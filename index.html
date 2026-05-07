@@ -5,6 +5,14 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0">
   <title>BlitzIQ — Defensive Scouting</title>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
+  <!-- Anthropic SDK for AI play generation (loaded as ES module, exposed globally) -->
+  <script type="module">
+    try {
+      const mod = await import('https://esm.sh/@anthropic-ai/sdk@0.52.0');
+      window._AnthropicSDK = mod.default || mod.Anthropic || mod;
+      window.dispatchEvent(new CustomEvent('anthropic-ready'));
+    } catch(e) { console.warn('Anthropic SDK load failed:', e); }
+  </script>
   <style>
     :root {
       --navy:#0a1628; --navy2:#112240; --navy3:#1a3256; --navyc:#0f1e35;
@@ -272,6 +280,11 @@
     .cw-btn.active{border-color:var(--gold);color:var(--gold)}
     .canvas-wrap{flex:1;position:relative;overflow:hidden}
     #playCanvas{display:block;width:100%;height:100%;touch-action:none;cursor:crosshair}
+    /* AI Generate button */
+    .gen-play-btn{width:100%;padding:14px;background:linear-gradient(135deg,rgba(240,165,0,.15),rgba(240,165,0,.08));border:1.5px solid rgba(240,165,0,.5);border-radius:12px;color:var(--gold);font-size:15px;font-weight:800;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:8px;margin-bottom:14px;font-family:inherit;transition:all .15s}
+    .gen-play-btn:active{background:rgba(240,165,0,.25);transform:scale(.98)}
+    .pro-badge{background:var(--gold);color:var(--navy);font-size:9px;font-weight:900;padding:2px 6px;border-radius:10px;letter-spacing:.5px;text-transform:uppercase;margin-left:4px}
+    .api-note{font-size:11px;color:var(--gray);text-align:center;margin-bottom:14px;line-height:1.5}
     .draw-play-btn{width:100%;padding:14px;background:rgba(240,165,0,.08);border:1.5px dashed rgba(240,165,0,.4);border-radius:12px;color:var(--gold);font-size:15px;font-weight:700;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:8px;margin-bottom:14px;font-family:inherit}
     .draw-play-btn:active{background:rgba(240,165,0,.18)}
     .play-thumb-wrap{background:var(--navy2);border:1px solid rgba(255,255,255,.08);border-radius:12px;overflow:hidden;margin-bottom:14px;cursor:pointer;position:relative}
@@ -569,6 +582,32 @@
     <div class="modal-foot">
       <button class="btn-cancel" onclick="closeModal('mForm')">Cancel</button>
       <button class="btn-save" onclick="saveForm()">Save Formation</button>
+    </div>
+  </div>
+</div>
+
+<!-- MODAL: API KEY SETUP -->
+<div class="modal-ov" id="mApiKey">
+  <div class="modal-sheet">
+    <div class="modal-handle"></div>
+    <div class="modal-hdr">
+      <span class="modal-title">&#9889; AI Play Generator</span>
+      <button class="modal-x" onclick="closeModal('mApiKey')">&#10005;</button>
+    </div>
+    <div class="modal-body">
+      <div style="background:rgba(240,165,0,.08);border:1px solid rgba(240,165,0,.3);border-radius:10px;padding:14px;margin-bottom:16px">
+        <div style="font-size:11px;color:var(--gold);font-weight:800;letter-spacing:1px;text-transform:uppercase;margin-bottom:6px">&#128274; Pro Feature</div>
+        <div style="font-size:13px;color:var(--grayl);line-height:1.55">Enter your Anthropic API key to enable AI-powered play card generation. The key is stored only on your device and never sent anywhere except Anthropic's API.</div>
+      </div>
+      <div class="fld">
+        <label class="fld-lbl">Anthropic API Key</label>
+        <input class="fld-in" id="apiKeyIn" type="password" placeholder="sk-ant-api03-...">
+      </div>
+      <div class="api-note">Get a key at <strong style="color:var(--grayl)">console.anthropic.com</strong><br>Usage is billed to your Anthropic account at standard API rates.</div>
+    </div>
+    <div class="modal-foot">
+      <button class="btn-cancel" onclick="closeModal('mApiKey')">Cancel</button>
+      <button class="btn-save" onclick="saveApiKey()">Save &amp; Enable</button>
     </div>
   </div>
 </div>
@@ -915,6 +954,13 @@ function renderSits() {
   } else {
     recEl.innerHTML='';
   }
+
+  // AI Generate Play Card button
+  const hasKey=!!localStorage.getItem('blitziq_api_key');
+  recEl.innerHTML+=`
+    <button class="gen-play-btn" onclick="generatePlayCard()">
+      &#9889; Generate Play Card &nbsp;<span class="pro-badge">Pro</span>
+    </button>`;
   const grid = document.getElementById('sitGrid');
   if (!f.situations.length) {
     grid.style.display='block';
@@ -2099,6 +2145,185 @@ function closeGamePlan(){
   document.body.style.overflow='';
 }
 
+// ── AI PLAY GENERATOR ─────────────────────────────────────────────────────────
+let _anthropicSDK = null;
+window.addEventListener('anthropic-ready', () => { _anthropicSDK = window._AnthropicSDK; });
+
+function saveApiKey(){
+  const k = document.getElementById('apiKeyIn').value.trim();
+  if (!k) { document.getElementById('apiKeyIn').classList.add('err'); return; }
+  localStorage.setItem('blitziq_api_key', k);
+  closeModal('mApiKey');
+  renderSits(); // refresh to show active state
+}
+
+async function generatePlayCard(){
+  if (!st.form) return;
+  const key = localStorage.getItem('blitziq_api_key');
+  if (!key) { openModal('mApiKey'); return; }
+
+  if (!_anthropicSDK) {
+    alert('AI service is still loading — please wait a moment and try again.');
+    return;
+  }
+
+  showLoad('Asking AI to generate play…');
+
+  try {
+    const client = new _anthropicSDK({
+      apiKey: key,
+      dangerouslyAllowBrowser: true
+    });
+
+    const prompt = buildPlayGenPrompt(st.form);
+    const msg = await client.messages.create({
+      model: 'claude-sonnet-4-6',
+      max_tokens: 1500,
+      messages: [{ role: 'user', content: prompt }]
+    });
+
+    const text = msg.content[0].text;
+    // Extract JSON block from response
+    const jsonMatch = text.match(/\{[\s\S]+\}/);
+    if (!jsonMatch) throw new Error('No JSON returned by AI — try again.');
+    const playData = JSON.parse(jsonMatch[0]);
+
+    hideLoad();
+    applyGeneratedPlay(playData);
+
+  } catch(err) {
+    hideLoad();
+    console.error('AI play gen error:', err);
+    const msg = err.status === 401 ? 'Invalid API key — check your key in Settings.'
+              : err.status === 429 ? 'Rate limit hit — wait a moment and try again.'
+              : err.message || 'Unknown error';
+    alert('AI generation failed: ' + msg);
+  }
+}
+
+function buildPlayGenPrompt(f){
+  const sits = (f.situations||[]).map(s=>`${s.distLabel}: ${s.runPct}% run / ${s.passPct}% pass`).join(', ');
+  return `You are a football play diagram generator for a defensive scouting app.
+
+Offensive formation data:
+- Formation name: ${f.name}
+- Run tendency: ${f.runPct}%
+- Pass tendency: ${f.passPct}%
+- Favorite run play: ${f.favoriteRunPlay||'unknown'}
+- Favorite pass play: ${f.favoritePassPlay||'unknown'}
+- Down tendencies: ${sits||'not available'}
+
+Generate realistic player positions and route assignments as JSON for a football field that is 600px wide and 400px tall with the line of scrimmage at y=250. Offense is BELOW y=250 (higher y values). Defense is ABOVE y=250 (lower y values).
+
+Align the offense to match the formation name "${f.name}" with authentic spacing. Draw realistic routes for skill players based on the favorite pass play. Set defensive alignment to counter the tendency (${f.passPct>=60?'pass coverage':'run stopping'}). Add a blitz path if the tendency warrants one.
+
+Return ONLY valid JSON with no extra text:
+{
+  "offense": [
+    {"type":"C","x":300,"y":258},
+    {"type":"OL","x":260,"y":258},
+    {"type":"OL","x":220,"y":258},
+    {"type":"OL","x":340,"y":258},
+    {"type":"OL","x":380,"y":258},
+    {"type":"QB","x":300,"y":295,"route":[]},
+    {"type":"RB","x":320,"y":328,"route":[]},
+    {"type":"WR","x":80,"y":258,"route":[{"x":80,"y":200},{"x":120,"y":155}]},
+    {"type":"WR","x":520,"y":258,"route":[{"x":520,"y":195},{"x":480,"y":150}]},
+    {"type":"TE","x":420,"y":258,"route":[{"x":420,"y":210},{"x":460,"y":175}]},
+    {"type":"WR","x":480,"y":258,"route":[{"x":480,"y":195},{"x":440,"y":160}]}
+  ],
+  "defense": [
+    {"type":"DE","x":220,"y":238},
+    {"type":"DT","x":272,"y":238},
+    {"type":"DT","x":328,"y":238},
+    {"type":"DE","x":380,"y":238},
+    {"type":"LB","x":200,"y":205},
+    {"type":"MLB","x":300,"y":205},
+    {"type":"LB","x":400,"y":205},
+    {"type":"CB","x":80,"y":218},
+    {"type":"CB","x":520,"y":218},
+    {"type":"SS","x":370,"y":155},
+    {"type":"FS","x":300,"y":130}
+  ],
+  "blitzPaths": [
+    {"from":{"x":200,"y":205},"to":{"x":240,"y":252}}
+  ]
+}`;
+}
+
+function applyGeneratedPlay(playData){
+  // Open canvas; when ready apply the generated positions and routes
+  openCanvas((cw, ch) => {
+    const sx = cw / 600, sy = ch / 400; // scale from prompt dims to canvas
+
+    // Place players (replace existing)
+    cvPlayers = [];
+    (playData.offense||[]).forEach(p => {
+      cvPlayers.push({id:++cvPid, type:p.type, team:'off',
+        x:Math.round(p.x*sx), y:Math.round(p.y*sy)});
+    });
+    (playData.defense||[]).forEach(p => {
+      cvPlayers.push({id:++cvPid, type:p.type, team:'def',
+        x:Math.round(p.x*sx), y:Math.round(p.y*sy)});
+    });
+
+    // Draw routes and blitz paths on the route canvas
+    if(cvRouteCanvas){
+      const rCtx = cvRouteCanvas.getContext('2d');
+      rCtx.clearRect(0,0,cvRouteCanvas.width,cvRouteCanvas.height);
+
+      // Offensive routes — red lines with arrowheads
+      (playData.offense||[]).forEach(p => {
+        if(!p.route||!p.route.length) return;
+        const pts = [{x:p.x,y:p.y}, ...p.route];
+        rCtx.save();
+        rCtx.strokeStyle='#ef4444'; rCtx.lineWidth=2.5;
+        rCtx.lineCap='round'; rCtx.lineJoin='round';
+        rCtx.beginPath();
+        pts.forEach((pt,i) => i===0
+          ? rCtx.moveTo(pt.x*sx, pt.y*sy)
+          : rCtx.lineTo(pt.x*sx, pt.y*sy));
+        rCtx.stroke();
+        // Arrowhead at last segment
+        if(pts.length>=2){
+          const a=pts[pts.length-2], b=pts[pts.length-1];
+          drawRouteArrow(rCtx, a.x*sx, a.y*sy, b.x*sx, b.y*sy, '#ef4444');
+        }
+        rCtx.restore();
+      });
+
+      // Blitz paths — dashed gold lines with arrowheads
+      (playData.blitzPaths||[]).forEach(bp => {
+        rCtx.save();
+        rCtx.strokeStyle='#f0a500'; rCtx.lineWidth=2.5;
+        rCtx.setLineDash([7,4]);
+        rCtx.beginPath();
+        rCtx.moveTo(bp.from.x*sx, bp.from.y*sy);
+        rCtx.lineTo(bp.to.x*sx, bp.to.y*sy);
+        rCtx.stroke(); rCtx.setLineDash([]);
+        drawRouteArrow(rCtx, bp.from.x*sx, bp.from.y*sy, bp.to.x*sx, bp.to.y*sy, '#f0a500');
+        rCtx.restore();
+      });
+    }
+
+    redrawAll();
+    // Switch to Draw Routes mode so coach can add to the diagram
+    setCanvasMode('draw', document.getElementById('modeDrawBtn'));
+  });
+}
+
+function drawRouteArrow(ctx, x1, y1, x2, y2, color){
+  const angle = Math.atan2(y2-y1, x2-x1);
+  const len = 11;
+  ctx.fillStyle = color;
+  ctx.beginPath();
+  ctx.moveTo(x2, y2);
+  ctx.lineTo(x2 - len*Math.cos(angle-0.42), y2 - len*Math.sin(angle-0.42));
+  ctx.lineTo(x2 - len*Math.cos(angle+0.42), y2 - len*Math.sin(angle+0.42));
+  ctx.closePath();
+  ctx.fill();
+}
+
 // ── ESCAPE HTML ───────────────────────────────────────────────────────────────
 function esc(s){return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');}
 
@@ -2376,13 +2601,11 @@ function placePreset(name){
 }
 
 // ── OPEN / CLOSE / CLEAR / SAVE ───────────────────────────────────────────────
-function openCanvas(){
+function openCanvas(onReady){
   const canvas=document.getElementById('playCanvas');
   const dpr=window.devicePixelRatio||1;
-  // Size canvas — measure toolbar after it renders
   document.getElementById('canvasOv').classList.add('open');
   document.body.style.overflow='hidden';
-  // Use rAF so the overlay is painted and has real dimensions
   requestAnimationFrame(()=>{
     const hdrH=document.querySelector('.canvas-hdr')?.offsetHeight||52;
     const tbH=document.querySelector('.canvas-toolbar')?.offsetHeight||130;
@@ -2423,6 +2646,7 @@ function openCanvas(){
 
     // Default to Place Players mode
     setCanvasMode('place',document.getElementById('modePlaceBtn'));
+    if(onReady) onReady(cw,ch);
   });
 }
 
