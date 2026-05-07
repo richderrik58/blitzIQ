@@ -1343,6 +1343,53 @@ function extractFormations(lines,data,tp){
     }
   }
 
+  // Phase D: multi-line formation detection
+  // Handles "FORMATION NAME\n45 plays | 22% Run | 78% Pass" (Hudl breakdown format)
+  // Only runs if we still haven't found any formations
+  if(formations.length===0){
+    data.extractionLog.push('↳ Trying multi-line formation scan (name on one line, stats on next)');
+    for(let i=0;i<lines.length-1;i++){
+      const name=lines[i].trim();
+      if(!isAllCaps(name)||isSkipWord(name)||name.length<3||name.length>45) continue;
+      if(/\d/.test(name)) continue; // standalone name has no numbers
+
+      // Scan the next 4 lines for run+pass data
+      for(let j=i+1;j<Math.min(i+5,lines.length);j++){
+        const sub=lines[j];
+        if(!sub.trim()) break;
+        // Stop if we hit another candidate formation name
+        if(isAllCaps(sub.trim())&&!isSkipWord(sub.trim())&&!/\d/.test(sub.trim())) break;
+
+        // Try "Run X% ... Pass X%" labeled format on the sub-line
+        const rM=sub.match(/\brun[:\s]+(\d{1,3})%/i);
+        const pM=sub.match(/\bpass[:\s]+(\d{1,3})%/i);
+        if(rM&&pM){
+          const r=parseInt(rM[1]), p=parseInt(pM[1]);
+          if(Math.abs(r+p-100)<=6&&!formations.find(f=>f.name===name)){
+            const pc=sub.match(/(\d+)\s*(?:plays?|\/)/i);
+            formations.push({name,runPct:r,passPct:p,
+              playCount:pc?parseInt(pc[1]):null,totalPlays:null,
+              favoriteRunPlay:tp.run||'',favoritePassPlay:tp.pass||'',
+              downTendency:'Imported from Hudl. Add tendency notes.',situations:[]});
+            data.extractionLog.push(`✓ Formation (multi-line): "${name}" — Run ${r}% / Pass ${p}%`);
+            break;
+          }
+        }
+
+        // Also try bare pct pair (e.g., "22%  78%") on the sub-line
+        const pct=extractPctPair(sub);
+        if(pct&&!formations.find(f=>f.name===name)){
+          formations.push({name,runPct:pct.run,passPct:pct.pass,
+            playCount:null,totalPlays:null,
+            favoriteRunPlay:tp.run||'',favoritePassPlay:tp.pass||'',
+            downTendency:'Imported from Hudl. Add tendency notes.',situations:[]});
+          data.extractionLog.push(`✓ Formation (multi-line pct): "${name}" — Run ${pct.run}% / Pass ${pct.pass}%`);
+          break;
+        }
+      }
+    }
+  }
+
   if(formations.length===0) data.extractionLog.push('✗ No formations detected');
   return formations;
 }
@@ -1483,8 +1530,20 @@ function extractSituations(lines,data){
 
     for(const pat of SIT_PATS){
       if(!pat.re.test(line)||seen.has(pat.label)) continue;
-      const pct=extractPctPair(line);
+
+      // Try current line first, then look ahead 3 lines
+      // Hudl tables sometimes put the label on one line and the pct on the next
+      let pct=extractPctPair(line);
+      if(!pct){
+        for(let j=i+1;j<=Math.min(i+3,lines.length-1);j++){
+          pct=extractPctPair(lines[j]);
+          if(pct) break;
+          // Stop looking if we hit another down/distance label
+          if(SIT_PATS.some(p=>p.re.test(lines[j]))) break;
+        }
+      }
       if(!pct) continue;
+
       seen.add(pat.label);
       sits.push({down:pat.down,distLabel:pat.label,runPct:pct.run,passPct:pct.pass,
         notes:'Extracted from Hudl report. Add tendency notes in app.',
@@ -1497,10 +1556,19 @@ function extractSituations(lines,data){
   // Phase C: global fallback
   if(!foundHeader||sits.length===0){
     if(!foundHeader) data.extractionLog.push('✗ Down/distance section header not found — trying global scan');
-    for(const line of lines){
+    for(let i=0;i<lines.length;i++){
+      const line=lines[i];
       for(const pat of SIT_PATS){
         if(!pat.re.test(line)||seen.has(pat.label)) continue;
-        const pct=extractPctPair(line);
+        // Same look-ahead logic in global scan
+        let pct=extractPctPair(line);
+        if(!pct){
+          for(let j=i+1;j<=Math.min(i+3,lines.length-1);j++){
+            pct=extractPctPair(lines[j]);
+            if(pct) break;
+            if(SIT_PATS.some(p=>p.re.test(lines[j]))) break;
+          }
+        }
         if(!pct) continue;
         seen.add(pat.label);
         sits.push({down:pat.down,distLabel:pat.label,runPct:pct.run,passPct:pct.pass,
