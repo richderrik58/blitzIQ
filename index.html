@@ -796,24 +796,50 @@ function renderSits() {
   }).join('');
 }
 function selSit(id) {
-  for(const f of st.opp.formations){ const s=f.situations.find(x=>x.id===id); if(s){st.sit=s;break;} }
+  st.sit = null;
+  for(const f of st.opp.formations){
+    const s=f.situations.find(x=>x.id===id||String(x.id)===String(id));
+    if(s){st.sit=s; st.form=f; break;}
+  }
+  if(!st.sit){ console.error('Situation not found:', id); return; }
   renderDefCall(); showScreen(4);
 }
 
 // ── SCREEN 4 ──────────────────────────────────────────────────────────────────
 function renderDefCall() {
-  const s=st.sit, dc=s.dc;
-  document.getElementById('sitOv').innerHTML=`<div class="ov-ttl">${esc(st.form.name)} — ${esc(s.distLabel)}</div>${sbar(s.runPct,s.passPct)}<div class="ov-note">${esc(s.notes)}</div>`;
+  if(!st.sit||!st.form) return;
+  const s=st.sit;
+  // Ensure dc always has all fields so we never throw on undefined
+  if(!s.dc) s.dc={};
+  const dc=s.dc;
+  const cov   = dc.coverage || 'Not yet specified';
+  const blitz = dc.blitz    || 'Not yet specified';
+  const reason= dc.reason   || 'Add reasoning notes in the situation editor.';
+  const alert = dc.alert    || 'Add watch-for notes in the situation editor.';
+
+  document.getElementById('sitOv').innerHTML=
+    `<div class="ov-ttl">${esc(st.form.name)} — ${esc(s.distLabel)}</div>
+     ${sbar(s.runPct,s.passPct)}
+     <div class="ov-note">${esc(s.notes||'')}</div>`;
+
   document.getElementById('defCall').innerHTML=`
-    <div class="def-block"><div class="def-lbl">Recommended Coverage</div><div class="def-val">${esc(dc.coverage)}</div></div>
-    <div class="def-block"><div class="def-lbl">Blitz Package</div><div class="def-val-sm">${esc(dc.blitz)}</div></div>
-    <div class="def-block"><div class="def-lbl">Why This Call</div><div class="reason-box">${esc(dc.reason)}</div></div>
+    <div class="def-block"><div class="def-lbl">Recommended Coverage</div><div class="def-val">${esc(cov)}</div></div>
+    <div class="def-block"><div class="def-lbl">Blitz Package</div><div class="def-val-sm">${esc(blitz)}</div></div>
+    <div class="def-block"><div class="def-lbl">Why This Call</div><div class="reason-box">${esc(reason)}</div></div>
     <div class="alert-box">
-      <div class="alert-hdr"><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>Watch For</div>
-      <div class="alert-txt">${esc(dc.alert)}</div>
+      <div class="alert-hdr">
+        <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z"/>
+          <line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/>
+        </svg>Watch For
+      </div>
+      <div class="alert-txt">${esc(alert)}</div>
     </div>
     ${dc.playCanvas
-      ? `<div class="play-thumb-wrap" onclick="openCanvas()"><img class="play-thumb" src="${dc.playCanvas}"><div class="play-thumb-lbl">&#9999; Tap to Edit Play Diagram</div></div>`
+      ? `<div class="play-thumb-wrap" onclick="openCanvas()">
+           <img class="play-thumb" src="${dc.playCanvas}">
+           <div class="play-thumb-lbl">&#9999; Tap to Edit Play Diagram</div>
+         </div>`
       : `<button class="draw-play-btn" onclick="openCanvas()">&#9999; Draw Play Diagram</button>`
     }`;
 }
@@ -1862,9 +1888,12 @@ function drawField(ctx,w,h){
 function openCanvas(){
   const canvas=document.getElementById('playCanvas');
   const wrap=canvas.parentElement;
-  // Size canvas to physical pixels for sharp rendering
   const dpr=window.devicePixelRatio||1;
-  const cw=wrap.clientWidth, ch=wrap.clientHeight||Math.round(window.innerHeight*0.65);
+  // Use window dimensions directly — clientHeight of the flex child can be 0 before layout
+  const toolbarH=document.querySelector('.canvas-toolbar')?.offsetHeight||80;
+  const hdrH=document.querySelector('.canvas-hdr')?.offsetHeight||56;
+  const cw=Math.min(window.innerWidth, 640);
+  const ch=window.innerHeight - hdrH - toolbarH;
   canvas.width=cw*dpr; canvas.height=ch*dpr;
   canvas.style.width=cw+'px'; canvas.style.height=ch+'px';
   cvCtx=canvas.getContext('2d');
@@ -1968,14 +1997,21 @@ function cvMove(e){
 
 function cvEnd(e){cvDrawing=false;}
 
-// Wire up canvas events after DOM is ready
-document.addEventListener('DOMContentLoaded',()=>{
+// Wire up canvas events — DOM is already ready (script is at end of <body>)
+// DOMContentLoaded has already fired by the time inline scripts at end-of-body run,
+// so we must attach directly rather than via addEventListener('DOMContentLoaded',...).
+(function attachCanvasEvents(){
   const c=document.getElementById('playCanvas');
+  if(!c){ console.error('playCanvas not found'); return; }
   c.addEventListener('pointerdown',cvStart,{passive:false});
   c.addEventListener('pointermove',cvMove,{passive:false});
   c.addEventListener('pointerup',cvEnd);
   c.addEventListener('pointercancel',cvEnd);
-});
+  // Touch fallback for older iOS
+  c.addEventListener('touchstart', e=>cvStart(e.touches[0]?{...e,clientX:e.touches[0].clientX,clientY:e.touches[0].clientY,preventDefault:()=>e.preventDefault()}:e),{passive:false});
+  c.addEventListener('touchmove',  e=>cvMove(e.touches[0]?{...e,clientX:e.touches[0].clientX,clientY:e.touches[0].clientY,preventDefault:()=>e.preventDefault()}:e),{passive:false});
+  c.addEventListener('touchend',   cvEnd);
+})();
 
 // ── BOOT ──────────────────────────────────────────────────────────────────────
 loadDB(); renderOpps(); syncHdr();
