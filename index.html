@@ -241,7 +241,10 @@
     /* PLAY CANVAS */
     .canvas-ov{position:fixed;inset:0;background:var(--navy);z-index:900;display:flex;flex-direction:column;opacity:0;pointer-events:none;transition:opacity .18s;overflow:hidden}
     .canvas-ov.open{opacity:1;pointer-events:all}
-    .canvas-hdr{background:var(--navy2);border-bottom:2px solid var(--gold);padding:10px 16px;display:flex;align-items:center;justify-content:space-between;flex-shrink:0;gap:10px}
+    .canvas-hdr{background:var(--navy2);border-bottom:2px solid var(--gold);padding:7px 12px;display:flex;align-items:center;justify-content:space-between;flex-shrink:0;gap:8px}
+    @media (orientation:landscape) and (max-height:540px){.canvas-hdr{padding:4px 10px}}
+    .toast{position:fixed;bottom:90px;left:50%;transform:translateX(-50%);background:rgba(34,197,94,.92);color:#fff;font-size:12px;font-weight:700;padding:8px 18px;border-radius:20px;z-index:9999;pointer-events:none;opacity:0;transition:opacity .2s}
+    .toast.show{opacity:1}
     .canvas-hdr-title{font-size:15px;font-weight:800;color:var(--white)}
     .canvas-hdr-sub{font-size:10px;color:var(--gray);letter-spacing:.5px;margin-top:1px}
     .canvas-btns{display:flex;gap:8px;flex-shrink:0}
@@ -389,7 +392,11 @@
 <div class="screen" id="screen2">
   <div id="oppOv" class="ov"></div>
   <div id="gameNotesCard"></div>
-  <button class="act-sec" style="width:100%;margin-bottom:14px" onclick="showGamePlan()">&#128203; Game Plan Cheat Sheet</button>
+  <div style="display:flex;gap:8px;margin-bottom:14px">
+    <button class="act-sec" style="flex:1" onclick="showGamePlan()">&#128203; Game Plan</button>
+    <button class="act-sec" onclick="shareGamePlan()" style="flex:1">&#11014; Email Plan</button>
+    <button class="act-sec" onclick="copyGamePlan()" style="flex:1">&#128203; Copy</button>
+  </div>
   <p class="sec-lbl">Offensive Formations</p>
   <div id="formList"></div>
   <button class="add-btn" onclick="openModal('mForm')">+ Add Formation</button>
@@ -437,8 +444,10 @@
       <div class="prev-title" id="gpTitle">Game Plan</div>
       <div class="prev-file" id="gpSub">Defensive Quick Reference</div>
     </div>
-    <div style="display:flex;gap:8px;flex-shrink:0">
-      <button class="cbtn-save" onclick="printGamePlan()" style="display:flex;align-items:center;gap:5px">&#128438; Print</button>
+    <div style="display:flex;gap:6px;flex-shrink:0;flex-wrap:wrap">
+      <button class="cbtn-save" onclick="printGamePlan()" style="display:flex;align-items:center;gap:4px;font-size:11px">&#128438; Print</button>
+      <button class="cbtn-save" onclick="shareGamePlan()" style="display:flex;align-items:center;gap:4px;font-size:11px;background:rgba(240,165,0,.18);border:1.5px solid rgba(240,165,0,.5);color:var(--gold)">&#11014; Email</button>
+      <button class="cbtn-save" onclick="copyGamePlan()" style="display:flex;align-items:center;gap:4px;font-size:11px;background:rgba(255,255,255,.07);border:1px solid rgba(255,255,255,.2);color:var(--grayl)">&#128203; Copy</button>
       <button class="cbtn-close" onclick="closeGamePlan()">&#10005;</button>
     </div>
   </div>
@@ -456,6 +465,7 @@
       <button class="cbtn-clear" onclick="flipCanvas()" title="Mirror play left/right">&#8596; Flip</button>
       <button class="cbtn-clear" onclick="clearCanvas()">Clear</button>
       <button class="cbtn-save" onclick="saveCanvas()">Save</button>
+      <button class="cbtn-save" onclick="sharePlayCard()" style="background:rgba(240,165,0,.18);border:1.5px solid rgba(240,165,0,.5);color:var(--gold)">&#11014; Share</button>
       <button class="cbtn-close" onclick="closeCanvas()">&#10005;</button>
     </div>
   </div>
@@ -1145,7 +1155,8 @@ function renderDefCall() {
            <div class="play-thumb-lbl">&#9999; Tap to Edit Play Diagram</div>
          </div>`
       : `<button class="draw-play-btn" onclick="openCanvas()">&#9999; Draw Play Diagram</button>`
-    }`;
+    }
+    <button class="act-sec" style="width:100%;margin-top:10px" onclick="shareDefCall()">&#11014; Share This Call</button>`;
 }
 
 // ── MODALS ────────────────────────────────────────────────────────────────────
@@ -3217,17 +3228,17 @@ let cvDragging=null;                  // player being dragged
 let cvDragOffX=0, cvDragOffY=0;
 let cvRouteCanvas=null;               // offscreen canvas storing ONLY freehand routes
 let cvPid=0;                          // player ID counter
-let CV_R=18;                           // player radius — set in openCanvas (18=36px, 20=40px)
+let CV_R=14;                           // player radius — 28px diameter, set in openCanvas
 
 function drawField(ctx,w,h){
   // Field background
   ctx.fillStyle='#15391f';
   ctx.fillRect(0,0,w,h);
-  // Yard lines — 8 lines gives wider spacing between them
+  // Yard lines — 6 lines gives the widest spacing
   ctx.strokeStyle='rgba(255,255,255,0.12)';
   ctx.lineWidth=1;
-  const spacing=h/8;
-  for(let i=0;i<=8;i++){
+  const spacing=h/6;
+  for(let i=0;i<=6;i++){
     ctx.beginPath();ctx.moveTo(0,i*spacing);ctx.lineTo(w,i*spacing);ctx.stroke();
   }
   // Vertical sideline guides
@@ -3238,13 +3249,13 @@ function drawField(ctx,w,h){
   // Hash marks
   const hL=w*0.33, hR=w*0.67;
   ctx.strokeStyle='rgba(255,255,255,0.18)';
-  for(let i=0;i<=8;i++){
+  for(let i=0;i<=6;i++){
     const y=i*spacing;
-    ctx.beginPath();ctx.moveTo(hL-9,y);ctx.lineTo(hL+9,y);ctx.stroke();
-    ctx.beginPath();ctx.moveTo(hR-9,y);ctx.lineTo(hR+9,y);ctx.stroke();
+    ctx.beginPath();ctx.moveTo(hL-10,y);ctx.lineTo(hL+10,y);ctx.stroke();
+    ctx.beginPath();ctx.moveTo(hR-10,y);ctx.lineTo(hR+10,y);ctx.stroke();
   }
   // Line of scrimmage
-  const los=h*0.58;
+  const los=h*0.65;
   ctx.strokeStyle='rgba(240,165,0,0.55)';
   ctx.lineWidth=2;
   ctx.setLineDash([10,5]);
@@ -3293,7 +3304,7 @@ function redrawAll(){
   const canvas=document.getElementById('playCanvas');
   const dpr=window.devicePixelRatio||1;
   const cw=canvas.width/dpr, ch=canvas.height/dpr;
-  const los=ch*0.58;
+  const los=ch*0.65;
   window._cvGapMap=computeGapAssignments(); // compute before drawing players
   cvCtx.clearRect(0,0,cw,ch);
   drawField(cvCtx,cw,ch);
@@ -3497,7 +3508,7 @@ function drawGapLabels(ctx,cw,los){
 function drawPlayerSymbol(ctx,p){
   const r=CV_R;
   ctx.save();
-  ctx.font='bold 9px -apple-system,Helvetica,sans-serif';
+  ctx.font='bold 8px -apple-system,Helvetica,sans-serif';
   ctx.textAlign='center'; ctx.textBaseline='middle';
 
   // Selection / drag ring
@@ -3535,7 +3546,7 @@ function drawPlayerSymbol(ctx,p){
     ctx.lineWidth=2.5;
     ctx.stroke();
     ctx.fillStyle='#ffffff';
-    ctx.font='bold 9px -apple-system,Helvetica,sans-serif';
+    ctx.font='bold 8px -apple-system,Helvetica,sans-serif';
     ctx.fillText(p.type,p.x,p.y+0.5);
   }
 
@@ -3582,111 +3593,111 @@ function selectSymbol(type,team,btn){
 // xf = fraction of canvas width (0=left, 1=right, 0.5=center)
 // yd = pixels from line of scrimmage (negative = defensive side, positive = offensive side)
 const CV_PRESETS = {
-  // ── DEFENSIVE ────────────────────────────────────────────────────────────────
+  // ── DEFENSIVE — spread full field width ───────────────────────────────────────
   '4-3':[
-    {type:'DE',  team:'def', xf:0.26, yd:-35},
-    {type:'DT',  team:'def', xf:0.40, yd:-35},
-    {type:'DT',  team:'def', xf:0.60, yd:-35},
-    {type:'DE',  team:'def', xf:0.74, yd:-35},
-    {type:'LB',  team:'def', xf:0.23, yd:-88},
-    {type:'MLB', team:'def', xf:0.50, yd:-88},
-    {type:'LB',  team:'def', xf:0.77, yd:-88},
-    {type:'CB',  team:'def', xf:0.07, yd:-55},
-    {type:'SS',  team:'def', xf:0.38, yd:-148},
-    {type:'FS',  team:'def', xf:0.62, yd:-148},
-    {type:'CB',  team:'def', xf:0.93, yd:-55},
+    {type:'DE',  team:'def', xf:0.22, yd:-38},  // wide 5-tech
+    {type:'DT',  team:'def', xf:0.39, yd:-38},  // 3-tech strong
+    {type:'DT',  team:'def', xf:0.61, yd:-38},  // 1-tech weak
+    {type:'DE',  team:'def', xf:0.78, yd:-38},  // wide 5-tech
+    {type:'LB',  team:'def', xf:0.20, yd:-95},  // Will — outside
+    {type:'MLB', team:'def', xf:0.50, yd:-95},  // Mike — middle
+    {type:'LB',  team:'def', xf:0.80, yd:-95},  // Sam — outside
+    {type:'CB',  team:'def', xf:0.04, yd:-62},  // weak CB near sideline
+    {type:'SS',  team:'def', xf:0.35, yd:-165}, // strong safety
+    {type:'FS',  team:'def', xf:0.65, yd:-165}, // free safety
+    {type:'CB',  team:'def', xf:0.96, yd:-62},  // strong CB near sideline
   ],
   '3-4':[
-    {type:'DE',  team:'def', xf:0.34, yd:-35},
-    {type:'NT',  team:'def', xf:0.50, yd:-35},
-    {type:'DE',  team:'def', xf:0.66, yd:-35},
-    {type:'LB',  team:'def', xf:0.16, yd:-88},
-    {type:'LB',  team:'def', xf:0.38, yd:-88},
-    {type:'LB',  team:'def', xf:0.62, yd:-88},
-    {type:'LB',  team:'def', xf:0.84, yd:-88},
-    {type:'CB',  team:'def', xf:0.07, yd:-55},
-    {type:'SS',  team:'def', xf:0.38, yd:-155},
-    {type:'FS',  team:'def', xf:0.62, yd:-155},
-    {type:'CB',  team:'def', xf:0.93, yd:-55},
+    {type:'DE',  team:'def', xf:0.32, yd:-38},
+    {type:'NT',  team:'def', xf:0.50, yd:-38},
+    {type:'DE',  team:'def', xf:0.68, yd:-38},
+    {type:'LB',  team:'def', xf:0.10, yd:-95},  // weak OLB — wide
+    {type:'LB',  team:'def', xf:0.37, yd:-95},  // weak ILB
+    {type:'LB',  team:'def', xf:0.63, yd:-95},  // strong ILB
+    {type:'LB',  team:'def', xf:0.90, yd:-95},  // strong OLB — wide
+    {type:'CB',  team:'def', xf:0.04, yd:-62},
+    {type:'SS',  team:'def', xf:0.35, yd:-170},
+    {type:'FS',  team:'def', xf:0.65, yd:-170},
+    {type:'CB',  team:'def', xf:0.96, yd:-62},
   ],
   '3-3-5':[
-    {type:'DE',  team:'def', xf:0.34, yd:-35},
-    {type:'NT',  team:'def', xf:0.50, yd:-35},
-    {type:'DE',  team:'def', xf:0.66, yd:-35},
-    {type:'LB',  team:'def', xf:0.27, yd:-88},
-    {type:'MLB', team:'def', xf:0.50, yd:-88},
-    {type:'LB',  team:'def', xf:0.73, yd:-88},
-    {type:'CB',  team:'def', xf:0.07, yd:-52},
-    {type:'NB',  team:'def', xf:0.30, yd:-140},
-    {type:'FS',  team:'def', xf:0.50, yd:-168},
-    {type:'SS',  team:'def', xf:0.70, yd:-140},
-    {type:'CB',  team:'def', xf:0.93, yd:-52},
+    {type:'DE',  team:'def', xf:0.32, yd:-38},
+    {type:'NT',  team:'def', xf:0.50, yd:-38},
+    {type:'DE',  team:'def', xf:0.68, yd:-38},
+    {type:'LB',  team:'def', xf:0.25, yd:-95},
+    {type:'MLB', team:'def', xf:0.50, yd:-95},
+    {type:'LB',  team:'def', xf:0.75, yd:-95},
+    {type:'CB',  team:'def', xf:0.04, yd:-58},  // near sideline
+    {type:'NB',  team:'def', xf:0.28, yd:-148},
+    {type:'FS',  team:'def', xf:0.50, yd:-180},
+    {type:'SS',  team:'def', xf:0.72, yd:-148},
+    {type:'CB',  team:'def', xf:0.96, yd:-58},  // near sideline
   ],
-  // ── OFFENSIVE ────────────────────────────────────────────────────────────────
+  // ── OFFENSIVE — WRs to sidelines, OL evenly spaced ───────────────────────────
   'pro-set':[
-    {type:'WR', team:'off', xf:0.08, yd:28},
-    {type:'OL', team:'off', xf:0.34, yd:28},
-    {type:'OL', team:'off', xf:0.42, yd:28},
-    {type:'C',  team:'off', xf:0.50, yd:28},
-    {type:'OL', team:'off', xf:0.58, yd:28},
-    {type:'OL', team:'off', xf:0.66, yd:28},
-    {type:'TE', team:'off', xf:0.76, yd:28},
-    {type:'WR', team:'off', xf:0.92, yd:38},
-    {type:'QB', team:'off', xf:0.50, yd:70},
-    {type:'FB', team:'off', xf:0.50, yd:105},
-    {type:'RB', team:'off', xf:0.62, yd:120},
+    {type:'WR', team:'off', xf:0.04, yd:30},    // X receiver — far sideline
+    {type:'OL', team:'off', xf:0.31, yd:30},
+    {type:'OL', team:'off', xf:0.405,yd:30},
+    {type:'C',  team:'off', xf:0.50, yd:30},
+    {type:'OL', team:'off', xf:0.595,yd:30},
+    {type:'OL', team:'off', xf:0.69, yd:30},
+    {type:'TE', team:'off', xf:0.79, yd:30},    // TE tight to OL
+    {type:'WR', team:'off', xf:0.96, yd:30},    // Z receiver — far sideline
+    {type:'QB', team:'off', xf:0.50, yd:72},
+    {type:'FB', team:'off', xf:0.50, yd:108},
+    {type:'RB', team:'off', xf:0.60, yd:130},
   ],
   'trips':[
-    {type:'WR', team:'off', xf:0.08, yd:28},
-    {type:'OL', team:'off', xf:0.34, yd:28},
-    {type:'OL', team:'off', xf:0.42, yd:28},
-    {type:'C',  team:'off', xf:0.50, yd:28},
-    {type:'OL', team:'off', xf:0.58, yd:28},
-    {type:'OL', team:'off', xf:0.66, yd:28},
-    {type:'QB', team:'off', xf:0.50, yd:75},
-    {type:'RB', team:'off', xf:0.61, yd:75},
-    {type:'WR', team:'off', xf:0.76, yd:28},
-    {type:'WR', team:'off', xf:0.85, yd:28},
-    {type:'WR', team:'off', xf:0.94, yd:28},
+    {type:'WR', team:'off', xf:0.04, yd:30},    // weak-side X — far left
+    {type:'OL', team:'off', xf:0.31, yd:30},
+    {type:'OL', team:'off', xf:0.405,yd:30},
+    {type:'C',  team:'off', xf:0.50, yd:30},
+    {type:'OL', team:'off', xf:0.595,yd:30},
+    {type:'OL', team:'off', xf:0.69, yd:30},
+    {type:'QB', team:'off', xf:0.50, yd:72},
+    {type:'RB', team:'off', xf:0.60, yd:72},
+    {type:'WR', team:'off', xf:0.78, yd:30},    // trips #1
+    {type:'WR', team:'off', xf:0.87, yd:30},    // trips #2
+    {type:'WR', team:'off', xf:0.96, yd:30},    // trips #3 at sideline
   ],
   'spread':[
-    {type:'WR', team:'off', xf:0.06, yd:28},
-    {type:'WR', team:'off', xf:0.20, yd:28},
-    {type:'OL', team:'off', xf:0.34, yd:28},
-    {type:'OL', team:'off', xf:0.42, yd:28},
-    {type:'C',  team:'off', xf:0.50, yd:28},
-    {type:'OL', team:'off', xf:0.58, yd:28},
-    {type:'OL', team:'off', xf:0.66, yd:28},
-    {type:'WR', team:'off', xf:0.80, yd:28},
-    {type:'WR', team:'off', xf:0.94, yd:28},
-    {type:'QB', team:'off', xf:0.50, yd:75},
-    {type:'RB', team:'off', xf:0.61, yd:75},
+    {type:'WR', team:'off', xf:0.04, yd:30},    // far left sideline
+    {type:'WR', team:'off', xf:0.16, yd:30},    // slot left
+    {type:'OL', team:'off', xf:0.31, yd:30},
+    {type:'OL', team:'off', xf:0.405,yd:30},
+    {type:'C',  team:'off', xf:0.50, yd:30},
+    {type:'OL', team:'off', xf:0.595,yd:30},
+    {type:'OL', team:'off', xf:0.69, yd:30},
+    {type:'WR', team:'off', xf:0.84, yd:30},    // slot right
+    {type:'WR', team:'off', xf:0.96, yd:30},    // far right sideline
+    {type:'QB', team:'off', xf:0.50, yd:72},
+    {type:'RB', team:'off', xf:0.60, yd:72},
   ],
   'i-form':[
-    {type:'WR', team:'off', xf:0.08, yd:28},
-    {type:'OL', team:'off', xf:0.34, yd:28},
-    {type:'OL', team:'off', xf:0.42, yd:28},
-    {type:'C',  team:'off', xf:0.50, yd:28},
-    {type:'OL', team:'off', xf:0.58, yd:28},
-    {type:'OL', team:'off', xf:0.66, yd:28},
-    {type:'TE', team:'off', xf:0.76, yd:28},
-    {type:'WR', team:'off', xf:0.92, yd:28},
-    {type:'QB', team:'off', xf:0.50, yd:65},
-    {type:'FB', team:'off', xf:0.50, yd:100},
-    {type:'RB', team:'off', xf:0.50, yd:142},
+    {type:'WR', team:'off', xf:0.04, yd:30},    // far left
+    {type:'OL', team:'off', xf:0.31, yd:30},
+    {type:'OL', team:'off', xf:0.405,yd:30},
+    {type:'C',  team:'off', xf:0.50, yd:30},
+    {type:'OL', team:'off', xf:0.595,yd:30},
+    {type:'OL', team:'off', xf:0.69, yd:30},
+    {type:'TE', team:'off', xf:0.79, yd:30},
+    {type:'WR', team:'off', xf:0.96, yd:30},    // far right
+    {type:'QB', team:'off', xf:0.50, yd:68},
+    {type:'FB', team:'off', xf:0.50, yd:105},
+    {type:'RB', team:'off', xf:0.50, yd:148},
   ],
   'empty':[
-    {type:'WR', team:'off', xf:0.06, yd:28},
-    {type:'WR', team:'off', xf:0.18, yd:28},
-    {type:'OL', team:'off', xf:0.34, yd:28},
-    {type:'OL', team:'off', xf:0.42, yd:28},
-    {type:'C',  team:'off', xf:0.50, yd:28},
-    {type:'OL', team:'off', xf:0.58, yd:28},
-    {type:'OL', team:'off', xf:0.66, yd:28},
-    {type:'TE', team:'off', xf:0.76, yd:28},
-    {type:'WR', team:'off', xf:0.86, yd:28},
-    {type:'WR', team:'off', xf:0.94, yd:28},
-    {type:'QB', team:'off', xf:0.50, yd:75},
+    {type:'WR', team:'off', xf:0.04, yd:30},    // far left
+    {type:'WR', team:'off', xf:0.16, yd:30},    // slot left
+    {type:'OL', team:'off', xf:0.31, yd:30},
+    {type:'OL', team:'off', xf:0.405,yd:30},
+    {type:'C',  team:'off', xf:0.50, yd:30},
+    {type:'OL', team:'off', xf:0.595,yd:30},
+    {type:'OL', team:'off', xf:0.69, yd:30},
+    {type:'WR', team:'off', xf:0.79, yd:30},    // slot right (TE as WR)
+    {type:'WR', team:'off', xf:0.87, yd:30},
+    {type:'WR', team:'off', xf:0.96, yd:30},    // far right
+    {type:'QB', team:'off', xf:0.50, yd:72},
   ],
 };
 
@@ -3695,7 +3706,7 @@ function placePreset(name){
   const canvas=document.getElementById('playCanvas');
   const dpr=window.devicePixelRatio||1;
   const cw=canvas.width/dpr, ch=canvas.height/dpr;
-  const los=ch*0.58;
+  const los=ch*0.65;
   const preset=CV_PRESETS[name];
   if(!preset) return;
   // Replace only players of the same team so defense + offense can coexist
@@ -3719,7 +3730,7 @@ function openCanvas(onReady){
     const wrap=document.querySelector('.canvas-wrap');
     const cw=Math.min(window.innerWidth,640);
     const ch=Math.max(200, wrap?.clientHeight||window.innerHeight-104);
-    CV_R=cw>=600?20:18; // 40px on tablet, 36px on phone/narrow
+    CV_R=14; // 28px on all screens
     canvas.width=cw*dpr; canvas.height=ch*dpr;
     canvas.style.width=cw+'px'; canvas.style.height=ch+'px';
     cvCtx=canvas.getContext('2d');
@@ -4031,6 +4042,158 @@ function cvEnd(e){ cvDrawing=false; cvDragging=null; }
   c.addEventListener('touchend',   cvEnd);
 })();
 
+// ── SHARE / EMAIL ─────────────────────────────────────────────────────────────
+function showToast(msg, ms=2200){
+  const el=document.getElementById('toastEl');
+  el.textContent=msg; el.classList.add('show');
+  setTimeout(()=>el.classList.remove('show'), ms);
+}
+
+function buildPlayCardText(){
+  if(!st.form||!st.sit) return '';
+  const dc=st.sit.dc||{};
+  const gapMap=window._cvGapMap;
+  const preset=window._cvPresetType||getDefPreset(st.form);
+  const presetLabel={'4-3':'4-3 BASE','3-4':'3-4 BASE','3-3-5':'3-3-5 STACK'}[preset]||preset;
+  const rushers=window._cvDefCall?identifyRushers(dc.blitz||''):new Set();
+  const rushing=cvPlayers.filter(p=>p.team==='def'&&rushers.has(p.id)).map(p=>p.type).join(', ')||'4 DL';
+
+  let lines=[
+    `BlitzIQ Play Card`,
+    `─────────────────────────────`,
+    `Formation:  ${st.form.name}`,
+    `Situation:  ${st.sit.distLabel}`,
+    `Tendency:   ${st.sit.runPct}% Run / ${st.sit.passPct}% Pass`,
+    ``,
+    `DEFENSIVE CALL`,
+    `Coverage:   ${dc.coverage||'—'}`,
+    `Blitz:      ${dc.blitz||'—'}`,
+    ``,
+    `GAP ASSIGNMENTS (${presetLabel})`,
+  ];
+  if(gapMap&&gapMap.size){
+    cvPlayers.filter(p=>p.team==='def').forEach(p=>{
+      const g=gapMap.get(p.id);
+      if(g) lines.push(`  ${p.type.padEnd(5)} → Gap ${g}`);
+    });
+  }
+  lines.push(``, `RUSH: ${rushing}`);
+  if(dc.reason) lines.push(``, `WHY: ${dc.reason}`);
+  if(dc.alert)  lines.push(``, `WATCH FOR: ${dc.alert}`);
+  lines.push(``, `— Generated by BlitzIQ`);
+  return lines.join('\n');
+}
+
+function buildGamePlanText(o){
+  if(!o) return '';
+  applyRecommendations(o);
+  let lines=[
+    `BlitzIQ Game Plan — ${o.name} ${o.season}`,
+    `Defensive Quick Reference`,
+    `${'═'.repeat(40)}`,
+    ``,
+  ];
+  o.formations.forEach(f=>{
+    const rec=f.recommendation||generateRecommendation(f);
+    const preset=getDefPreset(f);
+    const presetLabel={'4-3':'4-3','3-4':'3-4','3-3-5':'3-3-5'}[preset];
+    lines.push(`▶ ${f.name}`);
+    lines.push(`  Tendency: ${f.runPct}% Run / ${f.passPct}% Pass`);
+    if(f.favoriteRunPlay&&f.favoriteRunPlay!=='Not specified') lines.push(`  Run play: ${f.favoriteRunPlay}`);
+    if(f.favoritePassPlay&&f.favoritePassPlay!=='Not specified') lines.push(`  Pass play: ${f.favoritePassPlay}`);
+    lines.push(`  Coverage: ${rec.coverage}`);
+    lines.push(`  Blitz:    ${rec.blitz}`);
+    lines.push(`  Defense:  ${presetLabel}`);
+    if(f.situations&&f.situations.length){
+      lines.push(`  Situations:`);
+      f.situations.forEach(s=>{
+        lines.push(`    ${s.distLabel}: ${s.runPct}% run — ${s.dc?.coverage||''} / ${s.dc?.blitz||''}`);
+      });
+    }
+    lines.push(``);
+  });
+  if(o.gameNotes) lines.push(`GAME NOTES\n${o.gameNotes}`, ``);
+  lines.push(`— Generated by BlitzIQ · richderrik58.github.io/blitzIQ`);
+  return lines.join('\n');
+}
+
+function sharePlayCard(){
+  if(!st.form||!st.sit) return;
+  const dc=st.sit.dc||{};
+  const subject=`BlitzIQ Play Card — ${st.form.name} — ${dc.coverage||''}`;
+  const body=buildPlayCardText();
+  const canvas=document.getElementById('playCanvas');
+
+  // Mobile: Web Share API with image
+  if(navigator.share){
+    canvas.toBlob(blob=>{
+      const file=new File([blob],'play-card.png',{type:'image/png'});
+      const shareData={title:subject,text:body};
+      if(navigator.canShare&&navigator.canShare({files:[file]})){
+        shareData.files=[file];
+      }
+      navigator.share(shareData).catch(()=>{});
+    },'image/png');
+    return;
+  }
+  // Desktop: mailto
+  window.open(`mailto:?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`,'_blank');
+}
+
+function shareGamePlan(){
+  if(!st.opp) return;
+  const subject=`BlitzIQ Game Plan — ${st.opp.name} — ${st.opp.season}`;
+  const body=buildGamePlanText(st.opp);
+  if(navigator.share){
+    navigator.share({title:subject,text:body}).catch(()=>{});
+    return;
+  }
+  window.open(`mailto:?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`,'_blank');
+}
+
+function copyGamePlan(){
+  if(!st.opp) return;
+  const text=buildGamePlanText(st.opp);
+  if(navigator.clipboard){
+    navigator.clipboard.writeText(text).then(()=>showToast('✓ Copied to clipboard'));
+  } else {
+    // Fallback for older browsers
+    const ta=document.createElement('textarea');
+    ta.value=text; ta.style.position='fixed'; ta.style.opacity='0';
+    document.body.appendChild(ta); ta.select();
+    document.execCommand('copy');
+    document.body.removeChild(ta);
+    showToast('✓ Copied to clipboard');
+  }
+}
+
+function shareDefCall(){
+  if(!st.form||!st.sit) return;
+  const dc=st.sit.dc||{};
+  const subject=`BlitzIQ — ${st.form.name} vs ${dc.coverage||'Coverage'} — ${st.opp?.name||''}`;
+  const body=[
+    `BlitzIQ Defensive Call`,
+    `─────────────────────────────`,
+    `Opponent:  ${st.opp?.name||''} ${st.opp?.season||''}`,
+    `Formation: ${st.form.name}  (${st.form.runPct}% Run / ${st.form.passPct}% Pass)`,
+    `Situation: ${st.sit.distLabel}`,
+    ``,
+    `CALL: ${dc.coverage||''}`,
+    `BLITZ: ${dc.blitz||''}`,
+    ``,
+    dc.reason?`WHY: ${dc.reason}`:'',
+    dc.alert?`WATCH FOR: ${dc.alert}`:'',
+    ``,
+    `— BlitzIQ · richderrik58.github.io/blitzIQ`,
+  ].filter(l=>l!==undefined).join('\n');
+
+  if(navigator.share){
+    navigator.share({title:subject,text:body}).catch(()=>{});
+    return;
+  }
+  window.open(`mailto:?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`,'_blank');
+}
+
 // ── BOOT ──────────────────────────────────────────────────────────────────────
 // Clear any malformed API key on load (must start with sk-ant-)
 (function(){
@@ -4058,5 +4221,6 @@ loadDB();
 })();
 renderOpps(); syncHdr();
 </script>
+<div class="toast" id="toastEl"></div>
 </body>
 </html>
