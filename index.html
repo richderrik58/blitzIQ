@@ -1205,6 +1205,7 @@ function parseHudl(text,filename) {
 }
 
 function extractName(text,lines,filename){
+  // Standard patterns first
   const pats=[
     /vs\.?\s+([A-Z][A-Za-z\s\-']{2,35})(?:\s{2,}|\n|\d{4})/,
     /Opponent[:\s]+([A-Za-z][A-Za-z\s\-']{2,35})(?:\n|\s{2,})/i,
@@ -1213,6 +1214,16 @@ function extractName(text,lines,filename){
     /Team[:\s]+([A-Za-z][A-Za-z\s\-']{2,35})(?:\n|\s{2,})/i,
   ];
   for(const re of pats){const m=text.match(re);if(m){const n=m[1].trim();if(n.length>2&&n.length<40)return n;}}
+
+  // Hudl header: "Created by Coach X based on these playlists: PLAYLIST NAME"
+  // The playlist name is the closest thing to an opponent/report label in many Hudl exports
+  const plM=text.match(/playlists?[:\s]+([A-Za-z0-9][A-Za-z0-9\s\-'&]{2,60})(?:\n|$)/i);
+  if(plM){
+    const n=plM[1].trim().replace(/\s+/g,' ');
+    if(n.length>2&&n.length<60) return n;
+  }
+
+  // Fall back to second non-empty line (often the report title)
   for(let i=1;i<Math.min(lines.length,8);i++){
     const l=lines[i];
     if(l.length>2&&l.length<35&&/^[A-Z]/.test(l)&&!/^\d/.test(l)&&!l.includes('%')&&!l.includes(':'))return l;
@@ -1221,13 +1232,35 @@ function extractName(text,lines,filename){
 }
 
 function extractOverall(text,lines){
-  const pats=[
+  // Priority 1: Hudl summary format — "Run 50% 63/126" and "Pass 50% 63/126" on separate lines
+  // This is the exact format from Hudl's PDF summary header
+  const runM  = text.match(/\bRun\s+(\d{1,3})%\s+(\d{1,3})\/(\d{1,4})/i);
+  const passM = text.match(/\bPass\s+(\d{1,3})%\s+(\d{1,3})\/(\d{1,4})/i);
+  if(runM && passM){
+    const r=parseInt(runM[1]), p=parseInt(passM[1]);
+    // Same denominator = confirmed overall totals (both fractions are X/TotalPlays)
+    if(runM[3]===passM[3]) return{run:r,pass:100-r,found:true};
+    if(Math.abs(r+p-100)<=5) return{run:r,pass:p,found:true};
+  }
+
+  // Priority 2: "Run X%" and "Pass X%" anywhere in the doc (no fraction required)
+  const runOnly  = text.match(/\bRun\s+(\d{1,3})%/i);
+  const passOnly = text.match(/\bPass\s+(\d{1,3})%/i);
+  if(runOnly && passOnly){
+    const r=parseInt(runOnly[1]), p=parseInt(passOnly[1]);
+    if(Math.abs(r+p-100)<=5) return{run:r,pass:p,found:true};
+  }
+
+  // Priority 3: same-line patterns
+  const sameLine=[
     /overall[^%\n]{0,30}run[:\s]+(\d+)%[^%\n]{0,30}pass[:\s]+(\d+)%/i,
     /total[^%\n]{0,30}run[:\s]+(\d+)%[^%\n]{0,30}pass[:\s]+(\d+)%/i,
     /(\d+)%\s+run[^%\n]{0,20}(\d+)%\s+pass/i,
     /run[:\s]+(\d+)%[,\s]+pass[:\s]+(\d+)%/i,
   ];
-  for(const re of pats){const m=text.match(re);if(m){const r=parseInt(m[1]),p=parseInt(m[2]);if(Math.abs(r+p-100)<=5)return{run:r,pass:p,found:true};}}
+  for(const re of sameLine){const m=text.match(re);if(m){const r=parseInt(m[1]),p=parseInt(m[2]);if(Math.abs(r+p-100)<=5)return{run:r,pass:p,found:true};}}
+
+  // Priority 4: any line containing both "run" and "pass" with a pct pair
   for(const line of lines){
     if(/run/i.test(line)&&/pass/i.test(line)){
       const pct=extractPctPair(line);
