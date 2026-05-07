@@ -437,7 +437,10 @@
       <div class="prev-title" id="gpTitle">Game Plan</div>
       <div class="prev-file" id="gpSub">Defensive Quick Reference</div>
     </div>
-    <button class="cbtn-close" onclick="closeGamePlan()">&#10005;</button>
+    <div style="display:flex;gap:8px;flex-shrink:0">
+      <button class="cbtn-save" onclick="printGamePlan()" style="display:flex;align-items:center;gap:5px">&#128438; Print</button>
+      <button class="cbtn-close" onclick="closeGamePlan()">&#10005;</button>
+    </div>
   </div>
   <div class="prev-body" id="gpBody"></div>
 </div>
@@ -2346,6 +2349,117 @@ function showGamePlan(){
 function closeGamePlan(){
   document.getElementById('gamePlanOv').classList.remove('open');
   document.body.style.overflow='';
+}
+
+function printGamePlan(){
+  if(!st.opp) return;
+  applyRecommendations(st.opp);
+  const o=st.opp;
+
+  const cards=o.formations.map(f=>{
+    const rec=f.recommendation||generateRecommendation(f);
+    const lean=f.passPct>=60?`${f.passPct}% PASS`:`${f.runPct}% RUN`;
+    const leanColor=f.passPct>=60?'#1d4ed8':'#15803d';
+    const preset=getDefPreset(f);
+    const presetLabel={'4-3':'4-3 BASE','3-4':'3-4 BASE','3-3-5':'3-3-5 STACK'}[preset];
+    const nm=(f.name||'').toUpperCase();
+    const teAdj=preset==='3-4'&&/\bTE\b|\bWING\b|\bKING\b|\bPRO\b|\bI.?FORM\b|\bTIGHT/.test(nm);
+
+    let gapData=[];
+    if(preset==='4-3') gapData=[
+      ['DE (strong)','C','5-tech contain'],['DT (3-tech)','B','strong side'],
+      ['DT (1-tech)','A','weak side'],['DE (weak)','C','5-tech contain'],
+      ['MLB','A',''],['Sam LB','B','force'],['Will LB','B / Flat',''],
+    ];
+    else if(preset==='3-4') gapData=[
+      ['NT','A','strong A gap'],
+      ['DE (strong)',teAdj?'C':'B',teAdj?'TE — bumped from B':''],
+      ['DE (weak)','B',''],
+      ['OLB (strong)',teAdj?'D':'C',teAdj?'TE — bumped from C':'edge'],
+      ['ILB (strong)','B / Flow','hit-and-run'],
+      ['ILB (weak)','A','weak A gap'],
+      ['OLB (weak)','C','edge'],
+    ];
+    else gapData=[
+      ['NT','A / A','both A gaps'],['DE (strong)','B','4i crash inside'],
+      ['DE (weak)','B','4i crash inside'],['MLB','A','flow'],
+      ['OLB (strong)','C','edge contain'],['OLB (weak)','C','edge contain'],
+    ];
+
+    const gapRows=gapData.map(([pos,gap,note])=>
+      `<tr><td>${esc(pos)}</td><td class="gap-val">${esc(gap)}</td><td class="gap-note">${esc(note)}</td></tr>`
+    ).join('');
+    const teTag=teAdj?` <span class="te-tag">TE ADJ</span>`:'';
+    const run=f.favoriteRunPlay&&f.favoriteRunPlay!=='Not specified'?`&#127939;&nbsp;${esc(f.favoriteRunPlay)}`:'';
+    const pass=f.favoritePassPlay&&f.favoritePassPlay!=='Not specified'?`&#9992;&nbsp;${esc(f.favoritePassPlay)}`:'';
+    const plays=[run,pass].filter(Boolean).join('<span class="dot">·</span>');
+
+    return `<div class="card">
+      <div class="card-head">
+        <span class="form-name">${esc(f.name)}</span>
+        <span class="lean" style="color:${leanColor}">${lean}</span>
+      </div>
+      <div class="call">&#9889; ${esc(rec.coverage)}</div>
+      <div class="blitz-lbl">${esc(rec.blitz)}</div>
+      ${plays?`<div class="plays">${plays}</div>`:''}
+      <div class="gap-hdr">Gap Assignments — ${esc(presetLabel)}${teTag}</div>
+      <table class="gap-tbl">${gapRows}</table>
+    </div>`;
+  }).join('');
+
+  const notes=o.gameNotes?`
+    <div class="notes-block">
+      <div class="notes-hdr">Game Notes</div>
+      <div class="notes-body">${esc(o.gameNotes).replace(/\n/g,'<br>')}</div>
+    </div>`:'';
+
+  const html=`<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>BlitzIQ — ${esc(o.name)} ${esc(o.season)}</title>
+<style>
+  @page{margin:.45in;size:portrait}
+  *{margin:0;padding:0;box-sizing:border-box}
+  body{font-family:-apple-system,Helvetica,Arial,sans-serif;font-size:10pt;color:#111;background:#fff}
+  h1{font-size:17pt;font-weight:900;letter-spacing:2px;margin-bottom:2px}
+  .sub{font-size:8.5pt;color:#6b7280;margin-bottom:14px;border-bottom:2px solid #111;padding-bottom:8px}
+  .grid{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+  .card{border:1.5px solid #d1d5db;border-radius:7px;padding:10px 12px;break-inside:avoid}
+  .card-head{display:flex;justify-content:space-between;align-items:baseline;margin-bottom:3px}
+  .form-name{font-size:12pt;font-weight:800}
+  .lean{font-size:8.5pt;font-weight:700}
+  .call{font-size:14pt;font-weight:900;color:#92400e;line-height:1.15}
+  .blitz-lbl{font-size:9.5pt;font-weight:700;margin:2px 0 4px}
+  .plays{font-size:7.5pt;color:#374151;margin-bottom:4px}
+  .dot{margin:0 4px;color:#9ca3af}
+  .gap-hdr{font-size:6.5pt;letter-spacing:1px;text-transform:uppercase;color:#6b7280;font-weight:700;margin:6px 0 3px;border-top:1px solid #f3f4f6;padding-top:5px}
+  .te-tag{background:#fef3c7;color:#92400e;border:1px solid #d97706;border-radius:3px;padding:1px 4px;font-size:6pt;font-weight:700}
+  .gap-tbl{width:100%;border-collapse:collapse;font-size:7.5pt}
+  .gap-tbl td{padding:1px 5px 1px 0;vertical-align:top}
+  .gap-val{font-weight:800;color:#92400e;white-space:nowrap}
+  .gap-note{color:#6b7280}
+  .notes-block{margin-top:12px;border:1.5px solid #d97706;border-radius:7px;padding:10px 12px;break-inside:avoid}
+  .notes-hdr{font-size:7pt;font-weight:800;letter-spacing:1.5px;text-transform:uppercase;color:#92400e;margin-bottom:6px}
+  .notes-body{font-size:9pt;line-height:1.65;color:#374151}
+  .footer{margin-top:14px;font-size:6.5pt;color:#9ca3af;text-align:center;border-top:1px solid #f3f4f6;padding-top:8px}
+</style>
+</head>
+<body>
+<h1>BlitzIQ — ${esc(o.name)}</h1>
+<div class="sub">${esc(o.season)} &nbsp;·&nbsp; Defensive Quick Reference &nbsp;·&nbsp; ${o.formations.length} Formation${o.formations.length!==1?'s':''}</div>
+<div class="grid">${cards}</div>
+${notes}
+<div class="footer">BlitzIQ &nbsp;·&nbsp; richderrik58.github.io/blitzIQ</div>
+</body>
+</html>`;
+
+  const w=window.open('','_blank','width=820,height=1000');
+  if(!w){alert('Allow pop-ups to print the game plan.');return;}
+  w.document.write(html);
+  w.document.close();
+  w.focus();
+  setTimeout(()=>{w.print();},350);
 }
 
 // ── AI PLAY GENERATOR ─────────────────────────────────────────────────────────
