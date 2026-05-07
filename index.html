@@ -245,6 +245,33 @@
     @media (orientation:landscape) and (max-height:540px){.canvas-hdr{padding:4px 10px}}
     .toast{position:fixed;bottom:90px;left:50%;transform:translateX(-50%);background:rgba(34,197,94,.92);color:#fff;font-size:12px;font-weight:700;padding:8px 18px;border-radius:20px;z-index:9999;pointer-events:none;opacity:0;transition:opacity .2s}
     .toast.show{opacity:1}
+    /* ── PRINT ── hide app chrome, show only #printPage ──────────────────── */
+    #printPage{display:none}
+    @media print{
+      body>*:not(#printPage){display:none!important}
+      #printPage{display:block!important;margin:0;padding:0}
+      @page{margin:.45in}
+    }
+    @media print and (max-width:9999px){#pp-landscape{}}
+    .pp-h{font-family:Arial,Helvetica,sans-serif;color:#111;font-size:10pt;line-height:1.4}
+    .pp-logo{font-size:22pt;font-weight:900;letter-spacing:3px;color:#111}
+    .pp-logo span{color:#666}
+    .pp-opp{font-size:9pt;letter-spacing:1px;text-transform:uppercase;color:#555;margin-top:2px}
+    .pp-form-name{font-size:17pt;font-weight:900}
+    .pp-sit{font-size:10pt;color:#444}
+    .pp-divider{border:none;border-top:2.5px solid #111;margin:8px 0}
+    .pp-lbl{font-size:7pt;letter-spacing:1.5px;text-transform:uppercase;color:#777;font-weight:700;margin-bottom:3px}
+    .pp-call{font-size:16pt;font-weight:900;color:#111;margin-bottom:2px}
+    .pp-blitz{font-size:10pt;font-weight:700;margin-bottom:10px}
+    .pp-gap-tbl{width:100%;border-collapse:collapse;font-size:8pt;margin-bottom:8px}
+    .pp-gap-tbl td{padding:2px 5px 2px 0;vertical-align:top}
+    .pp-gap-val{font-weight:800;color:#111;white-space:nowrap}
+    .pp-gap-note{color:#666}
+    .pp-reason{font-size:8.5pt;line-height:1.55;color:#333;margin-bottom:8px}
+    .pp-alert{border:1.5px solid #c00;border-radius:4px;padding:7px 9px;margin-bottom:10px}
+    .pp-alert-hdr{font-size:7pt;font-weight:800;text-transform:uppercase;letter-spacing:1px;color:#c00;margin-bottom:3px}
+    .pp-notes-box{border:1px solid #bbb;border-radius:3px;height:55px;margin-top:4px}
+    .pp-footer{font-size:7pt;color:#aaa;text-align:center;margin-top:10px;border-top:1px solid #ddd;padding-top:6px}
     .canvas-hdr-title{font-size:15px;font-weight:800;color:var(--white)}
     .canvas-hdr-sub{font-size:10px;color:var(--gray);letter-spacing:.5px;margin-top:1px}
     .canvas-btns{display:flex;gap:8px;flex-shrink:0}
@@ -392,10 +419,11 @@
 <div class="screen" id="screen2">
   <div id="oppOv" class="ov"></div>
   <div id="gameNotesCard"></div>
-  <div style="display:flex;gap:8px;margin-bottom:14px">
-    <button class="act-sec" style="flex:1" onclick="showGamePlan()">&#128203; Game Plan</button>
-    <button class="act-sec" onclick="shareGamePlan()" style="flex:1">&#11014; Email Plan</button>
-    <button class="act-sec" onclick="copyGamePlan()" style="flex:1">&#128203; Copy</button>
+  <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:14px">
+    <button class="act-sec" onclick="showGamePlan()">&#128203; Game Plan</button>
+    <button class="act-sec" onclick="printGamePlan()">&#128438; Print Plan</button>
+    <button class="act-sec" onclick="shareGamePlan()">&#11014; Email Plan</button>
+    <button class="act-sec" onclick="copyGamePlan()">&#128203; Copy Text</button>
   </div>
   <p class="sec-lbl">Offensive Formations</p>
   <div id="formList"></div>
@@ -465,6 +493,7 @@
       <button class="cbtn-clear" onclick="flipCanvas()" title="Mirror play left/right">&#8596; Flip</button>
       <button class="cbtn-clear" onclick="clearCanvas()">Clear</button>
       <button class="cbtn-save" onclick="saveCanvas()">Save</button>
+      <button class="cbtn-close" onclick="printPlayCard()" title="Print play card">&#128438;</button>
       <button class="cbtn-save" onclick="sharePlayCard()" style="background:rgba(240,165,0,.18);border:1.5px solid rgba(240,165,0,.5);color:var(--gold)">&#11014; Share</button>
       <button class="cbtn-close" onclick="closeCanvas()">&#10005;</button>
     </div>
@@ -1156,7 +1185,10 @@ function renderDefCall() {
          </div>`
       : `<button class="draw-play-btn" onclick="openCanvas()">&#9999; Draw Play Diagram</button>`
     }
-    <button class="act-sec" style="width:100%;margin-top:10px" onclick="shareDefCall()">&#11014; Share This Call</button>`;
+    <div style="display:flex;gap:8px;margin-top:10px">
+      <button class="act-sec" style="flex:1" onclick="shareDefCall()">&#11014; Share</button>
+      <button class="act-sec" style="flex:1" onclick="printBlitzPackage()">&#128438; Print</button>
+    </div>`;
 }
 
 // ── MODALS ────────────────────────────────────────────────────────────────────
@@ -4042,6 +4074,136 @@ function cvEnd(e){ cvDrawing=false; cvDragging=null; }
   c.addEventListener('touchend',   cvEnd);
 })();
 
+// ── PRINT ─────────────────────────────────────────────────────────────────────
+function _ppGapRows(preset, teAdj){
+  let rows=[];
+  if(preset==='4-3') rows=[
+    ['DE (strong)','C','5-tech contain'],['DT (3-tech)','B','strong side'],
+    ['DT (1-tech)','A','weak side'],['DE (weak)','C','5-tech contain'],
+    ['MLB','A',''],['Sam LB','B','force'],['Will LB','B/Flat',''],
+  ];
+  else if(preset==='3-4') rows=[
+    ['NT','A','strong A'],['DE (strong)',teAdj?'C':'B',teAdj?'TE bumped':''],
+    ['DE (weak)','B',''],['OLB (strong)',teAdj?'D':'C',teAdj?'TE bumped':'edge'],
+    ['ILB (strong)','B/Flow','hit-and-run'],['ILB (weak)','A','weak A'],
+    ['OLB (weak)','C','edge'],
+  ];
+  else rows=[
+    ['NT','A/A','both A gaps'],['DE (strong)','B','4i crash'],
+    ['DE (weak)','B','4i crash'],['MLB','A','flow'],
+    ['OLB (strong)','C','edge'],['OLB (weak)','C','edge'],
+  ];
+  return rows.map(([p,g,n])=>
+    `<tr><td>${esc(p)}</td><td class="pp-gap-val">${esc(g)}</td><td class="pp-gap-note">${esc(n)}</td></tr>`
+  ).join('');
+}
+
+function _buildPrintHeader(formName, sitLabel, runPct, passPct){
+  const o=st.opp||{};
+  return `
+    <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:4px">
+      <div>
+        <div class="pp-logo">BLITZ<span>IQ</span></div>
+        <div class="pp-opp">${esc(o.name||'')} &nbsp;${esc(o.season||'')}</div>
+      </div>
+      <div style="text-align:right">
+        <div class="pp-form-name">${esc(formName)}</div>
+        <div class="pp-sit">${esc(sitLabel||'')}${sitLabel?'&nbsp;—&nbsp;':''}${runPct}% Run / ${passPct}% Pass</div>
+      </div>
+    </div>
+    <hr class="pp-divider">`;
+}
+
+function printPlayCard(){
+  if(!st.form||!st.sit) return;
+  const canvas=document.getElementById('playCanvas');
+  const img=canvas.toDataURL('image/png');
+  const dc=st.sit.dc||{};
+  const f=st.form; const s=st.sit;
+  const preset=window._cvPresetType||getDefPreset(f);
+  const nm=(f.name||'').toUpperCase();
+  const teAdj=preset==='3-4'&&/\bTE\b|\bWING\b|\bKING\b|\bPRO\b|\bI.?FORM\b|\bTIGHT/.test(nm);
+  const presetLabel={'4-3':'4-3 BASE','3-4':'3-4 BASE','3-3-5':'3-3-5 STACK'}[preset]||preset;
+  const teTag=teAdj?` <span style="background:#fef3c7;color:#92400e;border:1px solid #d97706;border-radius:3px;padding:1px 5px;font-size:7pt;font-weight:700">TE ADJ</span>`:'';
+
+  document.getElementById('printPage').innerHTML=`
+    <style>@page{size:letter landscape;margin:.45in}</style>
+    <div class="pp-h">
+      ${_buildPrintHeader(f.name, s.distLabel, s.runPct, s.passPct)}
+      <div style="display:grid;grid-template-columns:3fr 2fr;gap:20px;align-items:start">
+        <div>
+          <img src="${img}" style="width:100%;border:1.5px solid #ccc;border-radius:4px;display:block">
+          <div style="margin-top:10px">
+            <div class="pp-lbl">Coach Notes</div>
+            <div class="pp-notes-box"></div>
+          </div>
+        </div>
+        <div>
+          <div class="pp-lbl">Defensive Call</div>
+          <div class="pp-call">${esc(dc.coverage||'—')}</div>
+          <div class="pp-blitz">${esc(dc.blitz||'—')}</div>
+
+          <div class="pp-lbl">Gap Assignments — ${esc(presetLabel)}${teTag}</div>
+          <table class="pp-gap-tbl">${_ppGapRows(preset,teAdj)}</table>
+
+          ${dc.reason?`<div class="pp-lbl">Why This Call</div>
+          <div class="pp-reason">${esc(dc.reason)}</div>`:''}
+
+          ${dc.alert?`<div class="pp-alert">
+            <div class="pp-alert-hdr">⚠ Watch For</div>
+            <div style="font-size:8.5pt">${esc(dc.alert)}</div>
+          </div>`:''}
+        </div>
+      </div>
+      <div class="pp-footer">BlitzIQ &nbsp;·&nbsp; Defensive Scouting &nbsp;·&nbsp; richderrik58.github.io/blitzIQ</div>
+    </div>`;
+  window.print();
+  setTimeout(()=>{ document.getElementById('printPage').innerHTML=''; }, 800);
+}
+
+function printBlitzPackage(){
+  if(!st.form||!st.sit) return;
+  const dc=st.sit.dc||{};
+  const f=st.form; const s=st.sit;
+  const preset=getDefPreset(f);
+  const nm=(f.name||'').toUpperCase();
+  const teAdj=preset==='3-4'&&/\bTE\b|\bWING\b|\bKING\b|\bPRO\b|\bI.?FORM\b|\bTIGHT/.test(nm);
+  const presetLabel={'4-3':'4-3 BASE','3-4':'3-4 BASE','3-3-5':'3-3-5 STACK'}[preset]||preset;
+  const teTag=teAdj?` <span style="background:#fef3c7;color:#92400e;border:1px solid #d97706;border-radius:3px;padding:1px 5px;font-size:7pt;font-weight:700">TE ADJ</span>`:'';
+  const img=dc.playCanvas||'';
+
+  document.getElementById('printPage').innerHTML=`
+    <style>@page{size:letter portrait;margin:.45in}</style>
+    <div class="pp-h">
+      ${_buildPrintHeader(f.name, s.distLabel, s.runPct, s.passPct)}
+      <div style="display:grid;grid-template-columns:${img?'1fr 1fr':'1fr'};gap:18px;align-items:start">
+        ${img?`<img src="${img}" style="width:100%;border:1.5px solid #ccc;border-radius:4px;display:block">`:''}
+        <div>
+          <div class="pp-lbl">Blitz Package</div>
+          <div class="pp-call" style="font-size:14pt">${esc(dc.blitz||'—')}</div>
+          <div class="pp-blitz" style="margin-bottom:10px">${esc(dc.coverage||'')}</div>
+
+          <div class="pp-lbl">Gap Assignments — ${esc(presetLabel)}${teTag}</div>
+          <table class="pp-gap-tbl">${_ppGapRows(preset,teAdj)}</table>
+
+          ${dc.reason?`<div class="pp-lbl">Why This Blitz</div>
+          <div class="pp-reason">${esc(dc.reason)}</div>`:''}
+
+          ${dc.alert?`<div class="pp-alert">
+            <div class="pp-alert-hdr">⚠ Watch For</div>
+            <div style="font-size:8.5pt">${esc(dc.alert)}</div>
+          </div>`:''}
+
+          <div class="pp-lbl" style="margin-top:10px">Coach Notes</div>
+          <div class="pp-notes-box"></div>
+        </div>
+      </div>
+      <div class="pp-footer">BlitzIQ &nbsp;·&nbsp; ${esc(dc.blitz||'Blitz Package')} &nbsp;·&nbsp; richderrik58.github.io/blitzIQ</div>
+    </div>`;
+  window.print();
+  setTimeout(()=>{ document.getElementById('printPage').innerHTML=''; }, 800);
+}
+
 // ── SHARE / EMAIL ─────────────────────────────────────────────────────────────
 function showToast(msg, ms=2200){
   const el=document.getElementById('toastEl');
@@ -4222,5 +4384,6 @@ loadDB();
 renderOpps(); syncHdr();
 </script>
 <div class="toast" id="toastEl"></div>
+<div id="printPage" class="pp-h"></div>
 </body>
 </html>
