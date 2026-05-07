@@ -1025,9 +1025,14 @@ function renderSits() {
   const hasKey=!!localStorage.getItem('blitziq_api_key');
   recEl.innerHTML+=`
     <button class="gen-play-btn" onclick="generatePlayCard()">
-      &#9889; ${hasKey?'Generate Play Card':'Generate Play Card (Demo)'}
+      &#9889; ${hasKey?'Generate AI Play Card':'Generate Play Diagram'}
       &nbsp;<span class="pro-badge">${hasKey?'AI':'Demo'}</span>
     </button>
+    <div style="font-size:10px;color:var(--gray);text-align:center;margin-top:-10px;margin-bottom:10px">
+      ${hasKey
+        ? 'Uses Anthropic AI + this formation\'s actual tendency data'
+        : 'Demo: shows a typical play concept for this formation type — add an API key for opponent-specific AI diagrams'}
+    </div>
     <div style="text-align:center;margin-top:-8px;margin-bottom:12px;display:flex;justify-content:center;gap:16px">
       ${hasKey
         ? `<button onclick="resetApiKey()" style="background:none;border:none;color:var(--gray);font-size:11px;cursor:pointer;text-decoration:underline;font-family:inherit">Change API Key</button>`
@@ -2530,7 +2535,9 @@ function applyGeneratedPlay(playData){
     }
 
     redrawAll();
-    setCanvasMode('draw', document.getElementById('modeDrawBtn'));
+    // Switch to Draw Routes mode AFTER rendering so toolbar height is stable
+    // Use setTimeout(0) to let the browser paint first
+    setTimeout(()=>setCanvasMode('draw', document.getElementById('modeDrawBtn')), 0);
   });
 }
 
@@ -2643,15 +2650,16 @@ function drawPlayerSymbol(ctx,p){
     ctx.fillStyle='#0a1628';
     ctx.fillText(p.type,p.x,p.y+0.5);
   } else {
-    // Defensive = open circle
+    // Defensive = open circle — high-contrast for visibility on dark field
     ctx.beginPath();
     ctx.arc(p.x,p.y,r,0,Math.PI*2);
-    ctx.fillStyle='rgba(10,22,40,0.75)';
+    ctx.fillStyle='rgba(0,10,28,0.92)';  // nearly opaque dark navy
     ctx.fill();
-    ctx.strokeStyle='rgba(255,255,255,0.92)';
-    ctx.lineWidth=2;
+    ctx.strokeStyle='#ffffff';            // solid white border
+    ctx.lineWidth=2.5;
     ctx.stroke();
     ctx.fillStyle='#ffffff';
+    ctx.font=`bold ${p.type.length>2?9:11}px -apple-system,Helvetica,sans-serif`;
     ctx.fillText(p.type,p.x,p.y+0.5);
   }
 
@@ -2830,9 +2838,11 @@ function openCanvas(onReady){
   document.body.style.overflow='hidden';
   requestAnimationFrame(()=>{
     const hdrH=document.querySelector('.canvas-hdr')?.offsetHeight||52;
+    const defH=document.getElementById('cvDefCall')?.classList.contains('show')
+               ? (document.getElementById('cvDefCall')?.offsetHeight||0) : 0;
     const tbH=document.querySelector('.canvas-toolbar')?.offsetHeight||130;
     const cw=Math.min(window.innerWidth,640);
-    const ch=Math.max(200, window.innerHeight-hdrH-tbH);
+    const ch=Math.max(200, window.innerHeight-hdrH-defH-tbH);
     canvas.width=cw*dpr; canvas.height=ch*dpr;
     canvas.style.width=cw+'px'; canvas.style.height=ch+'px';
     cvCtx=canvas.getContext('2d');
@@ -2908,8 +2918,9 @@ function toggleCanvasTools(){
   const btn=document.getElementById('toolCollapseBtn');
   const collapsed=body.classList.toggle('collapsed');
   btn.innerHTML=collapsed?'&#8963;':'&#8964;';
-  // Resize canvas after transition completes
-  setTimeout(()=>{ if(cvCtx) resizeCanvas(); }, 280);
+  // Do NOT resize the canvas on toggle — resizing moves players because their
+  // absolute pixel coords don't rescale with the new canvas height.
+  // Canvas overflows the visible area slightly when tools are hidden; that's fine.
 }
 
 function resizeCanvas(){
