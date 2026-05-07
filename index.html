@@ -308,6 +308,7 @@
 <div class="screen" id="screen2">
   <div id="oppOv" class="ov"></div>
   <div id="gameNotesCard"></div>
+  <button class="act-sec" style="width:100%;margin-bottom:14px" onclick="showGamePlan()">&#128203; Game Plan Cheat Sheet</button>
   <p class="sec-lbl">Offensive Formations</p>
   <div id="formList"></div>
   <button class="add-btn" onclick="openModal('mForm')">+ Add Formation</button>
@@ -316,6 +317,7 @@
 <!-- SCREEN 3 -->
 <div class="screen" id="screen3">
   <div id="formOv" class="ov"></div>
+  <div id="blitziqRec"></div>
   <p class="sec-lbl">Down &amp; Distance Tendencies</p>
   <div class="sit-grid" id="sitGrid"></div>
   <div style="margin-top:12px">
@@ -345,6 +347,18 @@
     <div class="prog-box-sub" id="progSub">Starting…</div>
     <div id="progList"></div>
   </div>
+</div>
+
+<!-- GAME PLAN OVERLAY -->
+<div class="prev-ov" id="gamePlanOv">
+  <div class="prev-hdr">
+    <div class="prev-hdr-l">
+      <div class="prev-title" id="gpTitle">Game Plan</div>
+      <div class="prev-file" id="gpSub">Defensive Quick Reference</div>
+    </div>
+    <button class="cbtn-close" onclick="closeGamePlan()">&#10005;</button>
+  </div>
+  <div class="prev-body" id="gpBody"></div>
 </div>
 
 <!-- PLAY CANVAS OVERLAY -->
@@ -882,6 +896,25 @@ function selForm(id) { st.form=st.opp.formations.find(f=>f.id===id); renderSits(
 function renderSits() {
   const f = st.form;
   document.getElementById('formOv').innerHTML = `<div class="ov-ttl">${esc(f.name)} — Formation Tendency</div>${sbar(f.runPct,f.passPct)}<div class="ptags" style="margin-top:10px"><span class="tag tag-r">&#127939; ${esc(f.favoriteRunPlay)}</span><span class="tag tag-p">&#9992; ${esc(f.favoritePassPlay)}</span></div>`;
+
+  // BlitzIQ auto-recommendation
+  if(!f.recommendation) f.recommendation = generateRecommendation(f);
+  const rec = f.recommendation;
+  const recEl = document.getElementById('blitziqRec');
+  if(rec && !rec.dismissed){
+    recEl.innerHTML=`
+      <div style="background:rgba(240,165,0,.07);border:1.5px solid rgba(240,165,0,.4);border-radius:12px;padding:16px;margin-bottom:14px">
+        <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:10px">
+          <div style="font-size:10px;letter-spacing:2px;text-transform:uppercase;color:var(--gold);font-weight:800">&#9889; BlitzIQ Recommendation</div>
+          <button onclick="dismissRec()" style="background:none;border:none;color:var(--gray);font-size:16px;cursor:pointer;padding:0 0 0 10px;line-height:1">&#10005;</button>
+        </div>
+        <div style="font-size:24px;font-weight:900;color:var(--gold);line-height:1.1;margin-bottom:4px">${esc(rec.coverage)}</div>
+        <div style="font-size:16px;font-weight:700;color:var(--white);margin-bottom:10px">${esc(rec.blitz)}</div>
+        <div style="font-size:12px;color:var(--grayl);line-height:1.6;background:rgba(255,255,255,.03);border-radius:8px;padding:10px">${esc(rec.reason)}</div>
+      </div>`;
+  } else {
+    recEl.innerHTML='';
+  }
   const grid = document.getElementById('sitGrid');
   if (!f.situations.length) {
     grid.style.display='block';
@@ -1944,11 +1977,126 @@ function importPreview(){
       downTendency:'Imported from Hudl. Add tendency notes in app.',
       situations:f.situations.map(s=>({...s,id:uid(),dc:s.dc||{coverage:'',blitz:'',reason:'',alert:''}}))});
   });
-  DB.opponents.push({id:uid(),name,season:season||String(new Date().getFullYear()),
+  const newOpp={id:uid(),name,season:season||String(new Date().getFullYear()),
     runPct:run,passPct:100-run,
     notes:document.getElementById('p_notes').value.trim()||'Imported from Hudl scouting report.',
-    formations});
+    gameNotes:'',formations};
+  applyRecommendations(newOpp);
+  DB.opponents.push(newOpp);
   saveDB(); closePreview(); renderOpps(); showScreen(1);
+}
+
+// ── BLITZIQ RECOMMENDATION ENGINE ────────────────────────────────────────────
+function generateRecommendation(f){
+  const nm=f.name.toUpperCase();
+  const pass=f.passPct||0, run=f.runPct||0;
+  const tend=(f.downTendency||'').toLowerCase();
+  const sits=f.situations||[];
+
+  // Empty backfield → max pressure
+  if(/EMPTY/.test(nm)||pass>=90)
+    return{coverage:'Cover 0',blitz:'Max Pressure (5-man)',
+      reason:`Empty backfield eliminates RB hot routes — bring max pressure and force an immediate release. No RB means no check-down safety valve.`,auto:true};
+
+  // Trips / Trey → bracket trips side with Cover 3
+  if(/TRIPS|TREY|3X1/.test(nm))
+    return{coverage:'Cover 3 (Trips Bracket)',blitz:'Weak-side Edge Pressure',
+      reason:`Trips formation — Cover 3 uses the flat defender plus two deep thirds to bracket the trips side. Force the QB to throw to the single receiver by bringing edge pressure from the backside.`,auto:true};
+
+  // 80%+ pass → Quarters + zone blitz
+  if(pass>=80)
+    return{coverage:'Cover 4 (Quarters)',blitz:'A-Gap Fire Zone',
+      reason:`${pass}% pass tendency — Quarters carries every receiver vertically and protects against 4-verts. The fire zone generates interior pressure without exposing the deep field.`,auto:true};
+
+  // 80%+ run → stack the box + edge blitz
+  if(run>=80)
+    return{coverage:'Cover 1 Man',blitz:'Edge Blitz — 8 in Box',
+      reason:`${run}% run tendency — stack the box with Cover 1 to outnumber the run. Edge blitz attacks the outside gap and forces the ball back inside to pursuit angles.`,auto:true};
+
+  // 100% pass on 3rd & Long → Cover 4 + corner blitz
+  const thirdLong=sits.find(s=>s.down===3&&/long/i.test(s.distLabel||'')&&s.passPct>=95);
+  if(thirdLong)
+    return{coverage:'Cover 4 (Quarters)',blitz:'Corner Blitz',
+      reason:`100% pass on ${thirdLong.distLabel} — Quarters takes away all vertical routes. Corner blitz disguises the coverage and creates an unblocked rusher off the edge.`,auto:true};
+
+  // RPO / option tendency
+  if(/rpo|read.?option|option run/.test(tend))
+    return{coverage:'Cover 1 Man',blitz:'No Blitz — LB QB Spy',
+      reason:`RPO/option tendency — Cover 1 locks down receivers individually. Keep a linebacker spying the QB to contain designed scrambles and pull reads.`,auto:true};
+
+  // Pass-leaning (60–79%)
+  if(pass>=60)
+    return{coverage:'Cover 2',blitz:'Weak-side Edge Pressure',
+      reason:`Pass-leaning formation (${pass}% pass) — Cover 2 protects both deep halves and brackets the slot. Edge pressure disrupts route timing without leaving gaps over the top.`,auto:true};
+
+  // Run-leaning (60–79%)
+  if(run>=60)
+    return{coverage:'Cover 3',blitz:'Mike LB Blitz',
+      reason:`Run-leaning formation (${run}% run) — Cover 3 stays disciplined against the run with three deep defenders. Mike blitz attacks the interior gap before the line can reach the second level.`,auto:true};
+
+  // Balanced default
+  return{coverage:'Cover 3',blitz:'Base 4-3 — No Blitz',
+    reason:`Balanced formation — play assignment-sound Cover 3 and execute gap responsibilities. Stay disciplined and let the defense dictate rather than over-committing.`,auto:true};
+}
+
+function applyRecommendations(opp){
+  if(!opp||!opp.formations) return;
+  opp.formations.forEach(f=>{ if(!f.recommendation) f.recommendation=generateRecommendation(f); });
+}
+
+function dismissRec(){
+  if(st.form&&st.form.recommendation){
+    st.form.recommendation.dismissed=true;
+    saveDB(); renderSits();
+  }
+}
+
+// ── GAME PLAN ────────────────────────────────────────────────────────────────
+function showGamePlan(){
+  if(!st.opp) return;
+  const o=st.opp;
+  applyRecommendations(o);
+  document.getElementById('gpTitle').textContent=`${o.name} ${o.season}`;
+  document.getElementById('gpSub').textContent=`${o.formations.length} Formation${o.formations.length!==1?'s':''} · Defensive Quick Reference`;
+
+  const rows=o.formations.map(f=>{
+    const rec=f.recommendation||generateRecommendation(f);
+    const lean=f.passPct>=60?
+      `<span style="color:var(--blue);font-weight:700">${f.passPct}% PASS</span>`:
+      `<span style="color:var(--green);font-weight:700">${f.runPct}% RUN</span>`;
+    const plays=[
+      f.favoriteRunPlay&&f.favoriteRunPlay!=='Not specified'?`<span class="tag tag-r" style="font-size:10px">&#127939; ${esc(f.favoriteRunPlay)}</span>`:'',
+      f.favoritePassPlay&&f.favoritePassPlay!=='Not specified'?`<span class="tag tag-p" style="font-size:10px">&#9992; ${esc(f.favoritePassPlay)}</span>`:'',
+    ].filter(Boolean).join('');
+    return`<div style="background:var(--navy2);border:1px solid rgba(255,255,255,.07);border-radius:12px;padding:14px 16px;margin-bottom:10px">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
+        <div style="font-size:16px;font-weight:800">${esc(f.name)}</div>
+        <div style="font-size:11px">${lean}</div>
+      </div>
+      <div style="font-size:10px;letter-spacing:2px;text-transform:uppercase;color:var(--gold);font-weight:800;margin-bottom:5px">&#9889; BlitzIQ Call</div>
+      <div style="font-size:20px;font-weight:900;color:var(--gold);line-height:1.1">${esc(rec.coverage)}</div>
+      <div style="font-size:14px;font-weight:700;color:var(--white);margin:3px 0 8px">${esc(rec.blitz)}</div>
+      ${plays?`<div class="ptags">${plays}</div>`:''}
+    </div>`;
+  }).join('');
+
+  const notesBlock=o.gameNotes?`
+    <div style="background:var(--navy3);border:1px solid rgba(240,165,0,.2);border-radius:12px;padding:14px;margin-top:4px">
+      <div class="sec-lbl" style="margin:0 0 8px">Game Notes</div>
+      <div style="font-size:13px;color:rgba(255,255,255,.82);line-height:1.65;white-space:pre-wrap">${esc(o.gameNotes)}</div>
+    </div>`:'';
+
+  document.getElementById('gpBody').innerHTML=`
+    <div style="margin-bottom:6px">${rows}</div>
+    ${notesBlock}`;
+
+  document.getElementById('gamePlanOv').classList.add('open');
+  document.body.style.overflow='hidden';
+}
+
+function closeGamePlan(){
+  document.getElementById('gamePlanOv').classList.remove('open');
+  document.body.style.overflow='';
 }
 
 // ── ESCAPE HTML ───────────────────────────────────────────────────────────────
