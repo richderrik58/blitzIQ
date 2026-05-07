@@ -960,7 +960,13 @@ function renderSits() {
   recEl.innerHTML+=`
     <button class="gen-play-btn" onclick="generatePlayCard()">
       &#9889; Generate Play Card &nbsp;<span class="pro-badge">Pro</span>
-    </button>`;
+    </button>
+    ${hasKey
+      ? `<div style="text-align:center;margin-top:-8px;margin-bottom:12px">
+           <button onclick="resetApiKey()" style="background:none;border:none;color:var(--gray);font-size:11px;cursor:pointer;text-decoration:underline;font-family:inherit">Change API Key</button>
+         </div>`
+      : ''
+    }`;
   const grid = document.getElementById('sitGrid');
   if (!f.situations.length) {
     grid.style.display='block';
@@ -2154,7 +2160,13 @@ function saveApiKey(){
   if (!k) { document.getElementById('apiKeyIn').classList.add('err'); return; }
   localStorage.setItem('blitziq_api_key', k);
   closeModal('mApiKey');
-  renderSits(); // refresh to show active state
+  renderSits();
+}
+function resetApiKey(){
+  localStorage.removeItem('blitziq_api_key');
+  document.getElementById('apiKeyIn').value='';
+  renderSits(); // removes the "Change Key" link
+  openModal('mApiKey');
 }
 
 async function generatePlayCard(){
@@ -2194,10 +2206,16 @@ async function generatePlayCard(){
   } catch(err) {
     hideLoad();
     console.error('AI play gen error:', err);
-    const msg = err.status === 401 ? 'Invalid API key — check your key in Settings.'
-              : err.status === 429 ? 'Rate limit hit — wait a moment and try again.'
-              : err.message || 'Unknown error';
-    alert('AI generation failed: ' + msg);
+    if(err.status===401||err.message?.includes('401')||err.message?.includes('auth')){
+      localStorage.removeItem('blitziq_api_key');
+      renderSits();
+      document.getElementById('apiKeyIn').value='';
+      openModal('mApiKey');
+    } else {
+      const msg = err.status===429 ? 'Rate limit hit — wait a moment and try again.'
+                : err.message || 'Unknown error';
+      alert('AI generation failed: ' + msg);
+    }
   }
 }
 
