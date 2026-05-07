@@ -3078,7 +3078,26 @@ function cvEnd(e){ cvDrawing=false; cvDragging=null; }
   const k=localStorage.getItem('blitziq_api_key');
   if(k && !k.startsWith('sk-ant-')) localStorage.removeItem('blitziq_api_key');
 })();
-loadDB(); renderOpps(); syncHdr();
+loadDB();
+// Migration: auto-fill defensive calls for any existing imported opponents
+// that have empty dc fields (safe to run every load — skips already-filled situations)
+(function(){
+  let changed=false;
+  (DB.opponents||[]).forEach(o=>{
+    applyRecommendations(o);
+    (o.formations||[]).forEach(f=>{
+      (f.situations||[]).forEach(s=>{
+        if(!s.dc||(!s.dc.coverage&&!s.dc.blitz)){
+          const formRec=f.recommendation||generateRecommendation(f);
+          s.dc=generateSituationDC(f,s,formRec);
+          changed=true;
+        }
+      });
+    });
+  });
+  if(changed) saveDB();
+})();
+renderOpps(); syncHdr();
 </script>
 </body>
 </html>
