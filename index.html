@@ -307,6 +307,7 @@
 <!-- SCREEN 2 -->
 <div class="screen" id="screen2">
   <div id="oppOv" class="ov"></div>
+  <div id="gameNotesCard"></div>
   <p class="sec-lbl">Offensive Formations</p>
   <div id="formList"></div>
   <button class="add-btn" onclick="openModal('mForm')">+ Add Formation</button>
@@ -558,6 +559,27 @@
   </div>
 </div>
 
+<!-- MODAL: GAME NOTES -->
+<div class="modal-ov" id="mGameNotes">
+  <div class="modal-sheet">
+    <div class="modal-handle"></div>
+    <div class="modal-hdr">
+      <span class="modal-title">Game Notes</span>
+      <button class="modal-x" onclick="closeModal('mGameNotes')">&#10005;</button>
+    </div>
+    <div class="modal-body">
+      <div class="fld">
+        <label class="fld-lbl">Notes — adjustments, observations, final score</label>
+        <textarea class="fld-ta" id="gn_text" style="height:220px" placeholder="e.g. Won 21-14. Their trips motion caught us twice in the 1st quarter. MLB blitz on 3rd & long worked all night. QB scrambled for 2 first downs — spy LB next time."></textarea>
+      </div>
+    </div>
+    <div class="modal-foot">
+      <button class="btn-cancel" onclick="closeModal('mGameNotes')">Cancel</button>
+      <button class="btn-save" onclick="saveGameNotes()">Save Notes</button>
+    </div>
+  </div>
+</div>
+
 <!-- MODAL: ADD SITUATION -->
 <div class="modal-ov" id="mSit">
   <div class="modal-sheet">
@@ -702,6 +724,7 @@ if (typeof pdfjsLib !== 'undefined') ensurePDFWorker();
 const SEED = { opponents: [{
   id:1, name:'Broad Run', season:'2025', runPct:50, passPct:50,
   notes:'Trips-heavy spread offense. No-huddle, fast tempo. Mobile QB — dual-threat runner. Motions pre-snap frequently to create secondary conflicts.',
+  gameNotes:'',
   formations:[{
     id:11, name:'Trey R Weak', runPct:38, passPct:62,
     favoriteRunPlay:'Inside Zone (Strong Side)', favoritePassPlay:'Curl-Flat Combo (Trips)',
@@ -824,6 +847,18 @@ function selOpp(id) { st.opp=DB.opponents.find(o=>o.id===id); renderForms(); sho
 function renderForms() {
   const o = st.opp;
   document.getElementById('oppOv').innerHTML = `<div class="ov-ttl">${esc(o.name)} ${esc(o.season)} — Overall Tendency</div>${sbar(o.runPct,o.passPct)}<div class="ov-note">${esc(o.notes)}</div>`;
+  // Game notes card
+  const gn = o.gameNotes || '';
+  document.getElementById('gameNotesCard').innerHTML = `
+    <div class="def-block" style="margin-bottom:14px">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:${gn?'10px':'0'}">
+        <div class="def-lbl" style="margin:0">Game Notes</div>
+        <button onclick="editGameNotes()" style="background:rgba(240,165,0,.12);border:1px solid rgba(240,165,0,.35);color:var(--gold);font-size:12px;font-weight:700;padding:5px 12px;border-radius:7px;cursor:pointer;font-family:inherit">
+          ${gn ? '&#9998; Edit' : '+ Add Notes'}
+        </button>
+      </div>
+      ${gn ? `<div style="font-size:13px;color:rgba(255,255,255,.82);line-height:1.65;white-space:pre-wrap">${esc(gn)}</div>` : ''}
+    </div>`;
   const el = document.getElementById('formList');
   if (!o.formations.length) {
     el.innerHTML = `<div class="empty"><div class="empty-icon">🏈</div><div class="empty-txt">No formations scouted yet.<br>Tap below to add this team's formations.</div></div>`;
@@ -985,8 +1020,17 @@ function saveOpp(){
     runPct:parseInt(document.getElementById('o_run').value)||50,
     passPct:parseInt(document.getElementById('o_pass').value)||50,
     notes:document.getElementById('o_notes').value.trim()||'No scouting notes added.',
+    gameNotes:'',
     formations:[]});
   saveDB(); closeModal('mOpp'); resetOpp(); renderOpps();
+}
+function editGameNotes(){
+  document.getElementById('gn_text').value=st.opp.gameNotes||'';
+  openModal('mGameNotes');
+}
+function saveGameNotes(){
+  st.opp.gameNotes=document.getElementById('gn_text').value.trim();
+  saveDB(); closeModal('mGameNotes'); renderForms();
 }
 function saveForm(){
   const name=document.getElementById('f_name').value.trim();
