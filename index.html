@@ -2675,19 +2675,39 @@ function drawCoverageZones(ctx,cw,ch,los,coverage){
       ctx.font='bold 10px -apple-system,sans-serif';
       ctx.fillText(z.label,(z.x1+z.x2)/2, 22);
     });
-    // Four underneath zones
+    // Four underneath zones — assignments shift when a LB blitzes
+    // Blitz detection: look at the blitz package stored with the call
+    const blitz=(window._cvDefCall?.blitz||'').toUpperCase();
+    const weakBlitz=/WEAK|EDGE|BOUNDARY|WILL|OLB/.test(blitz)&&/BLITZ|PRESSURE|FIRE/.test(blitz);
+    const strongBlitz=/STRONG|SAM/.test(blitz)&&/BLITZ|PRESSURE|FIRE/.test(blitz);
+    const mlbBlitz=/MIKE|MLB|A.GAP|DOUBLE/.test(blitz)&&/BLITZ|PRESSURE|FIRE/.test(blitz);
+
+    // Default Cover 3 underneath assignments
+    let wFlat   = weakBlitz   ? 'NB/CB Rotates' : 'Will LB — FLAT';
+    let wHook   = (weakBlitz||mlbBlitz) ? 'MLB — Expand Hook' : 'Will LB — HOOK';
+    let sHook   = (strongBlitz||mlbBlitz) ? 'MLB — Expand Hook' : 'Sam LB — HOOK';
+    let sFlat   = strongBlitz ? 'NB/CB Rotates' : 'SS — FLAT';
+
     const und=[
-      {x1:0,       x2:cw*0.22, label:'FLAT'},
-      {x1:cw*0.22, x2:cw*0.48, label:'HOOK/CURL'},
-      {x1:cw*0.48, x2:cw*0.78, label:'HOOK/CURL'},
-      {x1:cw*0.78, x2:cw,      label:'FLAT'},
+      {x1:0,       x2:cw*0.22, label:wFlat,  alert:weakBlitz},
+      {x1:cw*0.22, x2:cw*0.48, label:wHook,  alert:weakBlitz||mlbBlitz},
+      {x1:cw*0.48, x2:cw*0.78, label:sHook,  alert:strongBlitz||mlbBlitz},
+      {x1:cw*0.78, x2:cw,      label:sFlat,  alert:strongBlitz},
     ];
     und.forEach(z=>{
-      ctx.fillStyle='rgba(34,197,94,0.09)';
+      ctx.fillStyle=z.alert?'rgba(245,158,11,0.12)':'rgba(34,197,94,0.09)';
       ctx.fillRect(z.x1,undBase,z.x2-z.x1,undTop-undBase);
-      ctx.fillStyle='rgba(34,197,94,0.55)';
-      ctx.font='9px -apple-system,sans-serif';
-      ctx.fillText(z.label,(z.x1+z.x2)/2,(undBase+undTop)/2+4);
+      ctx.fillStyle=z.alert?'rgba(245,158,11,0.75)':'rgba(34,197,94,0.55)';
+      ctx.font=z.alert?'bold 8px -apple-system,sans-serif':'8px -apple-system,sans-serif';
+      const mid=(undBase+undTop)/2;
+      // split label onto two lines if it contains ' — '
+      const parts=z.label.split(' — ');
+      if(parts.length>1){
+        ctx.fillText(parts[0],(z.x1+z.x2)/2,mid);
+        ctx.fillText(parts[1],(z.x1+z.x2)/2,mid+11);
+      } else {
+        ctx.fillText(z.label,(z.x1+z.x2)/2,mid+4);
+      }
     });
 
   } else if(/COVER.?4|QUARTER/.test(cov)){
