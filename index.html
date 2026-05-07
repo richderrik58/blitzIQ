@@ -1,0 +1,1605 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0">
+  <title>BlitzIQ — Defensive Scouting</title>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
+  <style>
+    :root {
+      --navy:#0a1628; --navy2:#112240; --navy3:#1a3256; --navyc:#0f1e35;
+      --gold:#f0a500; --goldd:#c88a00; --white:#ffffff;
+      --gray:#7a8fa8; --grayl:#afc2d4;
+      --green:#22c55e; --blue:#60a5fa; --amber:#f59e0b; --red:#ef4444;
+    }
+    *{margin:0;padding:0;box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+    body{background:var(--navy);color:var(--white);font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;min-height:100vh;max-width:640px;margin:0 auto}
+
+    /* HEADER */
+    .hdr{background:var(--navy2);border-bottom:2px solid var(--gold);padding:14px 18px;display:flex;align-items:center;gap:10px;position:sticky;top:0;z-index:200}
+    #backBtn{display:none;align-items:center;justify-content:center;background:rgba(240,165,0,.12);border:1px solid rgba(240,165,0,.35);color:var(--gold);font-size:22px;width:40px;height:40px;border-radius:8px;cursor:pointer;flex-shrink:0}
+    #backBtn.vis{display:flex}
+    .logo{font-size:26px;font-weight:900;letter-spacing:3px;color:var(--gold);line-height:1}
+    .logo span{color:var(--white)}
+    .hdr-sub{font-size:10px;letter-spacing:1.5px;text-transform:uppercase;color:var(--gray);margin-top:2px}
+    .hdr-txt{flex:1}
+
+    /* BREADCRUMB */
+    .bc{background:var(--navyc);padding:9px 18px;display:flex;align-items:center;gap:6px;font-size:12px;color:var(--gray);overflow-x:auto;white-space:nowrap;border-bottom:1px solid rgba(255,255,255,.04);scrollbar-width:none}
+    .bc::-webkit-scrollbar{display:none}
+    .bc-cur{color:var(--gold);font-weight:600}
+    .bc-sep{color:var(--gold);opacity:.4;font-size:14px}
+
+    /* SCREENS */
+    .screen{display:none;padding:16px}
+    .screen.active{display:block;animation:slideIn .18s ease}
+    @keyframes slideIn{from{opacity:0;transform:translateX(12px)}to{opacity:1;transform:translateX(0)}}
+
+    /* TYPE */
+    .sc-title{font-size:22px;font-weight:800;margin-bottom:3px;margin-top:4px}
+    .sc-sub{font-size:13px;color:var(--gray);margin-bottom:16px}
+    .sec-lbl{font-size:10px;letter-spacing:2px;text-transform:uppercase;color:var(--gray);margin:4px 0 12px}
+
+    /* STAT BAR */
+    .sb-wrap{margin-bottom:2px}
+    .sb-labels{display:flex;justify-content:space-between;font-size:11px;font-weight:700;margin-bottom:5px}
+    .lbl-r{color:var(--green)}.lbl-p{color:var(--blue)}.lbl-100{color:var(--amber)}
+    .sb{height:9px;background:rgba(255,255,255,.08);border-radius:5px;overflow:hidden;display:flex}
+    .sb-r{background:var(--green);border-radius:5px 0 0 5px}
+    .sb-p{background:var(--blue);border-radius:0 5px 5px 0}
+
+    /* OVERVIEW */
+    .ov{background:var(--navy3);border:1px solid rgba(240,165,0,.25);border-radius:12px;padding:14px 16px;margin-bottom:18px}
+    .ov-ttl{font-size:11px;letter-spacing:1.5px;text-transform:uppercase;color:var(--gray);margin-bottom:10px}
+    .ov-note{font-size:12px;color:var(--grayl);font-style:italic;margin-top:10px;line-height:1.5}
+
+    /* PLAY TAGS */
+    .ptags{display:flex;flex-wrap:wrap;gap:7px;margin-top:10px}
+    .tag{display:inline-flex;align-items:center;gap:5px;font-size:11px;font-weight:700;padding:4px 10px;border-radius:20px}
+    .tag-r{background:rgba(34,197,94,.14);color:var(--green);border:1px solid rgba(34,197,94,.3)}
+    .tag-p{background:rgba(96,165,250,.14);color:var(--blue);border:1px solid rgba(96,165,250,.3)}
+
+    /* CARDS */
+    .card{background:var(--navy2);border:1px solid rgba(255,255,255,.06);border-radius:14px;padding:18px;margin-bottom:14px;cursor:pointer;position:relative;transition:border-color .15s,transform .1s}
+    .card:active{transform:scale(.985);border-color:var(--gold)}
+    .card-hd{display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:14px}
+    .card-name{font-size:20px;font-weight:800}
+    .card-name-sm{font-size:18px;font-weight:800;margin-bottom:12px;padding-right:30px}
+    .card-meta{font-size:12px;color:var(--gray);margin-top:2px}
+    .card-note{font-size:13px;color:var(--grayl);line-height:1.55;font-style:italic;margin-top:12px;padding-top:12px;border-top:1px solid rgba(255,255,255,.06)}
+    .card-tend{font-size:12px;color:var(--grayl);font-style:italic;margin-top:10px;padding-top:10px;border-top:1px solid rgba(255,255,255,.05);line-height:1.5}
+    .season-badge{background:var(--gold);color:var(--navy);font-size:11px;font-weight:800;padding:4px 10px;border-radius:20px;flex-shrink:0}
+
+    /* DELETE BTN */
+    .del-btn{position:absolute;top:14px;right:14px;width:30px;height:30px;background:rgba(239,68,68,.1);border:1px solid rgba(239,68,68,.25);border-radius:7px;color:var(--red);font-size:13px;cursor:pointer;display:flex;align-items:center;justify-content:center;z-index:10}
+    .del-btn:active{background:rgba(239,68,68,.3)}
+
+    /* SIT GRID */
+    .sit-grid{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+    .sit-card{background:var(--navy2);border:1px solid rgba(255,255,255,.06);border-radius:12px;padding:14px;cursor:pointer;position:relative;transition:border-color .15s,transform .1s}
+    .sit-card:active{transform:scale(.97);border-color:var(--gold)}
+    .sit-card.pass-lean{border-color:rgba(96,165,250,.3)}
+    .sit-card.run-lean{border-color:rgba(34,197,94,.3)}
+    .sit-card.sure{border-color:rgba(245,158,11,.5);background:rgba(245,158,11,.04)}
+    .sit-down{font-size:10px;letter-spacing:1px;text-transform:uppercase;color:var(--gray);margin-bottom:4px}
+    .sit-dist{font-size:17px;font-weight:800;margin-bottom:10px;padding-right:22px}
+    .sit-sure{font-size:11px;font-weight:800;color:var(--amber);margin-top:7px}
+    .sit-del{position:absolute;top:8px;right:8px;width:22px;height:22px;background:rgba(239,68,68,.15);border:none;border-radius:50%;color:var(--red);font-size:10px;cursor:pointer;display:flex;align-items:center;justify-content:center}
+
+    /* DEF CALL */
+    .def-block{background:var(--navy2);border:1px solid rgba(255,255,255,.06);border-radius:14px;padding:18px;margin-bottom:14px}
+    .def-lbl{font-size:10px;letter-spacing:2px;text-transform:uppercase;color:var(--gray);margin-bottom:8px}
+    .def-val{font-size:28px;font-weight:900;color:var(--gold);line-height:1.1}
+    .def-val-sm{font-size:20px;font-weight:800;color:var(--gold)}
+    .reason-box{background:rgba(255,255,255,.04);border-radius:10px;padding:14px;font-size:14px;color:rgba(255,255,255,.82);line-height:1.65;margin-top:8px}
+    .alert-box{background:rgba(245,158,11,.1);border:1px solid rgba(245,158,11,.45);border-radius:14px;padding:18px;margin-bottom:14px}
+    .alert-hdr{display:flex;align-items:center;gap:8px;font-size:11px;letter-spacing:2px;text-transform:uppercase;color:var(--amber);font-weight:800;margin-bottom:10px}
+    .alert-txt{font-size:15px;font-weight:700;line-height:1.55}
+
+    /* ACTION ROW */
+    .action-row{display:flex;gap:10px;margin-bottom:20px}
+    .act-pri{flex:1;padding:15px 10px;background:var(--gold);border:none;border-radius:12px;color:var(--navy);font-size:15px;font-weight:800;cursor:pointer;font-family:inherit}
+    .act-pri:active{background:var(--goldd)}
+    .act-sec{flex:1;padding:15px 10px;background:rgba(240,165,0,.1);border:1.5px solid rgba(240,165,0,.4);border-radius:12px;color:var(--gold);font-size:15px;font-weight:700;cursor:pointer;font-family:inherit}
+    .act-sec:active{background:rgba(240,165,0,.2)}
+
+    /* ADD BUTTON */
+    .add-btn{width:100%;padding:16px;background:rgba(240,165,0,.08);border:1.5px dashed rgba(240,165,0,.35);border-radius:12px;color:var(--gold);font-size:15px;font-weight:700;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:8px;margin-top:4px;margin-bottom:20px;font-family:inherit}
+    .add-btn:active{background:rgba(240,165,0,.18)}
+
+    /* EMPTY */
+    .empty{text-align:center;padding:44px 24px;color:var(--gray)}
+    .empty-icon{font-size:44px;margin-bottom:12px}
+    .empty-txt{font-size:14px;line-height:1.6}
+
+    /* MODAL */
+    .modal-ov{position:fixed;inset:0;background:rgba(0,0,0,.75);z-index:500;display:flex;align-items:flex-end;opacity:0;pointer-events:none;transition:opacity .2s}
+    .modal-ov.open{opacity:1;pointer-events:all}
+    .modal-sheet{width:100%;max-width:640px;margin:0 auto;background:var(--navy2);border-radius:20px 20px 0 0;border-top:2px solid var(--gold);max-height:92vh;overflow-y:auto;transform:translateY(100%);transition:transform .25s ease;-webkit-overflow-scrolling:touch}
+    .modal-ov.open .modal-sheet{transform:translateY(0)}
+    .modal-handle{width:40px;height:4px;background:rgba(255,255,255,.2);border-radius:2px;margin:12px auto 0}
+    .modal-hdr{display:flex;justify-content:space-between;align-items:center;padding:16px 20px 12px;border-bottom:1px solid rgba(255,255,255,.07)}
+    .modal-title{font-size:18px;font-weight:800}
+    .modal-x{width:34px;height:34px;border-radius:50%;background:rgba(255,255,255,.08);border:none;color:var(--grayl);font-size:18px;cursor:pointer;display:flex;align-items:center;justify-content:center}
+    .modal-body{padding:16px 20px}
+    .modal-foot{padding:12px 20px 28px;display:flex;gap:10px;border-top:1px solid rgba(255,255,255,.07)}
+
+    /* FIELDS */
+    .fld{margin-bottom:18px}
+    .fld-lbl{display:block;font-size:10px;letter-spacing:2px;text-transform:uppercase;color:var(--gray);font-weight:700;margin-bottom:8px}
+    .fld-in{width:100%;background:var(--navy);border:1.5px solid rgba(255,255,255,.12);border-radius:10px;padding:14px 16px;color:var(--white);font-size:16px;outline:none;transition:border-color .15s;-webkit-appearance:none;font-family:inherit}
+    .fld-in:focus{border-color:var(--gold)}
+    .fld-in.err{border-color:var(--red)}
+    .fld-ta{width:100%;background:var(--navy);border:1.5px solid rgba(255,255,255,.12);border-radius:10px;padding:14px 16px;color:var(--white);font-size:15px;outline:none;resize:none;height:86px;line-height:1.5;font-family:inherit;transition:border-color .15s}
+    .fld-ta:focus{border-color:var(--gold)}
+    .fld-ta.tall{height:110px}
+
+    /* PCT PICKER */
+    .pct-row{display:flex;gap:12px}
+    .pct-col{flex:1}
+    .pct-lbl{font-size:10px;letter-spacing:1.5px;text-transform:uppercase;font-weight:700;margin-bottom:8px}
+    .pct-lbl.r{color:var(--green)}.pct-lbl.p{color:var(--blue)}
+    .pct-spin{display:flex;align-items:center;background:var(--navy);border:1.5px solid rgba(255,255,255,.12);border-radius:10px;overflow:hidden}
+    .pct-btn{width:46px;height:52px;background:rgba(255,255,255,.05);border:none;color:var(--white);font-size:24px;font-weight:300;cursor:pointer;flex-shrink:0;display:flex;align-items:center;justify-content:center}
+    .pct-btn:active{background:rgba(255,255,255,.15)}
+    .pct-num{flex:1;text-align:center;font-size:26px;font-weight:900;background:none;border:none;color:var(--white);width:100%;padding:0;-moz-appearance:textfield;font-family:inherit}
+    .pct-num::-webkit-outer-spin-button,.pct-num::-webkit-inner-spin-button{-webkit-appearance:none}
+
+    /* SELECTORS */
+    .sel-row{display:flex;gap:8px;flex-wrap:wrap}
+    .sel-btn{flex:1;min-width:60px;padding:13px 6px;background:var(--navy);border:1.5px solid rgba(255,255,255,.12);border-radius:10px;color:var(--grayl);font-size:13px;font-weight:700;cursor:pointer;text-align:center;transition:all .15s;font-family:inherit}
+    .sel-btn.active{background:rgba(240,165,0,.15);border-color:var(--gold);color:var(--gold)}
+
+    /* CHIPS */
+    .chips{display:flex;flex-wrap:wrap;gap:6px;margin-top:8px}
+    .chip{padding:7px 12px;background:var(--navy3);border:1px solid rgba(255,255,255,.1);border-radius:20px;color:var(--grayl);font-size:12px;font-weight:600;cursor:pointer;font-family:inherit}
+    .chip:active{background:rgba(240,165,0,.2);border-color:var(--gold);color:var(--gold)}
+
+    /* FORM DIVIDER */
+    .form-div{display:flex;align-items:center;gap:10px;margin:20px 0 16px}
+    .form-div-line{flex:1;height:1px;background:rgba(255,255,255,.08)}
+    .form-div-lbl{font-size:10px;letter-spacing:2px;text-transform:uppercase;color:var(--gold);font-weight:700}
+
+    /* BUTTONS */
+    .btn-cancel{flex:1;padding:16px;background:rgba(255,255,255,.06);border:1px solid rgba(255,255,255,.12);border-radius:12px;color:var(--grayl);font-size:16px;font-weight:700;cursor:pointer;font-family:inherit}
+    .btn-save{flex:2;padding:16px;background:var(--gold);border:none;border-radius:12px;color:var(--navy);font-size:16px;font-weight:800;cursor:pointer;font-family:inherit}
+    .btn-save:active{background:var(--goldd)}
+
+    /* LOADING */
+    .load-ov{position:fixed;inset:0;background:rgba(10,22,40,.88);z-index:800;display:flex;align-items:center;justify-content:center;flex-direction:column;gap:16px;opacity:0;pointer-events:none;transition:opacity .2s}
+    .load-ov.open{opacity:1;pointer-events:all}
+    .spinner{width:44px;height:44px;border:3px solid rgba(240,165,0,.2);border-top-color:var(--gold);border-radius:50%;animation:spin .8s linear infinite}
+    @keyframes spin{to{transform:rotate(360deg)}}
+    .load-txt{font-size:15px;color:var(--grayl);font-weight:600}
+
+    /* PROGRESS MODAL */
+    .prog-ov{position:fixed;inset:0;background:rgba(10,22,40,.92);z-index:850;display:flex;align-items:center;justify-content:center;padding:16px;opacity:0;pointer-events:none;transition:opacity .2s}
+    .prog-ov.open{opacity:1;pointer-events:all}
+    .prog-box{background:var(--navy2);border:2px solid rgba(240,165,0,.3);border-radius:16px;padding:22px;width:100%;max-width:540px}
+    .prog-box-title{font-size:17px;font-weight:800;margin-bottom:5px}
+    .prog-box-sub{font-size:12px;color:var(--gray);margin-bottom:18px;min-height:16px}
+    .prog-row{margin-bottom:14px}
+    .prog-row-top{display:flex;justify-content:space-between;align-items:center;margin-bottom:5px;gap:8px}
+    .prog-name{font-size:13px;color:var(--grayl);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;flex:1}
+    .prog-stat{font-size:11px;font-weight:800;letter-spacing:.5px;flex-shrink:0}
+    .prog-stat.queued{color:var(--gray)}.prog-stat.reading{color:var(--blue)}
+    .prog-stat.parsing{color:var(--amber)}.prog-stat.done{color:var(--green)}.prog-stat.error{color:var(--red)}
+    .prog-bar-bg{height:5px;background:rgba(255,255,255,.1);border-radius:3px;overflow:hidden}
+    .prog-bar-fill{height:100%;border-radius:3px;background:var(--gold);transition:width .4s ease,background .3s}
+    .prog-bar-fill.done{background:var(--green)}.prog-bar-fill.error{background:var(--red)}
+
+    /* PREVIEW OVERLAY */
+    .prev-ov{position:fixed;inset:0;background:var(--navy);z-index:700;display:flex;flex-direction:column;opacity:0;pointer-events:none;transition:opacity .2s;overflow:hidden}
+    .prev-ov.open{opacity:1;pointer-events:all}
+    .prev-hdr{background:var(--navy2);border-bottom:2px solid var(--gold);padding:14px 18px;display:flex;align-items:center;justify-content:space-between;flex-shrink:0}
+    .prev-hdr-l{display:flex;flex-direction:column;gap:2px}
+    .prev-title{font-size:17px;font-weight:800}
+    .prev-file{font-size:11px;color:var(--gray)}
+    .conf-badge{padding:5px 10px;border-radius:20px;font-size:11px;font-weight:800;letter-spacing:.5px}
+    .conf-hi{background:rgba(34,197,94,.2);color:var(--green);border:1px solid rgba(34,197,94,.4)}
+    .conf-mid{background:rgba(245,158,11,.2);color:var(--amber);border:1px solid rgba(245,158,11,.4)}
+    .conf-lo{background:rgba(239,68,68,.2);color:var(--red);border:1px solid rgba(239,68,68,.4)}
+    .prev-body{flex:1;overflow-y:auto;padding:16px;-webkit-overflow-scrolling:touch}
+    .prev-foot{background:var(--navy2);border-top:1px solid rgba(255,255,255,.07);padding:14px 18px 28px;display:flex;gap:10px;flex-shrink:0}
+    .prev-sec{margin-bottom:24px}
+    .prev-sec-lbl{font-size:10px;letter-spacing:2px;text-transform:uppercase;color:var(--gray);font-weight:700;margin-bottom:12px}
+    .conf-msg{font-size:12px;padding:10px 14px;border-radius:8px;margin-bottom:16px;line-height:1.5}
+    .conf-msg.hi{background:rgba(34,197,94,.1);color:var(--green)}
+    .conf-msg.mid{background:rgba(245,158,11,.1);color:var(--amber)}
+    .conf-msg.lo{background:rgba(239,68,68,.1);color:var(--red)}
+    .pfc{background:var(--navy2);border:1px solid rgba(255,255,255,.07);border-radius:12px;padding:14px;margin-bottom:10px;position:relative}
+    .pfc-name{width:100%;background:var(--navy);border:1.5px solid rgba(255,255,255,.15);border-radius:8px;padding:10px 12px;color:var(--white);font-size:15px;font-weight:700;outline:none;margin-bottom:10px;font-family:inherit}
+    .pfc-name:focus{border-color:var(--gold)}
+    .pfc-pct{display:flex;gap:10px;margin-bottom:10px}
+    .pfc-pct-col{flex:1;text-align:center}
+    .pfc-pct-lbl{font-size:9px;letter-spacing:1px;text-transform:uppercase;font-weight:700;margin-bottom:5px}
+    .pfc-pct-lbl.r{color:var(--green)}.pfc-pct-lbl.p{color:var(--blue)}
+    .pfc-spin{display:flex;align-items:center;background:var(--navy);border:1.5px solid rgba(255,255,255,.12);border-radius:8px;overflow:hidden}
+    .pfc-btn{width:36px;height:38px;background:rgba(255,255,255,.05);border:none;color:var(--white);font-size:18px;cursor:pointer;display:flex;align-items:center;justify-content:center;font-weight:300}
+    .pfc-num{flex:1;text-align:center;font-size:18px;font-weight:900;background:none;border:none;color:var(--white);font-family:inherit;-moz-appearance:textfield}
+    .pfc-num::-webkit-outer-spin-button,.pfc-num::-webkit-inner-spin-button{-webkit-appearance:none}
+    .pfc-plays{display:flex;gap:8px}
+    .pfc-play-in{flex:1;background:var(--navy);border:1.5px solid rgba(255,255,255,.1);border-radius:8px;padding:9px 11px;color:var(--white);font-size:12px;outline:none;font-family:inherit}
+    .pfc-play-in:focus{border-color:var(--gold)}
+    .pfc-del{position:absolute;top:10px;right:10px;width:26px;height:26px;background:rgba(239,68,68,.15);border:none;border-radius:50%;color:var(--red);font-size:11px;cursor:pointer;display:flex;align-items:center;justify-content:center}
+    .sit-tbl{width:100%;border-collapse:collapse}
+    .sit-tbl th{font-size:9px;letter-spacing:1px;text-transform:uppercase;color:var(--gray);padding:0 8px 8px 0;text-align:left;font-weight:700}
+    .sit-tbl td{font-size:13px;padding:7px 8px 7px 0;border-top:1px solid rgba(255,255,255,.05)}
+    .sit-tbl td.run{color:var(--green);font-weight:700}
+    .sit-tbl td.pass{color:var(--blue);font-weight:700}
+    .raw-pre{background:var(--navyc);border-radius:10px;padding:12px;font-size:11px;color:var(--gray);line-height:1.7;white-space:pre-wrap;max-height:200px;overflow-y:auto;margin-top:8px}
+    .raw-toggle{background:none;border:none;color:var(--gold);font-size:12px;font-weight:600;cursor:pointer;padding:8px 0;text-decoration:underline;font-family:inherit}
+  </style>
+</head>
+<body>
+
+<!-- HEADER -->
+<div class="hdr">
+  <button id="backBtn" onclick="goBack()">&#8249;</button>
+  <div class="hdr-txt">
+    <div class="logo">BLITZ<span>IQ</span></div>
+    <div class="hdr-sub" id="hdrSub">Defensive Scouting</div>
+  </div>
+</div>
+
+<!-- BREADCRUMB -->
+<div class="bc" id="bc"><span class="bc-cur">Opponents</span></div>
+
+<!-- SCREEN 1 -->
+<div class="screen active" id="screen1">
+  <p class="sc-title">Opponents</p>
+  <p class="sc-sub">Select a team to begin scouting</p>
+  <div class="action-row">
+    <button class="act-pri" onclick="openModal('mOpp')">+ Add Opponent</button>
+    <button class="act-sec" onclick="document.getElementById('pdfIn').click()">&#8679; Import Hudl PDFs</button>
+  </div>
+  <div id="oppList"></div>
+</div>
+
+<!-- SCREEN 2 -->
+<div class="screen" id="screen2">
+  <div id="oppOv" class="ov"></div>
+  <p class="sec-lbl">Offensive Formations</p>
+  <div id="formList"></div>
+  <button class="add-btn" onclick="openModal('mForm')">+ Add Formation</button>
+</div>
+
+<!-- SCREEN 3 -->
+<div class="screen" id="screen3">
+  <div id="formOv" class="ov"></div>
+  <p class="sec-lbl">Down &amp; Distance Tendencies</p>
+  <div class="sit-grid" id="sitGrid"></div>
+  <div style="margin-top:12px">
+    <button class="add-btn" onclick="openModal('mSit')">+ Add Situation</button>
+  </div>
+</div>
+
+<!-- SCREEN 4 -->
+<div class="screen" id="screen4">
+  <div id="sitOv" class="ov"></div>
+  <div id="defCall"></div>
+</div>
+
+<!-- HIDDEN FILE INPUT (multiple) -->
+<input type="file" id="pdfIn" accept=".pdf,application/pdf" multiple style="display:none" onchange="handlePDF(event)">
+
+<!-- LOADING (single-file fallback spinner) -->
+<div class="load-ov" id="loadOv">
+  <div class="spinner"></div>
+  <div class="load-txt" id="loadTxt">Reading PDF…</div>
+</div>
+
+<!-- PROGRESS MODAL -->
+<div class="prog-ov" id="progOv">
+  <div class="prog-box">
+    <div class="prog-box-title">&#8679; Importing Hudl PDFs</div>
+    <div class="prog-box-sub" id="progSub">Starting…</div>
+    <div id="progList"></div>
+  </div>
+</div>
+
+<!-- MODAL: ADD OPPONENT -->
+<div class="modal-ov" id="mOpp">
+  <div class="modal-sheet">
+    <div class="modal-handle"></div>
+    <div class="modal-hdr">
+      <span class="modal-title">Add Opponent</span>
+      <button class="modal-x" onclick="closeModal('mOpp')">&#10005;</button>
+    </div>
+    <div class="modal-body">
+      <div class="fld">
+        <label class="fld-lbl">Team Name *</label>
+        <input class="fld-in" id="o_name" placeholder="e.g. Broad Run" type="text">
+      </div>
+      <div class="fld">
+        <label class="fld-lbl">Season *</label>
+        <input class="fld-in" id="o_season" value="2025" type="text">
+      </div>
+      <div class="fld">
+        <label class="fld-lbl">Overall Run / Pass Tendency</label>
+        <div class="pct-row">
+          <div class="pct-col">
+            <div class="pct-lbl r">RUN %</div>
+            <div class="pct-spin">
+              <button class="pct-btn" onclick="adjPct('o_run','o_pass',-5)">&#8722;</button>
+              <input class="pct-num" id="o_run" type="number" value="50" min="0" max="100" oninput="syncPct('o_run','o_pass')">
+              <button class="pct-btn" onclick="adjPct('o_run','o_pass',5)">+</button>
+            </div>
+          </div>
+          <div class="pct-col">
+            <div class="pct-lbl p">PASS %</div>
+            <div class="pct-spin">
+              <button class="pct-btn" onclick="adjPct('o_pass','o_run',-5)">&#8722;</button>
+              <input class="pct-num" id="o_pass" type="number" value="50" min="0" max="100" oninput="syncPct('o_pass','o_run')">
+              <button class="pct-btn" onclick="adjPct('o_pass','o_run',5)">+</button>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div class="fld">
+        <label class="fld-lbl">Scouting Notes</label>
+        <textarea class="fld-ta" id="o_notes" placeholder="Offense style, key players, tempo…"></textarea>
+      </div>
+    </div>
+    <div class="modal-foot">
+      <button class="btn-cancel" onclick="closeModal('mOpp')">Cancel</button>
+      <button class="btn-save" onclick="saveOpp()">Save Opponent</button>
+    </div>
+  </div>
+</div>
+
+<!-- MODAL: ADD FORMATION -->
+<div class="modal-ov" id="mForm">
+  <div class="modal-sheet">
+    <div class="modal-handle"></div>
+    <div class="modal-hdr">
+      <span class="modal-title">Add Formation</span>
+      <button class="modal-x" onclick="closeModal('mForm')">&#10005;</button>
+    </div>
+    <div class="modal-body">
+      <div class="fld">
+        <label class="fld-lbl">Formation Name *</label>
+        <input class="fld-in" id="f_name" placeholder="e.g. Trey R Weak" type="text">
+        <div class="chips">
+          <button class="chip" onclick="fillFld('f_name','Gun Spread')">Gun Spread</button>
+          <button class="chip" onclick="fillFld('f_name','Pistol Strong')">Pistol Strong</button>
+          <button class="chip" onclick="fillFld('f_name','Trey R Weak')">Trey R Weak</button>
+          <button class="chip" onclick="fillFld('f_name','Gun Trips')">Gun Trips</button>
+          <button class="chip" onclick="fillFld('f_name','I-Form Pro')">I-Form Pro</button>
+          <button class="chip" onclick="fillFld('f_name','Empty Backfield')">Empty</button>
+        </div>
+      </div>
+      <div class="fld">
+        <label class="fld-lbl">Run / Pass Tendency</label>
+        <div class="pct-row">
+          <div class="pct-col">
+            <div class="pct-lbl r">RUN %</div>
+            <div class="pct-spin">
+              <button class="pct-btn" onclick="adjPct('f_run','f_pass',-5)">&#8722;</button>
+              <input class="pct-num" id="f_run" type="number" value="50" min="0" max="100" oninput="syncPct('f_run','f_pass')">
+              <button class="pct-btn" onclick="adjPct('f_run','f_pass',5)">+</button>
+            </div>
+          </div>
+          <div class="pct-col">
+            <div class="pct-lbl p">PASS %</div>
+            <div class="pct-spin">
+              <button class="pct-btn" onclick="adjPct('f_pass','f_run',-5)">&#8722;</button>
+              <input class="pct-num" id="f_pass" type="number" value="50" min="0" max="100" oninput="syncPct('f_pass','f_run')">
+              <button class="pct-btn" onclick="adjPct('f_pass','f_run',5)">+</button>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div class="fld">
+        <label class="fld-lbl">Favorite Run Play</label>
+        <input class="fld-in" id="f_frun" placeholder="e.g. Inside Zone" type="text">
+        <div class="chips">
+          <button class="chip" onclick="fillFld('f_frun','Inside Zone')">Inside Zone</button>
+          <button class="chip" onclick="fillFld('f_frun','Power O')">Power O</button>
+          <button class="chip" onclick="fillFld('f_frun','QB Draw')">QB Draw</button>
+          <button class="chip" onclick="fillFld('f_frun','Outside Zone')">Outside Zone</button>
+          <button class="chip" onclick="fillFld('f_frun','Speed Option')">Speed Option</button>
+        </div>
+      </div>
+      <div class="fld">
+        <label class="fld-lbl">Favorite Pass Play</label>
+        <input class="fld-in" id="f_fpass" placeholder="e.g. Curl-Flat Combo" type="text">
+        <div class="chips">
+          <button class="chip" onclick="fillFld('f_fpass','Curl-Flat')">Curl-Flat</button>
+          <button class="chip" onclick="fillFld('f_fpass','Four Verticals')">4 Verts</button>
+          <button class="chip" onclick="fillFld('f_fpass','Smash')">Smash</button>
+          <button class="chip" onclick="fillFld('f_fpass','Mesh')">Mesh</button>
+          <button class="chip" onclick="fillFld('f_fpass','Bubble Screen')">Bubble Screen</button>
+        </div>
+      </div>
+      <div class="fld">
+        <label class="fld-lbl">Down Tendency Notes</label>
+        <textarea class="fld-ta" id="f_tend" placeholder="e.g. Pass-heavy. 3rd & long = 100% pass."></textarea>
+      </div>
+    </div>
+    <div class="modal-foot">
+      <button class="btn-cancel" onclick="closeModal('mForm')">Cancel</button>
+      <button class="btn-save" onclick="saveForm()">Save Formation</button>
+    </div>
+  </div>
+</div>
+
+<!-- MODAL: ADD SITUATION -->
+<div class="modal-ov" id="mSit">
+  <div class="modal-sheet">
+    <div class="modal-handle"></div>
+    <div class="modal-hdr">
+      <span class="modal-title">Add Situation</span>
+      <button class="modal-x" onclick="closeModal('mSit')">&#10005;</button>
+    </div>
+    <div class="modal-body">
+      <div class="fld">
+        <label class="fld-lbl">Down *</label>
+        <div class="sel-row">
+          <button class="sel-btn" data-down="1" onclick="selDown(1,this)">1st</button>
+          <button class="sel-btn" data-down="2" onclick="selDown(2,this)">2nd</button>
+          <button class="sel-btn" data-down="3" onclick="selDown(3,this)">3rd</button>
+          <button class="sel-btn" data-down="4" onclick="selDown(4,this)">4th</button>
+        </div>
+      </div>
+      <div class="fld">
+        <label class="fld-lbl">Distance *</label>
+        <div class="sel-row">
+          <button class="sel-btn dist-btn" onclick="selDist('Short (1-3)',this)">Short</button>
+          <button class="sel-btn dist-btn" onclick="selDist('Medium (4-6)',this)">Med</button>
+          <button class="sel-btn dist-btn" onclick="selDist('Long (7+)',this)">Long (7+)</button>
+          <button class="sel-btn dist-btn" onclick="selDistCustom(this)">Custom</button>
+        </div>
+        <input class="fld-in" id="s_custom" placeholder="e.g. Goal Line" type="text" style="display:none;margin-top:10px">
+      </div>
+      <div class="fld">
+        <label class="fld-lbl">Run / Pass Tendency</label>
+        <div class="pct-row">
+          <div class="pct-col">
+            <div class="pct-lbl r">RUN %</div>
+            <div class="pct-spin">
+              <button class="pct-btn" onclick="adjPct('s_run','s_pass',-5)">&#8722;</button>
+              <input class="pct-num" id="s_run" type="number" value="50" min="0" max="100" oninput="syncPct('s_run','s_pass')">
+              <button class="pct-btn" onclick="adjPct('s_run','s_pass',5)">+</button>
+            </div>
+          </div>
+          <div class="pct-col">
+            <div class="pct-lbl p">PASS %</div>
+            <div class="pct-spin">
+              <button class="pct-btn" onclick="adjPct('s_pass','s_run',-5)">&#8722;</button>
+              <input class="pct-num" id="s_pass" type="number" value="50" min="0" max="100" oninput="syncPct('s_pass','s_run')">
+              <button class="pct-btn" onclick="adjPct('s_pass','s_run',5)">+</button>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div class="fld">
+        <label class="fld-lbl">Tendency Notes</label>
+        <textarea class="fld-ta" id="s_notes" placeholder="What does this team do in this situation?"></textarea>
+      </div>
+      <div class="form-div">
+        <div class="form-div-line"></div>
+        <div class="form-div-lbl">Defensive Call</div>
+        <div class="form-div-line"></div>
+      </div>
+      <div class="fld">
+        <label class="fld-lbl">Recommended Coverage</label>
+        <input class="fld-in" id="s_cov" placeholder="e.g. Cover 3" type="text">
+        <div class="chips">
+          <button class="chip" onclick="fillFld('s_cov','Cover 0')">Cover 0</button>
+          <button class="chip" onclick="fillFld('s_cov','Cover 1 Man')">Cover 1</button>
+          <button class="chip" onclick="fillFld('s_cov','Cover 2')">Cover 2</button>
+          <button class="chip" onclick="fillFld('s_cov','Cover 3')">Cover 3</button>
+          <button class="chip" onclick="fillFld('s_cov','Cover 4 (Quarters)')">Cover 4</button>
+          <button class="chip" onclick="fillFld('s_cov','Tampa 2')">Tampa 2</button>
+        </div>
+      </div>
+      <div class="fld">
+        <label class="fld-lbl">Blitz Package</label>
+        <input class="fld-in" id="s_blitz" placeholder="e.g. A-Gap Fire Zone" type="text">
+        <div class="chips">
+          <button class="chip" onclick="fillFld('s_blitz','No Blitz — Base 4-3')">No Blitz</button>
+          <button class="chip" onclick="fillFld('s_blitz','A-Gap Blitz')">A-Gap</button>
+          <button class="chip" onclick="fillFld('s_blitz','Edge Pressure')">Edge</button>
+          <button class="chip" onclick="fillFld('s_blitz','Mike Blitz')">Mike</button>
+          <button class="chip" onclick="fillFld('s_blitz','Double A-Gap')">Dbl A-Gap</button>
+          <button class="chip" onclick="fillFld('s_blitz','Cover-0 Dog Blitz')">Cover-0 Dog</button>
+          <button class="chip" onclick="fillFld('s_blitz','5-Man Overload')">5-Man OL</button>
+        </div>
+      </div>
+      <div class="fld">
+        <label class="fld-lbl">Why This Call</label>
+        <textarea class="fld-ta tall" id="s_reason" placeholder="Explain the reasoning for this defensive call…"></textarea>
+      </div>
+      <div class="fld">
+        <label class="fld-lbl">Watch For (Alert)</label>
+        <textarea class="fld-ta" id="s_alert" placeholder="What specific threat must defenders look for?"></textarea>
+      </div>
+    </div>
+    <div class="modal-foot">
+      <button class="btn-cancel" onclick="closeModal('mSit')">Cancel</button>
+      <button class="btn-save" onclick="saveSit()">Save Situation</button>
+    </div>
+  </div>
+</div>
+
+<!-- IMPORT PREVIEW -->
+<div class="prev-ov" id="prevOv">
+  <div class="prev-hdr">
+    <div class="prev-hdr-l">
+      <div class="prev-title">Hudl Import Preview</div>
+      <div class="prev-file" id="prevFile"></div>
+    </div>
+    <div class="conf-badge" id="confBadge"></div>
+  </div>
+  <div class="prev-body" id="prevBody"></div>
+  <div class="prev-foot">
+    <button class="btn-cancel" onclick="closePreview()">Discard</button>
+    <button class="btn-save" onclick="importPreview()">Import Opponent</button>
+  </div>
+</div>
+
+<script>
+// PDF.JS
+if (typeof pdfjsLib !== 'undefined') {
+  pdfjsLib.GlobalWorkerOptions.workerSrc =
+    'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
+}
+
+// ── SEED DATA ─────────────────────────────────────────────────────────────────
+const SEED = { opponents: [{
+  id:1, name:'Broad Run', season:'2025', runPct:50, passPct:50,
+  notes:'Trips-heavy spread offense. No-huddle, fast tempo. Mobile QB — dual-threat runner. Motions pre-snap frequently to create secondary conflicts.',
+  formations:[{
+    id:11, name:'Trey R Weak', runPct:38, passPct:62,
+    favoriteRunPlay:'Inside Zone (Strong Side)', favoritePassPlay:'Curl-Flat Combo (Trips)',
+    downTendency:'Pass-heavy in most situations. On 3rd & Long they pass 100% of the time. Expect curl-flat or 4-verts from the trips side.',
+    situations:[
+      {id:111,down:1,distLabel:'1st & 10',runPct:45,passPct:55,
+       notes:'Balanced. Bubble screen to trips is the go-to opening play. May use H-back motion pre-snap.',
+       dc:{coverage:'Cover 3',blitz:'Base 4-3 — No Blitz',reason:'Stay assignment-sound on first down. Cover 3 locks up the trips side: flat defender takes the short zone, two safeties split the deep thirds.',alert:'Watch for pre-snap motion — re-declare trips coverage before the snap or you give up a free release to the boundary.'}},
+      {id:112,down:2,distLabel:'2nd & Short',runPct:72,passPct:28,
+       notes:'Run-heavy. Power O or inside zone to get the first. QB keeper to the boundary is live.',
+       dc:{coverage:'Cover 1 Man',blitz:'Mike A-Gap Blitz',reason:'Stack the box and stop the run. Man coverage frees LBs to attack the gap. If they pass, corners are locked with FS over top.',alert:'QB keeper to the boundary — CB must set a hard edge and force it back inside to pursuit.'}},
+      {id:113,down:2,distLabel:'2nd & Medium',runPct:40,passPct:60,
+       notes:'Balanced but leaning pass. Mesh concept or quick slants to trips. Will motion to stress zone leverage.',
+       dc:{coverage:'Cover 2',blitz:'Weak-Side Edge Pressure',reason:'Cover 2 brackets the trips side — safeties rotate to carry deep threats. Edge pressure disrupts timing on slant and mesh routes.',alert:'Mesh concept underneath — LBs must pick up crossing routes. Do NOT get stuck on the back.'}},
+      {id:114,down:2,distLabel:'2nd & Long',runPct:22,passPct:78,
+       notes:'Pass-heavy. Smash or deep curl to trips. Often uses quick screen to gain manageable 3rd down.',
+       dc:{coverage:'Cover 2',blitz:'A-Gap Fire Zone',reason:'Bracket the trips side with Cover 2 safeties. Fire zone forces a quick throw before the smash corner route develops.',alert:'Bubble screen to trips to reduce 3rd down distance — nickelback must press the screen edge.'}},
+      {id:115,down:3,distLabel:'3rd & Short',runPct:52,passPct:48,
+       notes:'Even split. QB draw or sneak are real options. Quick slant is the hot route vs. a heavy box.',
+       dc:{coverage:'Cover 1 Man',blitz:'Double A-Gap Pressure',reason:'Crowd the line. If they hand off, we win the numbers. If they throw, corners locked man-to-man with FS rolling over top.',alert:'Quick slant is the automatic hot route vs. A-gap pressure — CBs must jam and reroute at the snap.'}},
+      {id:116,down:3,distLabel:'3rd & Long',runPct:0,passPct:100,
+       notes:'100% pass. Expect 4-Verticals or smash concept. QB checks to a hot route the instant he sees blitz.',
+       dc:{coverage:'Cover 4 (Quarters)',blitz:'Cover-0 Dog Blitz',reason:'Quarters is purpose-built for 4-verts — every receiver is carried vertically. The Cover-0 dog blitz must get home in under 2 seconds.',alert:'4-VERTICALS from trips — safeties carry #1 deep, CBs carry #2 on the seam. Do NOT bail early.'}}
+    ]
+  },{
+    id:12, name:'Gun Spread 4 Wide', runPct:22, passPct:78,
+    favoriteRunPlay:'QB Draw', favoritePassPlay:'Four Verticals',
+    downTendency:'Almost always passes. Uses RPOs and quick screens early. Loves attacking deep on 3rd. Tempo is fastest in this formation.',
+    situations:[
+      {id:121,down:1,distLabel:'1st & 10',runPct:28,passPct:72,
+       notes:'Quick screens or inside zone RPO. Very fast tempo — expect a snap within 10 seconds.',
+       dc:{coverage:'Cover 3',blitz:'Base 4-3 — No Blitz',reason:'Play assignment football vs. 4-wide. Stay in base. Cover 3 handles screens with the flat defender.',alert:'Tempo! Get aligned fast — they will snap the ball before you finish substituting.'}},
+      {id:122,down:3,distLabel:'3rd & Long',runPct:5,passPct:95,
+       notes:'Near-guaranteed pass. 4-verts or mesh. QB holds the ball looking for the deep shot.',
+       dc:{coverage:'Cover 4 (Quarters)',blitz:'5-Man Overload Blitz',reason:'Quarters is built for 4-verts. Overload blitz overwhelms the OL before routes fully develop.',alert:'QB scramble if pocket collapses — DE must set the edge. Do NOT let him convert with his legs.'}}
+    ]
+  },{
+    id:13, name:'Pistol Strong', runPct:68, passPct:32,
+    favoriteRunPlay:'Power O', favoritePassPlay:'Play-Action Boot Waggle',
+    downTendency:'Run-first. Uses this formation to control clock. Watch for play-action boot on 2nd & medium.',
+    situations:[
+      {id:131,down:1,distLabel:'1st & 10',runPct:75,passPct:25,
+       notes:'Heavy run. Power O or off-tackle strong side. Occasionally uses play-action early to set up boot later.',
+       dc:{coverage:'Cover 3',blitz:'Strong-Side LB Blitz',reason:'Stack the box to the strong side. LB blitz attacks the Power O gap before the double-team reaches the second level.',alert:'Cutback inside if DE overruns the Power — Mike must stay clean in the cutback lane.'}},
+      {id:132,down:2,distLabel:'2nd & Medium',runPct:55,passPct:45,
+       notes:'High boot risk. QB rolls out and looks for TE crossing or WR on a shallow out.',
+       dc:{coverage:'Cover 2',blitz:'No Blitz — Contain Rush',reason:'Contain the QB bootleg — DE must NOT crash inside. Cover 2 accounts for the TE crossing and protects the deep seam.',alert:'BOOT ALERT — DE stays home on the edge! LB must spy the QB on the rollout.'}}
+    ]
+  }]
+}]};
+
+// ── STORAGE ───────────────────────────────────────────────────────────────────
+const SKEY = 'blitziq_v1';
+let DB;
+function loadDB() {
+  try { const r = localStorage.getItem(SKEY); if (r) { DB = JSON.parse(r); return; } } catch(e) {}
+  DB = JSON.parse(JSON.stringify(SEED));
+  saveDB();
+}
+function saveDB() { localStorage.setItem(SKEY, JSON.stringify(DB)); }
+function uid() { return Date.now() * 1000 + Math.floor(Math.random() * 999); }
+
+// ── STATE ─────────────────────────────────────────────────────────────────────
+const st = { screen:1, opp:null, form:null, sit:null };
+
+// ── NAV ───────────────────────────────────────────────────────────────────────
+function showScreen(n) {
+  document.querySelectorAll('.screen').forEach(s => s.classList.remove('active'));
+  document.getElementById('screen' + n).classList.add('active');
+  st.screen = n; syncHdr(); window.scrollTo(0,0);
+}
+function goBack() {
+  if (st.screen===4){st.sit=null;renderSits();showScreen(3);}
+  else if(st.screen===3){st.form=null;renderForms();showScreen(2);}
+  else if(st.screen===2){st.opp=null;showScreen(1);}
+}
+function syncHdr() {
+  const subs=['Defensive Scouting','Formation Browser','Situation Analysis','Defensive Call'];
+  document.getElementById('hdrSub').textContent = subs[st.screen-1];
+  const bb = document.getElementById('backBtn');
+  st.screen > 1 ? bb.classList.add('vis') : bb.classList.remove('vis');
+  const crumbs = ['Opponents'];
+  if(st.opp)  crumbs.push(st.opp.name+' '+st.opp.season);
+  if(st.form) crumbs.push(st.form.name);
+  if(st.sit)  crumbs.push(st.sit.distLabel);
+  document.getElementById('bc').innerHTML = crumbs.map((c,i) => {
+    const last = i===crumbs.length-1;
+    return `<span class="${last?'bc-cur':''}">${c}</span>${!last?'<span class="bc-sep">›</span>':''}`;
+  }).join('');
+}
+
+// ── STAT BAR ──────────────────────────────────────────────────────────────────
+function sbar(run, pass) {
+  const rl = run===100  ? `<span class="lbl-100">RUN ${run}%</span>`  : `<span class="lbl-r">RUN ${run}%</span>`;
+  const pl = pass===100 ? `<span class="lbl-100">PASS ${pass}%</span>` : `<span class="lbl-p">PASS ${pass}%</span>`;
+  return `<div class="sb-wrap"><div class="sb-labels">${rl}${pl}</div><div class="sb"><div class="sb-r" style="width:${run}%"></div><div class="sb-p" style="width:${pass}%"></div></div></div>`;
+}
+
+// ── SCREEN 1 ──────────────────────────────────────────────────────────────────
+function renderOpps() {
+  const el = document.getElementById('oppList');
+  if (!DB.opponents.length) {
+    el.innerHTML = `<div class="empty"><div class="empty-icon">🏟</div><div class="empty-txt">No opponents yet.<br>Add one manually or import a Hudl PDF.</div></div>`;
+    return;
+  }
+  el.innerHTML = DB.opponents.map(o => `
+    <div class="card" onclick="selOpp(${o.id})">
+      <div class="card-hd">
+        <div><div class="card-name">${esc(o.name)}</div><div class="card-meta">Season ${esc(o.season)} &nbsp;·&nbsp; ${o.formations.length} Formation${o.formations.length!==1?'s':''}</div></div>
+        <span class="season-badge">${esc(o.season)}</span>
+      </div>
+      ${sbar(o.runPct,o.passPct)}
+      <div class="card-note">${esc(o.notes)}</div>
+      <button class="del-btn" onclick="delOpp(${o.id},event)">✕</button>
+    </div>`).join('');
+}
+function selOpp(id) { st.opp=DB.opponents.find(o=>o.id===id); renderForms(); showScreen(2); }
+
+// ── SCREEN 2 ──────────────────────────────────────────────────────────────────
+function renderForms() {
+  const o = st.opp;
+  document.getElementById('oppOv').innerHTML = `<div class="ov-ttl">${esc(o.name)} ${esc(o.season)} — Overall Tendency</div>${sbar(o.runPct,o.passPct)}<div class="ov-note">${esc(o.notes)}</div>`;
+  const el = document.getElementById('formList');
+  if (!o.formations.length) {
+    el.innerHTML = `<div class="empty"><div class="empty-icon">🏈</div><div class="empty-txt">No formations scouted yet.<br>Tap below to add this team's formations.</div></div>`;
+    return;
+  }
+  el.innerHTML = o.formations.map(f => `
+    <div class="card" onclick="selForm(${f.id})">
+      <div class="card-name-sm">${esc(f.name)}</div>
+      ${sbar(f.runPct,f.passPct)}
+      <div class="ptags">
+        <span class="tag tag-r">&#127939; ${esc(f.favoriteRunPlay)}</span>
+        <span class="tag tag-p">&#9992; ${esc(f.favoritePassPlay)}</span>
+      </div>
+      <div class="card-tend">${esc(f.downTendency)}</div>
+      <button class="del-btn" onclick="delForm(${f.id},event)">✕</button>
+    </div>`).join('');
+}
+function selForm(id) { st.form=st.opp.formations.find(f=>f.id===id); renderSits(); showScreen(3); }
+
+// ── SCREEN 3 ──────────────────────────────────────────────────────────────────
+function renderSits() {
+  const f = st.form;
+  document.getElementById('formOv').innerHTML = `<div class="ov-ttl">${esc(f.name)} — Formation Tendency</div>${sbar(f.runPct,f.passPct)}<div class="ptags" style="margin-top:10px"><span class="tag tag-r">&#127939; ${esc(f.favoriteRunPlay)}</span><span class="tag tag-p">&#9992; ${esc(f.favoritePassPlay)}</span></div>`;
+  const grid = document.getElementById('sitGrid');
+  if (!f.situations.length) {
+    grid.style.display='block';
+    grid.innerHTML=`<div class="empty"><div class="empty-icon">📋</div><div class="empty-txt">No situations added yet.<br>Tap below to add down & distance tendencies.</div></div>`;
+    return;
+  }
+  grid.style.display='grid';
+  const DLBLS=['','1st Down','2nd Down','3rd Down','4th Down'];
+  grid.innerHTML = f.situations.map(s => {
+    let cls='';
+    if(s.passPct===100||s.runPct===100) cls='sure';
+    else if(s.passPct>=70) cls='pass-lean';
+    else if(s.runPct>=60)  cls='run-lean';
+    const sure = s.passPct===100?'⚠ 100% PASS':s.runPct===100?'⚠ 100% RUN':'';
+    return `<div class="sit-card ${cls}" onclick="selSit(${s.id})">
+      <button class="sit-del" onclick="delSit(${s.id},event)">✕</button>
+      <div class="sit-down">${DLBLS[s.down]||s.down+' Down'}</div>
+      <div class="sit-dist">${esc(s.distLabel)}</div>
+      ${sbar(s.runPct,s.passPct)}
+      ${sure?`<div class="sit-sure">${sure}</div>`:''}
+    </div>`;
+  }).join('');
+}
+function selSit(id) {
+  for(const f of st.opp.formations){ const s=f.situations.find(x=>x.id===id); if(s){st.sit=s;break;} }
+  renderDefCall(); showScreen(4);
+}
+
+// ── SCREEN 4 ──────────────────────────────────────────────────────────────────
+function renderDefCall() {
+  const s=st.sit, dc=s.dc;
+  document.getElementById('sitOv').innerHTML=`<div class="ov-ttl">${esc(st.form.name)} — ${esc(s.distLabel)}</div>${sbar(s.runPct,s.passPct)}<div class="ov-note">${esc(s.notes)}</div>`;
+  document.getElementById('defCall').innerHTML=`
+    <div class="def-block"><div class="def-lbl">Recommended Coverage</div><div class="def-val">${esc(dc.coverage)}</div></div>
+    <div class="def-block"><div class="def-lbl">Blitz Package</div><div class="def-val-sm">${esc(dc.blitz)}</div></div>
+    <div class="def-block"><div class="def-lbl">Why This Call</div><div class="reason-box">${esc(dc.reason)}</div></div>
+    <div class="alert-box">
+      <div class="alert-hdr"><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>Watch For</div>
+      <div class="alert-txt">${esc(dc.alert)}</div>
+    </div>`;
+}
+
+// ── MODALS ────────────────────────────────────────────────────────────────────
+function openModal(id) { document.getElementById(id).classList.add('open'); document.body.style.overflow='hidden'; }
+function closeModal(id){ document.getElementById(id).classList.remove('open'); document.body.style.overflow=''; }
+
+// ── PCT PICKER ────────────────────────────────────────────────────────────────
+function adjPct(aId,bId,d){
+  const el=document.getElementById(aId);
+  let v=Math.max(0,Math.min(100,(parseInt(el.value)||0)+d));
+  el.value=v; document.getElementById(bId).value=100-v;
+}
+function syncPct(aId,bId){
+  const el=document.getElementById(aId);
+  let v=Math.max(0,Math.min(100,parseInt(el.value)||0));
+  el.value=v; document.getElementById(bId).value=100-v;
+}
+
+// ── DOWN / DIST ───────────────────────────────────────────────────────────────
+let sitDown=null, sitDist=null, sitCustom=false;
+function selDown(val,btn){
+  sitDown=val;
+  document.querySelectorAll('[data-down]').forEach(b=>b.classList.remove('active'));
+  btn.classList.add('active');
+}
+function selDist(val,btn){
+  sitDist=val; sitCustom=false;
+  document.querySelectorAll('.dist-btn').forEach(b=>b.classList.remove('active'));
+  btn.classList.add('active');
+  document.getElementById('s_custom').style.display='none';
+}
+function selDistCustom(btn){
+  sitCustom=true; sitDist=null;
+  document.querySelectorAll('.dist-btn').forEach(b=>b.classList.remove('active'));
+  btn.classList.add('active');
+  const ci=document.getElementById('s_custom');
+  ci.style.display='block'; ci.focus();
+}
+
+// ── FORM RESETS ───────────────────────────────────────────────────────────────
+function resetOpp(){
+  ['o_name','o_notes'].forEach(id=>{document.getElementById(id).value='';document.getElementById(id).classList.remove('err');});
+  document.getElementById('o_season').value='2025';
+  document.getElementById('o_run').value='50'; document.getElementById('o_pass').value='50';
+}
+function resetForm(){
+  ['f_name','f_frun','f_fpass','f_tend'].forEach(id=>{document.getElementById(id).value='';document.getElementById(id).classList.remove('err');});
+  document.getElementById('f_run').value='50'; document.getElementById('f_pass').value='50';
+}
+function resetSit(){
+  ['s_notes','s_cov','s_blitz','s_reason','s_alert','s_custom'].forEach(id=>document.getElementById(id).value='');
+  document.getElementById('s_custom').style.display='none';
+  document.getElementById('s_run').value='50'; document.getElementById('s_pass').value='50';
+  document.querySelectorAll('#mSit .sel-btn').forEach(b=>b.classList.remove('active'));
+  sitDown=null; sitDist=null; sitCustom=false;
+}
+function fillFld(id,val){ document.getElementById(id).value=val; }
+
+// ── SAVE ──────────────────────────────────────────────────────────────────────
+function saveOpp(){
+  const name=document.getElementById('o_name').value.trim();
+  const season=document.getElementById('o_season').value.trim();
+  if(!name){document.getElementById('o_name').classList.add('err');return;}
+  if(!season){document.getElementById('o_season').classList.add('err');return;}
+  DB.opponents.push({id:uid(),name,season,
+    runPct:parseInt(document.getElementById('o_run').value)||50,
+    passPct:parseInt(document.getElementById('o_pass').value)||50,
+    notes:document.getElementById('o_notes').value.trim()||'No scouting notes added.',
+    formations:[]});
+  saveDB(); closeModal('mOpp'); resetOpp(); renderOpps();
+}
+function saveForm(){
+  const name=document.getElementById('f_name').value.trim();
+  if(!name){document.getElementById('f_name').classList.add('err');return;}
+  const run=parseInt(document.getElementById('f_run').value)||50;
+  st.opp.formations.push({id:uid(),name,runPct:run,passPct:100-run,
+    favoriteRunPlay:document.getElementById('f_frun').value.trim()||'Not specified',
+    favoritePassPlay:document.getElementById('f_fpass').value.trim()||'Not specified',
+    downTendency:document.getElementById('f_tend').value.trim()||'No tendency notes added.',
+    situations:[]});
+  saveDB(); closeModal('mForm'); resetForm(); renderForms();
+}
+function saveSit(){
+  if(!sitDown){alert('Please select a Down.');return;}
+  const distVal=sitCustom?document.getElementById('s_custom').value.trim():sitDist;
+  if(!distVal){alert('Please select a Distance.');return;}
+  const DLBLS=['','1st','2nd','3rd','4th'];
+  const run=parseInt(document.getElementById('s_run').value)||50;
+  st.form.situations.push({id:uid(),down:sitDown,
+    distLabel:`${DLBLS[sitDown]} & ${distVal}`,
+    runPct:run,passPct:100-run,
+    notes:document.getElementById('s_notes').value.trim()||'No tendency notes added.',
+    dc:{coverage:document.getElementById('s_cov').value.trim()||'Not specified',
+        blitz:document.getElementById('s_blitz').value.trim()||'Not specified',
+        reason:document.getElementById('s_reason').value.trim()||'No reason provided.',
+        alert:document.getElementById('s_alert').value.trim()||'No specific alerts.'}});
+  saveDB(); closeModal('mSit'); resetSit(); renderSits();
+}
+
+// ── DELETE ────────────────────────────────────────────────────────────────────
+function delOpp(id,e){e.stopPropagation();if(!confirm('Delete this opponent? This cannot be undone.'))return;DB.opponents=DB.opponents.filter(o=>o.id!==id);saveDB();renderOpps();}
+function delForm(id,e){e.stopPropagation();if(!confirm('Delete this formation?'))return;st.opp.formations=st.opp.formations.filter(f=>f.id!==id);saveDB();renderForms();}
+function delSit(id,e){e.stopPropagation();if(!confirm('Delete this situation?'))return;st.form.situations=st.form.situations.filter(s=>s.id!==id);saveDB();renderSits();}
+
+// ── LOADING ───────────────────────────────────────────────────────────────────
+function showLoad(msg){document.getElementById('loadTxt').textContent=msg||'Loading…';document.getElementById('loadOv').classList.add('open');}
+function hideLoad(){document.getElementById('loadOv').classList.remove('open');}
+
+// ── PDF UPLOAD ────────────────────────────────────────────────────────────────
+async function handlePDF(e) {
+  const files=Array.from(e.target.files); e.target.value='';
+  if(!files.length) return;
+  if(typeof pdfjsLib==='undefined'){
+    alert('PDF import requires an internet connection. Check your connection and try again.');
+    return;
+  }
+
+  initProgress(files);
+  const results=[];
+
+  for(let i=0;i<files.length;i++){
+    const file=files[i];
+    try {
+      setProgress(i,'reading',20,'Reading…');
+      const text=await extractPDFText(file);
+      setProgress(i,'parsing',65,'Extracting…');
+      await new Promise(r=>setTimeout(r,0)); // yield so UI updates
+      const parsed=parseHudl(text,file.name);
+      parsed.filename=file.name;
+      results.push(parsed);
+      setProgress(i,'done',100,'Done ✓');
+      updateProgSub(`Processed ${i+1} of ${files.length} file${files.length>1?'s':''}…`);
+    } catch(err) {
+      console.error(err);
+      setProgress(i,'error',100,'Error ✕');
+    }
+  }
+
+  await new Promise(r=>setTimeout(r,500)); // let coaches see all-done state
+  hideProgress();
+
+  const valid=results.filter(r=>r.formations.length>0||r.situations.length>0);
+  if(!valid.length&&results.length>0){
+    alert('No scouting data was detected in the uploaded PDF(s). Make sure these are text-based Hudl tendency exports, not scanned images.');
+    return;
+  }
+  if(!results.length){
+    alert('Could not read any of the uploaded files.');
+    return;
+  }
+
+  const combined=combineResults(results);
+  openPreview(combined,results);
+}
+
+// ── PROGRESS UI ───────────────────────────────────────────────────────────────
+function initProgress(files){
+  document.getElementById('progList').innerHTML=files.map((f,i)=>`
+    <div class="prog-row">
+      <div class="prog-row-top">
+        <div class="prog-name">&#128196; ${esc(f.name)}</div>
+        <div class="prog-stat queued" id="prog_st_${i}">Queued</div>
+      </div>
+      <div class="prog-bar-bg"><div class="prog-bar-fill" id="prog_bar_${i}" style="width:0%"></div></div>
+    </div>`).join('');
+  document.getElementById('progSub').textContent=`Processing ${files.length} file${files.length>1?'s':''}…`;
+  document.getElementById('progOv').classList.add('open');
+  document.body.style.overflow='hidden';
+}
+function setProgress(i,status,pct,label){
+  const st=document.getElementById(`prog_st_${i}`);
+  const bar=document.getElementById(`prog_bar_${i}`);
+  if(st){st.textContent=label;st.className=`prog-stat ${status}`;}
+  if(bar){bar.style.width=pct+'%';bar.className=`prog-bar-fill${status==='done'?' done':status==='error'?' error':''}`;}
+}
+function updateProgSub(msg){const el=document.getElementById('progSub');if(el)el.textContent=msg;}
+function hideProgress(){document.getElementById('progOv').classList.remove('open');document.body.style.overflow='';}
+
+// ── COMBINE RESULTS ───────────────────────────────────────────────────────────
+function combineResults(results){
+  const log=[`Combining data from ${results.length} PDF${results.length>1?'s':''}`];
+
+  // Team name: first non-generic
+  let teamName='Imported Team', season=String(new Date().getFullYear());
+  let runPct=50, passPct=50, ovFound=false;
+
+  for(const r of results){
+    if(teamName==='Imported Team'&&r.teamName&&r.teamName!=='Imported Team'){
+      teamName=r.teamName; log.push(`✓ Team name from "${r.filename}": ${teamName}`);
+    }
+    if(r.season&&r.season!==String(new Date().getFullYear())) season=r.season;
+    if(!ovFound&&(r.runPct!==50||r.passPct!==50)){
+      runPct=r.runPct; passPct=r.passPct; ovFound=true;
+      log.push(`✓ Overall tendency from "${r.filename}": Run ${runPct}% / Pass ${passPct}%`);
+    }
+  }
+
+  // Formations: union by name, merge plays + situations from all files
+  const formations=[];
+  for(const r of results){
+    for(const f of r.formations){
+      let ex=formations.find(ef=>ef.name===f.name);
+      if(!ex){
+        ex={...f,sourcePDF:r.filename,situations:[...(f.situations||[])]};
+        formations.push(ex);
+        log.push(`✓ Formation "${f.name}" from "${r.filename}"`);
+      } else {
+        // Prefer richer play count data
+        if(f.playCount&&(!ex.playCount||f.playCount>ex.playCount)){
+          ex.runPct=f.runPct; ex.passPct=f.passPct;
+          ex.playCount=f.playCount; ex.totalPlays=f.totalPlays;
+        }
+        if(f.favoriteRunPlay&&!ex.favoriteRunPlay){
+          ex.favoriteRunPlay=f.favoriteRunPlay;
+          log.push(`  ↳ Run play from "${r.filename}": "${f.favoriteRunPlay}"`);
+        }
+        if(f.favoritePassPlay&&!ex.favoritePassPlay){
+          ex.favoritePassPlay=f.favoritePassPlay;
+          log.push(`  ↳ Pass play from "${r.filename}": "${f.favoritePassPlay}"`);
+        }
+        // Merge situations
+        for(const s of(f.situations||[])){
+          if(!ex.situations.find(es=>es.distLabel===s.distLabel)){
+            ex.situations.push(s);
+            log.push(`  ↳ Situation "${s.distLabel}" from "${r.filename}"`);
+          }
+        }
+      }
+    }
+  }
+
+  // Top-level situations (not attached to a specific formation)
+  const topSits=[];
+  for(const r of results){
+    for(const s of r.situations){
+      const inForm=formations.some(f=>f.situations.some(fs=>fs.distLabel===s.distLabel));
+      if(!inForm&&!topSits.find(ts=>ts.distLabel===s.distLabel)){
+        topSits.push(s);
+        log.push(`✓ Situation "${s.distLabel}" (top-level) from "${r.filename}"`);
+      }
+    }
+  }
+  if(topSits.length>0){
+    const noSit=formations.find(f=>f.situations.length===0);
+    if(noSit) noSit.situations=topSits;
+    else if(formations.length===0){
+      formations.push({name:'Overall Tendency',runPct,passPct,
+        favoriteRunPlay:'',favoritePassPlay:'',
+        downTendency:'Imported from Hudl reports.',
+        situations:topSits,sourcePDF:'Multiple files'});
+    }
+  }
+
+  const combined={
+    teamName,season,runPct,passPct,
+    notes:`Imported from ${results.length} Hudl PDF${results.length>1?'s':''}.`,
+    formations,situations:topSits,
+    rawLines:results.flatMap(r=>[`=== ${r.filename} ===`,...r.rawLines.slice(0,80)]),
+    extractionLog:log,
+    sourceFiles:results.map(r=>r.filename),
+    confidence:0
+  };
+  combined.confidence=calcConf(combined);
+  return combined;
+}
+
+async function extractPDFText(file) {
+  const ab=await file.arrayBuffer();
+  const pdf=await pdfjsLib.getDocument({data:new Uint8Array(ab)}).promise;
+  let full='';
+  for(let p=1;p<=pdf.numPages;p++){
+    const page=await pdf.getPage(p);
+    const tc=await page.getTextContent();
+    const lineMap=new Map();
+    for(const item of tc.items){
+      const y=Math.round(item.transform[5]/4)*4;
+      if(!lineMap.has(y))lineMap.set(y,[]);
+      lineMap.get(y).push({x:item.transform[4],str:item.str});
+    }
+    const ys=[...lineMap.keys()].sort((a,b)=>b-a);
+    for(const y of ys){
+      const items=lineMap.get(y).sort((a,b)=>a.x-b.x);
+      full+=items.map(i=>i.str).join(' ').trim()+'\n';
+    }
+    full+='\n';
+  }
+  return full;
+}
+
+// ── HUDL PARSER ───────────────────────────────────────────────────────────────
+
+// Hudl formation names are always ALL CAPS (e.g. "TREY R WEAK", "GUN TRIPS RIGHT")
+function isAllCaps(s) {
+  const t = s.trim();
+  return t.length >= 3 && t.length <= 45 && /^[A-Z0-9][A-Z0-9\s\-'\/]*$/.test(t) && /[A-Z]{2}/.test(t);
+}
+
+// Single-word ALL CAPS that are section headers, not formations
+const SKIP_WORDS = new Set([
+  'RUN','PASS','DOWN','DISTANCE','FORMATION','FORMATIONS','PLAYS','PLAY','TOTAL',
+  'USAGE','PCT','PERCENT','TENDENCY','TENDENCIES','ANALYSIS','REPORT','OFFENSE',
+  'DEFENSE','TEAM','TYPE','PERSONNEL','PACKAGE','OVERVIEW','SUMMARY','CHART',
+  'BREAKDOWN','LEFT','RIGHT','SHORT','MEDIUM','LONG','AND','THE','FOR','WITH',
+  'YARDS','GAIN','LOSS','FIRST','SECOND','THIRD','FOURTH','GOAL','DATE','SEASON'
+]);
+function isSkipWord(s) {
+  const words = s.trim().toUpperCase().split(/\s+/);
+  // Skip if every word is in the skip list (pure header line)
+  return words.length <= 2 && words.every(w => SKIP_WORDS.has(w));
+}
+
+function parseHudl(text,filename) {
+  const lines=text.split('\n').map(l=>l.replace(/\s+/g,' ').trim()).filter(l=>l.length>0);
+  const data={
+    teamName:'',season:String(new Date().getFullYear()),runPct:50,passPct:50,
+    notes:'',formations:[],situations:[],rawLines:lines,
+    extractionLog:[] // tracks what was found and where for the preview
+  };
+
+  data.teamName=extractName(text,lines,filename);
+  data.extractionLog.push(data.teamName&&data.teamName!=='Imported Team'
+    ? `✓ Team name: "${data.teamName}"` : `✗ Team name not detected — using filename`);
+
+  const ym=text.match(/\b(20\d{2})\b/);
+  if(ym){data.season=ym[1];data.extractionLog.push(`✓ Season: ${data.season}`);}
+
+  const ov=extractOverall(text,lines);
+  data.runPct=ov.run; data.passPct=ov.pass;
+  data.extractionLog.push(ov.found
+    ? `✓ Overall tendency: Run ${ov.run}% / Pass ${ov.pass}%`
+    : `✗ Overall tendency not found — defaulting to 50/50`);
+
+  const tp=extractTopPlays(text,lines,data);
+  data.formations=extractFormations(lines,data,tp);
+  data.situations=extractSituations(lines,data);
+
+  if(data.formations.length===0&&data.situations.length>0){
+    data.formations.push({name:'Overall Tendency',runPct:data.runPct,passPct:data.passPct,
+      favoriteRunPlay:tp.run||'',favoritePassPlay:tp.pass||'',
+      downTendency:'Extracted from Hudl report.',situations:data.situations});
+  } else if(data.formations.length>0&&data.situations.length>0){
+    const noSit=data.formations.find(f=>f.situations.length===0);
+    if(noSit)noSit.situations=data.situations;
+  }
+  data.formations.forEach(f=>{
+    if(!f.favoriteRunPlay&&tp.run)f.favoriteRunPlay=tp.run;
+    if(!f.favoritePassPlay&&tp.pass)f.favoritePassPlay=tp.pass;
+  });
+
+  data.extractionLog.push(`— Total: ${data.formations.length} formation(s), ${data.situations.length} situation(s)`);
+  data.confidence=calcConf(data);
+  return data;
+}
+
+function extractName(text,lines,filename){
+  const pats=[
+    /vs\.?\s+([A-Z][A-Za-z\s\-']{2,35})(?:\s{2,}|\n|\d{4})/,
+    /Opponent[:\s]+([A-Za-z][A-Za-z\s\-']{2,35})(?:\n|\s{2,})/i,
+    /Scout(?:ing)?\s+Report[:\s]+([A-Za-z][A-Za-z\s\-']{2,35})(?:\n|\s{2,})/i,
+    /([A-Z][A-Za-z\s\-']{2,35})\s+Tendency\s+Report/i,
+    /Team[:\s]+([A-Za-z][A-Za-z\s\-']{2,35})(?:\n|\s{2,})/i,
+  ];
+  for(const re of pats){const m=text.match(re);if(m){const n=m[1].trim();if(n.length>2&&n.length<40)return n;}}
+  for(let i=1;i<Math.min(lines.length,8);i++){
+    const l=lines[i];
+    if(l.length>2&&l.length<35&&/^[A-Z]/.test(l)&&!/^\d/.test(l)&&!l.includes('%')&&!l.includes(':'))return l;
+  }
+  return filename.replace(/\.pdf$/i,'').replace(/[-_]/g,' ').trim()||'Imported Team';
+}
+
+function extractOverall(text,lines){
+  const pats=[
+    /overall[^%\n]{0,30}run[:\s]+(\d+)%[^%\n]{0,30}pass[:\s]+(\d+)%/i,
+    /total[^%\n]{0,30}run[:\s]+(\d+)%[^%\n]{0,30}pass[:\s]+(\d+)%/i,
+    /(\d+)%\s+run[^%\n]{0,20}(\d+)%\s+pass/i,
+    /run[:\s]+(\d+)%[,\s]+pass[:\s]+(\d+)%/i,
+  ];
+  for(const re of pats){const m=text.match(re);if(m){const r=parseInt(m[1]),p=parseInt(m[2]);if(Math.abs(r+p-100)<=5)return{run:r,pass:p,found:true};}}
+  for(const line of lines){
+    if(/run/i.test(line)&&/pass/i.test(line)){
+      const pct=extractPctPair(line);
+      if(pct)return{run:pct.run,pass:pct.pass,found:true};
+    }
+  }
+  return{run:50,pass:50,found:false};
+}
+
+function extractFormations(lines,data,tp){
+  const formations=[];
+  let inSec=false, foundHeader=false;
+
+  for(let i=0;i<lines.length;i++){
+    const line=lines[i];
+
+    // Detect formation section header
+    if(!inSec&&/FORMATION/i.test(line)&&/(TENDENC|REPORT|ANALYS|USAGE|BREAKDOWN|CHART)/i.test(line)){
+      inSec=true; foundHeader=true;
+      data.extractionLog.push(`✓ Formation section found at line ${i}: "${line}"`);
+      continue;
+    }
+    // Detect end of formation section
+    if(inSec&&/^(DOWN\s*(AND|&)\s*DISTANCE|PLAY\s+TYPE|PERSONNEL|PACKAGE|TOP\s+(RUN|PASS)|SITUATION)/i.test(line)){
+      inSec=false; continue;
+    }
+    if(!inSec&&foundHeader) continue;
+
+    const parsed=parseFormLine(line);
+    if(parsed&&(inSec||!foundHeader)){
+      if(!formations.find(f=>f.name===parsed.name)){
+        parsed.favoriteRunPlay=tp.run||''; parsed.favoritePassPlay=tp.pass||'';
+        parsed.downTendency='Imported from Hudl. Add tendency notes.';
+        parsed.situations=[];
+        formations.push(parsed);
+        const badge=parsed.playCount?` (${parsed.playCount}/${parsed.totalPlays} plays)`:'';
+        data.extractionLog.push(`✓ Formation: "${parsed.name}"${badge} — Run ${parsed.runPct}% / Pass ${parsed.passPct}%`);
+
+        // Look ahead for sub-plays immediately below this formation entry
+        // Hudl format: plays listed on next lines with fraction denominator = formation's play count
+        if(parsed.playCount){
+          for(let j=i+1;j<Math.min(i+10,lines.length);j++){
+            const sub=lines[j];
+            if(!sub||!sub.trim()) break;
+            if(parseFormLine(sub)) break; // new formation starts
+            const sp=parseSubPlayLine(sub,parsed.playCount);
+            if(sp){
+              if(sp.runPct>=60&&!parsed.favoriteRunPlay){
+                parsed.favoriteRunPlay=sp.name;
+                data.extractionLog.push(`  ↳ Run play: "${sp.name}" (${sp.runPct}% run)`);
+              } else if(sp.passPct>=60&&!parsed.favoritePassPlay){
+                parsed.favoritePassPlay=sp.name;
+                data.extractionLog.push(`  ↳ Pass play: "${sp.name}" (${sp.passPct}% pass)`);
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+
+  // Second pass: look for standalone formation headers followed by play lists
+  // (Hudl sometimes exports a separate "formation detail" section)
+  scanFormationPlayHeaders(lines,formations,data);
+
+  // Phase C: global fallback if no section header found
+  if(!foundHeader&&formations.length===0){
+    data.extractionLog.push('✗ No formation section header — trying global scan');
+    for(const line of lines){
+      const parsed=parseFormLine(line);
+      if(parsed&&!formations.find(f=>f.name===parsed.name)){
+        parsed.favoriteRunPlay=tp.run||''; parsed.favoritePassPlay=tp.pass||'';
+        parsed.downTendency='Imported from Hudl. Add tendency notes.';
+        parsed.situations=[];
+        formations.push(parsed);
+        data.extractionLog.push(`✓ Formation (global): "${parsed.name}" — Run ${parsed.runPct}% / Pass ${parsed.passPct}%`);
+      }
+    }
+  }
+
+  if(formations.length===0) data.extractionLog.push('✗ No formations detected');
+  return formations;
+}
+
+// Look for a known formation name appearing as a standalone header line,
+// followed immediately by ALL CAPS play names (no accompanying percentages on the header line)
+function scanFormationPlayHeaders(lines,formations,data){
+  for(let i=0;i<lines.length;i++){
+    const line=lines[i].trim();
+    if(!isAllCaps(line)||isSkipWord(line)||/\d/.test(line)) continue; // no numbers = standalone header
+    const form=formations.find(f=>f.name===line);
+    if(!form) continue;
+
+    for(let j=i+1;j<Math.min(i+12,lines.length);j++){
+      const sub=lines[j];
+      if(!sub||!sub.trim()) break;
+      if(parseFormLine(sub)||/^(DOWN|DISTANCE|FORMATION|PLAY\s+TYPE|TOP\s+(RUN|PASS))/i.test(sub)) break;
+
+      // Extract play name + tendency from this sub-line
+      const playM=sub.match(/^([A-Z][A-Z0-9\s\-'\/]{2,35}?)(?:\s+\d|$)/);
+      if(playM&&isAllCaps(playM[1])&&!isSkipWord(playM[1])){
+        const pct=extractPctPair(sub);
+        if(pct){
+          const nm=playM[1].trim();
+          if(pct.run>=60&&!form.favoriteRunPlay){
+            form.favoriteRunPlay=nm;
+            data.extractionLog.push(`  ↳ Run play (header scan) for "${form.name}": "${nm}"`);
+          } else if(pct.pass>=60&&!form.favoritePassPlay){
+            form.favoritePassPlay=nm;
+            data.extractionLog.push(`  ↳ Pass play (header scan) for "${form.name}": "${nm}"`);
+          }
+        }
+      }
+    }
+  }
+}
+
+// Parse a play line where denominator should match the parent formation's play count
+function parseSubPlayLine(line,formPlayCount){
+  if(!formPlayCount) return null;
+  // "INSIDE ZONE  5/8  100%  0%"  or  "INSIDE ZONE  5/8  62%"
+  const m=line.match(/^([A-Z][A-Z0-9\s\-'\/]{2,35}?)\s+(\d{1,3})\/(\d{1,4})(.*)/);
+  if(!m) return null;
+  const name=m[1].trim(), plays=parseInt(m[2]), total=parseInt(m[3]), rest=m[4];
+  if(!isAllCaps(name)||isSkipWord(name)) return null;
+  if(Math.abs(total-formPlayCount)>2) return null; // denominator must match formation play count
+  const pct=extractPctPair(rest+' '+line);
+  // If no explicit pct, infer from fraction position (all run or all pass)
+  const runPct=pct?pct.run:50, passPct=pct?pct.pass:50;
+  return{name,playCount:plays,total,runPct,passPct};
+}
+
+function parseFormLine(line){
+  // All Hudl formation names are ALL CAPS. Try patterns in order of specificity.
+
+  // Pattern A: "TREY R WEAK  8/125  38%  62%"  (name + fraction + run% + pass%)
+  const pA=line.match(/^([A-Z][A-Z0-9\s\-'\/]{2,40}?)\s+(\d{1,3})\/(\d{1,4})\s+(\d{1,3})%\s+(\d{1,3})%/);
+  if(pA){
+    const name=pA[1].trim(), r=parseInt(pA[4]), p=parseInt(pA[5]);
+    if(isAllCaps(name)&&!isSkipWord(name)&&Math.abs(r+p-100)<=5)
+      return{name,runPct:r,passPct:p,playCount:parseInt(pA[2]),totalPlays:parseInt(pA[3])};
+  }
+
+  // Pattern B: "TREY R WEAK  8/125  38  62"  (fraction + bare numbers)
+  const pB=line.match(/^([A-Z][A-Z0-9\s\-'\/]{2,40}?)\s+(\d{1,3})\/(\d{1,4})\s+(\d{1,3})\s+(\d{1,3})$/);
+  if(pB){
+    const name=pB[1].trim(), r=parseInt(pB[4]), p=parseInt(pB[5]);
+    if(isAllCaps(name)&&!isSkipWord(name)&&Math.abs(r+p-100)<=5)
+      return{name,runPct:r,passPct:p,playCount:parseInt(pB[2]),totalPlays:parseInt(pB[3])};
+  }
+
+  // Pattern C: "TREY R WEAK  38%  62%"  (name + two percentages summing to ~100)
+  const pC=line.match(/^([A-Z][A-Z0-9\s\-'\/]{2,40}?)\s+(\d{1,3})%\s+(\d{1,3})%/);
+  if(pC){
+    const name=pC[1].trim(), r=parseInt(pC[2]), p=parseInt(pC[3]);
+    if(isAllCaps(name)&&!isSkipWord(name)&&Math.abs(r+p-100)<=5)
+      return{name,runPct:r,passPct:p};
+  }
+
+  // Pattern D: "TREY R WEAK  38  62"  (bare numbers, no % sign)
+  const pD=line.match(/^([A-Z][A-Z0-9\s\-'\/]{2,40}?)\s+(\d{1,3})\s+(\d{1,3})$/);
+  if(pD){
+    const name=pD[1].trim(), r=parseInt(pD[2]), p=parseInt(pD[3]);
+    if(isAllCaps(name)&&!isSkipWord(name)&&Math.abs(r+p-100)<=5&&r<=100&&p<=100)
+      return{name,runPct:r,passPct:p};
+  }
+
+  // Pattern E: "TREY R WEAK - Run 38%, Pass 62%"  (labeled format)
+  const pE=line.match(/^([A-Z][A-Z0-9\s\-'\/]{2,40}?)\s*[-–]\s*[Rr]un\s*(\d+)%[,\s]+[Pp]ass\s*(\d+)%/);
+  if(pE){
+    const name=pE[1].trim(), r=parseInt(pE[2]), p=parseInt(pE[3]);
+    if(isAllCaps(name)&&!isSkipWord(name)) return{name,runPct:r,passPct:p};
+  }
+
+  return null;
+}
+
+const SIT_PATS=[
+  {down:1,label:'1st & 10',    re:/1\s*st\s*[&and]+\s*10/i},
+  {down:1,label:'1st & Short', re:/1\s*st\s*[&and]+\s*(short|[1-3](?:\s|$))/i},
+  {down:1,label:'1st & Long',  re:/1\s*st\s*[&and]+\s*(long|1[1-9](?:\s|$))/i},
+  {down:2,label:'2nd & Short', re:/2\s*nd\s*[&and]+\s*(short|[1-3](?:\s|$))/i},
+  {down:2,label:'2nd & Medium',re:/2\s*nd\s*[&and]+\s*(med|mid|[4-6](?:\s|$))/i},
+  {down:2,label:'2nd & Long',  re:/2\s*nd\s*[&and]+\s*(long|[7-9](?:\s|$)|\d{2})/i},
+  {down:3,label:'3rd & Short', re:/3\s*rd\s*[&and]+\s*(short|[1-3](?:\s|$))/i},
+  {down:3,label:'3rd & Medium',re:/3\s*rd\s*[&and]+\s*(med|mid|[4-6](?:\s|$))/i},
+  {down:3,label:'3rd & Long',  re:/3\s*rd\s*[&and]+\s*(long|[7-9](?:\s|$)|\d{2})/i},
+  {down:4,label:'4th & Short', re:/4\s*th\s*[&and]+\s*(short|[1-3](?:\s|$))/i},
+  {down:4,label:'4th & Goal',  re:/4\s*th\s*[&and]+\s*goal/i},
+  {down:4,label:'4th & Long',  re:/4\s*th\s*[&and]+\s*(long|[7-9](?:\s|$)|\d{2})/i},
+];
+
+// Extract two pct values from a line that sum to ~100
+// Priority: fraction+pct > pct pair > bare numbers
+function extractPctPair(line){
+  // "8/125  38%  62%"  — take the % values after the fraction
+  const wFrac=line.match(/\d+\/\d+\s+(\d{1,3})%?\s+(\d{1,3})%?/);
+  if(wFrac){const r=parseInt(wFrac[1]),p=parseInt(wFrac[2]);if(Math.abs(r+p-100)<=5&&r<=100&&p<=100)return{run:r,pass:p};}
+  // "38%  62%"
+  const pctPair=[...line.matchAll(/(\d{1,3})%/g)].map(m=>parseInt(m[1]));
+  for(let i=0;i<pctPair.length-1;i++){if(Math.abs(pctPair[i]+pctPair[i+1]-100)<=5&&pctPair[i]<=100&&pctPair[i+1]<=100)return{run:pctPair[i],pass:pctPair[i+1]};}
+  // bare numbers summing to ~100 (last two candidates)
+  const nums=[...line.matchAll(/\b(\d{1,3})\b/g)].map(m=>parseInt(m[1])).filter(n=>n>=0&&n<=100);
+  for(let i=0;i<nums.length-1;i++){if(Math.abs(nums[i]+nums[i+1]-100)<=3&&nums[i]<=100&&nums[i+1]<=100)return{run:nums[i],pass:nums[i+1]};}
+  return null;
+}
+
+function extractSituations(lines,data){
+  const sits=[]; const seen=new Set();
+  let inSec=false, foundHeader=false;
+
+  // Phase A: section-aware
+  for(let i=0;i<lines.length;i++){
+    const line=lines[i];
+    if(/DOWN\s*(AND|&)\s*DISTANCE/i.test(line)){
+      inSec=true; foundHeader=true;
+      data.extractionLog.push(`✓ Down/distance section found at line ${i}`);
+      continue;
+    }
+    // End of section: new major header (but not another down label)
+    if(inSec && /^(FORMATION|PERSONNEL|TOP\s+(RUN|PASS)|PLAY\s+TYPE|SITUATION|OVERVIEW)/i.test(line)){
+      inSec=false; continue;
+    }
+    if(!inSec&&foundHeader) continue;
+
+    for(const pat of SIT_PATS){
+      if(!pat.re.test(line)||seen.has(pat.label)) continue;
+      const pct=extractPctPair(line);
+      if(!pct) continue;
+      seen.add(pat.label);
+      sits.push({down:pat.down,distLabel:pat.label,runPct:pct.run,passPct:pct.pass,
+        notes:'Extracted from Hudl report. Add tendency notes in app.',
+        dc:{coverage:'',blitz:'',reason:'',alert:''}});
+      data.extractionLog.push(`✓ Situation: ${pat.label} — Run ${pct.run}% / Pass ${pct.pass}%`);
+      break;
+    }
+  }
+
+  // Phase C: global fallback
+  if(!foundHeader||sits.length===0){
+    if(!foundHeader) data.extractionLog.push('✗ Down/distance section header not found — trying global scan');
+    for(const line of lines){
+      for(const pat of SIT_PATS){
+        if(!pat.re.test(line)||seen.has(pat.label)) continue;
+        const pct=extractPctPair(line);
+        if(!pct) continue;
+        seen.add(pat.label);
+        sits.push({down:pat.down,distLabel:pat.label,runPct:pct.run,passPct:pct.pass,
+          notes:'Extracted from Hudl report. Add tendency notes in app.',
+          dc:{coverage:'',blitz:'',reason:'',alert:''}});
+        data.extractionLog.push(`✓ Situation (global): ${pat.label} — Run ${pct.run}% / Pass ${pct.pass}%`);
+        break;
+      }
+    }
+  }
+
+  if(sits.length===0) data.extractionLog.push('✗ No down/distance situations detected');
+  sits.sort((a,b)=>a.down-b.down);
+  return sits;
+}
+
+function extractTopPlays(text,lines,data){
+  let run='', pass='';
+  let inRunSec=false, inPassSec=false;
+
+  for(let i=0;i<lines.length;i++){
+    const line=lines[i];
+
+    // Detect TOP RUN PLAYS section
+    if(/TOP\s+RUN\s+PLAYS?/i.test(line)){
+      inRunSec=true; inPassSec=false;
+      data.extractionLog.push(`✓ Top run plays section found at line ${i}`);
+      continue;
+    }
+    // Detect TOP PASS PLAYS section
+    if(/TOP\s+PASS\s+PLAYS?/i.test(line)){
+      inPassSec=true; inRunSec=false;
+      data.extractionLog.push(`✓ Top pass plays section found at line ${i}`);
+      continue;
+    }
+    // End of play sections on any new major header
+    if(/^(DOWN|FORMATION|OVERVIEW|PERSONNEL|SITUATION)/i.test(line)){
+      inRunSec=false; inPassSec=false;
+    }
+
+    // Extract first play name from section
+    if((inRunSec&&!run)||(inPassSec&&!pass)){
+      // Skip pure header/number-only lines
+      if(/^\d+$/.test(line)||/^(RUN|PASS|PLAY|PLAYS|NAME|COUNT|PCT|%)/i.test(line)) continue;
+
+      // Pattern A: ALL CAPS play name (Hudl style): "INSIDE ZONE  18/52  34%"
+      const capMatch=line.match(/^([A-Z][A-Z0-9\s\-'\/]{3,35})(?:\s+\d|\s*$)/);
+      if(capMatch&&isAllCaps(capMatch[1])&&!isSkipWord(capMatch[1])){
+        const name=capMatch[1].trim();
+        if(inRunSec&&!run){run=name;data.extractionLog.push(`✓ Top run play: "${name}"`);}
+        if(inPassSec&&!pass){pass=name;data.extractionLog.push(`✓ Top pass play: "${name}"`);}
+        continue;
+      }
+
+      // Pattern B: numbered list "1. Inside Zone (18)" or "1 Inside Zone"
+      const numMatch=line.match(/^(?:\d+\.?\s+)([A-Za-z][A-Za-z\s\/\-]{3,30}?)(?:\s*[\(\d]|$)/);
+      if(numMatch){
+        const name=numMatch[1].trim();
+        if(name.length>3&&!SKIP_WORDS.has(name.toUpperCase())){
+          if(inRunSec&&!run){run=name;data.extractionLog.push(`✓ Top run play: "${name}"`);}
+          if(inPassSec&&!pass){pass=name;data.extractionLog.push(`✓ Top pass play: "${name}"`);}
+        }
+      }
+    }
+  }
+
+  // Fallback: regex scan of full text
+  if(!run||!pass){
+    const rRe=/(?:top|#\s*1|most\s+common)\s+run[^\n]{0,40}?([A-Z][A-Za-z\s\/\-]{3,30})(?:\(|\d|,|\n)/i;
+    const pRe=/(?:top|#\s*1|most\s+common)\s+pass[^\n]{0,40}?([A-Z][A-Za-z\s\/\-]{3,30})(?:\(|\d|,|\n)/i;
+    const rList=/(?:run\s+plays?|rushing)[:\s\n]+1\.?\s+([A-Za-z][A-Za-z\s\/\-]{3,30})(?:\(|\d|,|\n)/i;
+    const pList=/(?:pass\s+plays?|passing)[:\s\n]+1\.?\s+([A-Za-z][A-Za-z\s\/\-]{3,30})(?:\(|\d|,|\n)/i;
+    let m;
+    m=text.match(rRe)||text.match(rList); if(m&&!run){run=m[1].trim();data.extractionLog.push(`✓ Run play (fallback regex): "${run}"`);}
+    m=text.match(pRe)||text.match(pList); if(m&&!pass){pass=m[1].trim();data.extractionLog.push(`✓ Pass play (fallback regex): "${pass}"`);}
+  }
+
+  if(!run)  data.extractionLog.push('✗ Top run play not detected');
+  if(!pass) data.extractionLog.push('✗ Top pass play not detected');
+  return{run,pass};
+}
+
+function calcConf(data){
+  let s=0;
+  if(data.teamName&&!['Imported Team'].includes(data.teamName))s+=20;
+  if(data.formations.length>0) s+=35;
+  if(data.formations.length>2) s+=10;
+  const hasSits=data.situations.length>0||data.formations.some(f=>f.situations&&f.situations.length>0);
+  if(hasSits) s+=25;
+  if(data.formations.some(f=>f.favoriteRunPlay||f.favoritePassPlay)) s+=10;
+  return Math.min(100,s);
+}
+
+// ── PREVIEW ────────────────────────────────────────────────────────────────────
+let prevData=null;
+
+function openPreview(data,results){
+  prevData=data;
+  // results is array of individual parse results (or undefined for backward-compat)
+  const fileLabel=data.sourceFiles&&data.sourceFiles.length>1
+    ? `${data.sourceFiles.length} files combined`
+    : data.sourceFiles?.[0]||'';
+  document.getElementById('prevFile').textContent=fileLabel;
+
+  const conf=data.confidence;
+  const badge=document.getElementById('confBadge');
+  if(conf>=65){badge.textContent=conf+'% Match';badge.className='conf-badge conf-hi';}
+  else if(conf>=35){badge.textContent=conf+'% Match';badge.className='conf-badge conf-mid';}
+  else{badge.textContent=conf+'% Match';badge.className='conf-badge conf-lo';}
+
+  const msgCls=conf>=65?'hi':conf>=35?'mid':'lo';
+  const msgTxt=conf>=65
+    ?'Good match — review the data below and tap Import when ready.'
+    :conf>=35
+    ?'Partial match — some data was found. Review all fields carefully before importing.'
+    :'Low match — these may not be Hudl tendency reports, or could be scanned images. Review carefully or add this opponent manually.';
+
+  const allSits=data.formations.flatMap(f=>f.situations);
+
+  document.getElementById('prevBody').innerHTML=`
+    <div class="conf-msg ${msgCls}">${msgTxt}</div>
+
+    <div class="prev-sec">
+      <div class="prev-sec-lbl">Team Info</div>
+      <div class="fld"><label class="fld-lbl">Team Name</label><input class="fld-in" id="p_name" value="${esc(data.teamName)}" type="text" placeholder="Team name"></div>
+      <div style="display:flex;gap:12px">
+        <div class="fld" style="flex:1"><label class="fld-lbl">Season</label><input class="fld-in" id="p_season" value="${esc(data.season)}" type="text"></div>
+        <div class="fld" style="flex:1"><label class="fld-lbl">Notes</label><input class="fld-in" id="p_notes" value="Imported from Hudl." type="text"></div>
+      </div>
+      <div class="fld">
+        <label class="fld-lbl">Overall Run / Pass</label>
+        <div class="pct-row">
+          <div class="pct-col"><div class="pct-lbl r">RUN %</div><div class="pct-spin"><button class="pct-btn" onclick="adjPct('p_run','p_pass',-5)">&#8722;</button><input class="pct-num" id="p_run" type="number" value="${data.runPct}" min="0" max="100" oninput="syncPct('p_run','p_pass')"><button class="pct-btn" onclick="adjPct('p_run','p_pass',5)">+</button></div></div>
+          <div class="pct-col"><div class="pct-lbl p">PASS %</div><div class="pct-spin"><button class="pct-btn" onclick="adjPct('p_pass','p_run',-5)">&#8722;</button><input class="pct-num" id="p_pass" type="number" value="${data.passPct}" min="0" max="100" oninput="syncPct('p_pass','p_run')"><button class="pct-btn" onclick="adjPct('p_pass','p_run',5)">+</button></div></div>
+        </div>
+      </div>
+    </div>
+
+    ${data.sourceFiles&&data.sourceFiles.length>1?`
+    <div class="prev-sec">
+      <div class="prev-sec-lbl">PDFs Combined (${data.sourceFiles.length})</div>
+      <div class="pfc" style="padding:12px">
+        ${data.sourceFiles.map(f=>`<div style="font-size:12px;color:var(--grayl);padding:4px 0;border-bottom:1px solid rgba(255,255,255,.05)">&#128196; ${esc(f)}</div>`).join('')}
+      </div>
+    </div>`:''}
+
+    <div class="prev-sec">
+      <div class="prev-sec-lbl">Formations Detected (${data.formations.length})</div>
+      ${data.formations.length===0
+        ?`<div class="conf-msg mid">No formations detected. Add them manually after importing.</div>`
+        :data.formations.map((f,i)=>`
+          <div class="pfc" id="pfc_${i}">
+            <button class="pfc-del" onclick="removePF(${i})">✕</button>
+            <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px">
+              ${f.playCount?`<span style="font-size:10px;color:var(--gray);letter-spacing:.5px">${f.playCount}/${f.totalPlays} plays &nbsp;(${Math.round(f.playCount/f.totalPlays*100)}%)</span>`:'<span></span>'}
+              ${f.sourcePDF?`<span style="font-size:10px;color:var(--blue);opacity:.7">&#128196; ${esc(f.sourcePDF)}</span>`:''}
+            </div>
+            <input class="pfc-name" id="pf_name_${i}" value="${esc(f.name)}" placeholder="Formation name">
+            <div class="pfc-pct">
+              <div class="pfc-pct-col">
+                <div class="pfc-pct-lbl r">RUN %</div>
+                <div class="pfc-spin"><button class="pfc-btn" onclick="adjFPct(${i},'pf_run_${i}','pf_pass_${i}',-5)">&#8722;</button><input class="pfc-num" id="pf_run_${i}" type="number" value="${f.runPct}" min="0" max="100" oninput="syncFPct('pf_run_${i}','pf_pass_${i}')"><button class="pfc-btn" onclick="adjFPct(${i},'pf_run_${i}','pf_pass_${i}',5)">+</button></div>
+              </div>
+              <div class="pfc-pct-col">
+                <div class="pfc-pct-lbl p">PASS %</div>
+                <div class="pfc-spin"><button class="pfc-btn" onclick="adjFPct(${i},'pf_pass_${i}','pf_run_${i}',-5)">&#8722;</button><input class="pfc-num" id="pf_pass_${i}" type="number" value="${f.passPct}" min="0" max="100" oninput="syncFPct('pf_pass_${i}','pf_run_${i}')"><button class="pfc-btn" onclick="adjFPct(${i},'pf_pass_${i}','pf_run_${i}',5)">+</button></div>
+              </div>
+            </div>
+            <div class="pfc-plays">
+              <input class="pfc-play-in" id="pf_frun_${i}" placeholder="&#127939; Top Run Play" value="${esc(f.favoriteRunPlay)}">
+              <input class="pfc-play-in" id="pf_fpass_${i}" placeholder="&#9992; Top Pass Play" value="${esc(f.favoritePassPlay)}">
+            </div>
+          </div>`).join('')}
+    </div>
+
+    ${allSits.length>0?`
+    <div class="prev-sec">
+      <div class="prev-sec-lbl">Down &amp; Distance (${allSits.length} situations found)</div>
+      <div class="pfc" style="padding:12px">
+        <table class="sit-tbl">
+          <tr><th>Situation</th><th>Run</th><th>Pass</th></tr>
+          ${allSits.map(s=>`<tr><td>${esc(s.distLabel)}</td><td class="run">${s.runPct}%</td><td class="pass">${s.passPct}%</td></tr>`).join('')}
+        </table>
+      </div>
+    </div>`:`
+    <div class="prev-sec">
+      <div class="prev-sec-lbl">Down &amp; Distance</div>
+      <div class="conf-msg mid">No down &amp; distance data detected. Add situations manually after importing.</div>
+    </div>`}
+
+    <div class="prev-sec">
+      <button class="raw-toggle" onclick="toggleSection('rawTxt',this,'Show Raw Text','Hide Raw Text')">Show Raw Text</button>
+      <div id="rawTxt" style="display:none"><div class="raw-pre">${esc(data.rawLines.slice(0,150).join('\n'))}</div></div>
+    </div>
+
+    <div class="prev-sec">
+      <button class="raw-toggle" onclick="toggleSection('extLog',this,'Show Extraction Details','Hide Extraction Details')">Show Extraction Details</button>
+      <div id="extLog" style="display:none">
+        <div class="raw-pre">${data.extractionLog.map(l=>esc(l)).join('\n')}</div>
+      </div>
+    </div>`;
+
+  document.getElementById('prevOv').classList.add('open');
+  document.body.style.overflow='hidden';
+}
+
+function closePreview(){document.getElementById('prevOv').classList.remove('open');document.body.style.overflow='';prevData=null;}
+function toggleSection(id,btn,showLabel,hideLabel){const el=document.getElementById(id);const hidden=el.style.display==='none';el.style.display=hidden?'block':'none';btn.textContent=hidden?hideLabel:showLabel;}
+function adjFPct(i,aId,bId,d){adjPct(aId,bId,d);}
+function syncFPct(aId,bId){syncPct(aId,bId);}
+function removePF(i){const el=document.getElementById('pfc_'+i);if(el){el.style.opacity='.3';el.style.pointerEvents='none';el.dataset.removed='1';}}
+
+function importPreview(){
+  const name=document.getElementById('p_name').value.trim();
+  if(!name){document.getElementById('p_name').classList.add('err');return;}
+  const season=document.getElementById('p_season').value.trim();
+  const run=parseInt(document.getElementById('p_run').value)||50;
+  const formations=[];
+  prevData.formations.forEach((f,i)=>{
+    const card=document.getElementById('pfc_'+i);
+    if(card&&card.dataset.removed)return;
+    const fname=(document.getElementById('pf_name_'+i)?.value||f.name).trim();
+    const frun=parseInt(document.getElementById('pf_run_'+i)?.value)||f.runPct;
+    const ffrun=(document.getElementById('pf_frun_'+i)?.value||f.favoriteRunPlay).trim();
+    const ffpass=(document.getElementById('pf_fpass_'+i)?.value||f.favoritePassPlay).trim();
+    formations.push({id:uid(),name:fname||'Unnamed Formation',runPct:frun,passPct:100-frun,
+      favoriteRunPlay:ffrun||'Not specified',favoritePassPlay:ffpass||'Not specified',
+      downTendency:'Imported from Hudl. Add tendency notes in app.',
+      situations:f.situations.map(s=>({...s,id:uid(),dc:s.dc||{coverage:'',blitz:'',reason:'',alert:''}}))});
+  });
+  DB.opponents.push({id:uid(),name,season:season||String(new Date().getFullYear()),
+    runPct:run,passPct:100-run,
+    notes:document.getElementById('p_notes').value.trim()||'Imported from Hudl scouting report.',
+    formations});
+  saveDB(); closePreview(); renderOpps(); showScreen(1);
+}
+
+// ── ESCAPE HTML ───────────────────────────────────────────────────────────────
+function esc(s){return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');}
+
+// ── BOOT ──────────────────────────────────────────────────────────────────────
+loadDB(); renderOpps(); syncHdr();
+</script>
+</body>
+</html>
