@@ -250,6 +250,15 @@
     .cbtn-save:active{background:var(--goldd)}
     .cbtn-close{padding:7px 12px;background:rgba(255,255,255,.07);border:1px solid rgba(255,255,255,.12);border-radius:8px;color:var(--grayl);font-size:12px;font-weight:700;cursor:pointer;font-family:inherit}
     .canvas-toolbar{background:var(--navyc);border-bottom:1px solid rgba(255,255,255,.06);padding:8px 12px;display:flex;flex-direction:column;gap:7px;flex-shrink:0}
+    /* Toolbar collapse */
+    .toolbar-body{transition:max-height .25s ease,opacity .25s ease;overflow:hidden;max-height:400px;opacity:1}
+    .toolbar-body.collapsed{max-height:0;opacity:0}
+    .collapse-btn{background:rgba(255,255,255,.07);border:1px solid rgba(255,255,255,.12);border-radius:7px;color:var(--grayl);font-size:13px;cursor:pointer;width:34px;height:34px;display:flex;align-items:center;justify-content:center;flex-shrink:0}
+    /* Defensive call banner */
+    .cv-def-call{background:rgba(240,165,0,.1);border-top:1px solid rgba(240,165,0,.2);padding:8px 14px;flex-shrink:0;display:none}
+    .cv-def-call.show{display:block}
+    .cv-def-cov{font-size:15px;font-weight:900;color:var(--gold);line-height:1.1}
+    .cv-def-blitz{font-size:12px;font-weight:700;color:var(--white);margin-top:2px}
     /* Mode toggle */
     .mode-row{display:flex;gap:8px}
     .mode-btn{flex:1;padding:8px;border-radius:8px;border:1.5px solid rgba(255,255,255,.12);background:rgba(255,255,255,.05);color:var(--grayl);font-size:12px;font-weight:700;cursor:pointer;font-family:inherit;text-align:center;transition:all .15s}
@@ -387,12 +396,21 @@
       <button class="cbtn-close" onclick="closeCanvas()">&#10005;</button>
     </div>
   </div>
+  <!-- Defensive call banner (shown after AI/demo generation) -->
+  <div class="cv-def-call" id="cvDefCall">
+    <div class="cv-def-cov" id="cvDefCov"></div>
+    <div class="cv-def-blitz" id="cvDefBlitz"></div>
+  </div>
+
   <div class="canvas-toolbar">
-    <!-- Mode toggle -->
+    <!-- Mode toggle + collapse button -->
     <div class="mode-row">
       <button class="mode-btn active" id="modePlaceBtn" onclick="setCanvasMode('place',this)">&#127952; Place Players</button>
       <button class="mode-btn" id="modeDrawBtn" onclick="setCanvasMode('draw',this)">&#9998; Draw Routes</button>
+      <button class="collapse-btn" id="toolCollapseBtn" onclick="toggleCanvasTools()" title="Show/hide tools">&#8964;</button>
     </div>
+    <!-- Collapsible body -->
+    <div class="toolbar-body" id="toolbarBody">
     <!-- Place Players panel -->
     <div id="placePanel">
       <!-- Formation presets -->
@@ -454,7 +472,8 @@
         <button class="cw-btn" onclick="setDrawWidth(12,this)">&#9644;</button>
       </div>
     </div>
-  </div>
+    </div><!-- end toolbar-body -->
+  </div><!-- end canvas-toolbar -->
   <div class="canvas-wrap">
     <canvas id="playCanvas"></canvas>
   </div>
@@ -2296,7 +2315,9 @@ function generateMockPlay(f){
     ? [{from:{x:260,y:205},to:{x:275,y:252}}]
     : [];
 
-  return {offense:off, defense:def, blitzPaths};
+  const rec = generateRecommendation(f);
+  return {offense:off, defense:def, blitzPaths,
+    defensiveCall:{coverage:rec.coverage, blitz:rec.blitz, reason:rec.reason}};
 }
 
 function buildPlayGenPrompt(f){
@@ -2350,7 +2371,8 @@ Return ONLY valid JSON with no extra text:
 }
 
 function applyGeneratedPlay(playData){
-  // Open canvas; when ready apply the generated positions and routes
+  // Show defensive call banner before opening canvas
+  if(playData.defensiveCall) showDefensiveCall(playData.defensiveCall);
   openCanvas((cw, ch) => {
     const sx = cw / 600, sy = ch / 400; // scale from prompt dims to canvas
 
@@ -2750,6 +2772,7 @@ function openCanvas(onReady){
 
 function closeCanvas(){
   document.getElementById('canvasOv').classList.remove('open');
+  document.getElementById('cvDefCall').classList.remove('show');
   document.body.style.overflow='';
 }
 
@@ -2778,6 +2801,43 @@ function saveCanvas(){
 }
 
 // ── DRAW TOOL CONTROLS ────────────────────────────────────────────────────────
+function toggleCanvasTools(){
+  const body=document.getElementById('toolbarBody');
+  const btn=document.getElementById('toolCollapseBtn');
+  const collapsed=body.classList.toggle('collapsed');
+  btn.innerHTML=collapsed?'&#8963;':'&#8964;';
+  // Resize canvas after transition completes
+  setTimeout(()=>{ if(cvCtx) resizeCanvas(); }, 280);
+}
+
+function resizeCanvas(){
+  const canvas=document.getElementById('playCanvas');
+  const dpr=window.devicePixelRatio||1;
+  const hdrH=document.querySelector('.canvas-hdr')?.offsetHeight||52;
+  const defH=document.getElementById('cvDefCall')?.offsetHeight||0;
+  const tbH=document.querySelector('.canvas-toolbar')?.offsetHeight||42;
+  const cw=Math.min(window.innerWidth,640);
+  const ch=Math.max(200, window.innerHeight-hdrH-defH-tbH);
+  canvas.width=cw*dpr; canvas.height=ch*dpr;
+  canvas.style.width=cw+'px'; canvas.style.height=ch+'px';
+  if(cvRouteCanvas){
+    cvRouteCanvas.width=cw*dpr; cvRouteCanvas.height=ch*dpr;
+    cvRouteCanvas.getContext('2d').scale(dpr,dpr);
+  }
+  cvCtx.scale(dpr,dpr);
+  redrawAll();
+}
+
+function showDefensiveCall(dc){
+  if(!dc) return;
+  const el=document.getElementById('cvDefCall');
+  document.getElementById('cvDefCov').textContent='⚡ '+dc.coverage;
+  document.getElementById('cvDefBlitz').textContent=dc.blitz;
+  el.classList.add('show');
+  // Resize canvas to account for the new banner height
+  setTimeout(()=>{ if(cvCtx) resizeCanvas(); }, 50);
+}
+
 function setDrawColor(c,btn){
   cvColor=c;
   document.querySelectorAll('.clr-btn').forEach(b=>b.classList.remove('active'));
