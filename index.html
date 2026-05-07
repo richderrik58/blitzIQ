@@ -599,11 +599,29 @@
 </div>
 
 <script>
-// PDF.JS
-if (typeof pdfjsLib !== 'undefined') {
-  pdfjsLib.GlobalWorkerOptions.workerSrc =
-    'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
+// PDF.JS — fetch worker as blob URL to avoid cross-origin worker restrictions on GitHub Pages
+const PDFJS_WORKER_CDN = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
+let _pdfWorkerReady = null;
+
+function ensurePDFWorker() {
+  if (_pdfWorkerReady) return _pdfWorkerReady;
+  if (typeof pdfjsLib === 'undefined') {
+    return Promise.reject(new Error('pdf.js library did not load. Check your internet connection and reload.'));
+  }
+  _pdfWorkerReady = fetch(PDFJS_WORKER_CDN)
+    .then(r => { if (!r.ok) throw new Error('fetch ' + r.status); return r.blob(); })
+    .then(blob => {
+      pdfjsLib.GlobalWorkerOptions.workerSrc = URL.createObjectURL(blob);
+    })
+    .catch(() => {
+      // Fallback: use CDN URL directly (works in most browsers)
+      pdfjsLib.GlobalWorkerOptions.workerSrc = PDFJS_WORKER_CDN;
+    });
+  return _pdfWorkerReady;
 }
+
+// Start loading the worker immediately so it's ready when the coach uploads
+if (typeof pdfjsLib !== 'undefined') ensurePDFWorker();
 
 // ── SEED DATA ─────────────────────────────────────────────────────────────────
 const SEED = { opponents: [{
@@ -910,8 +928,12 @@ function hideLoad(){document.getElementById('loadOv').classList.remove('open');}
 async function handlePDF(e) {
   const files=Array.from(e.target.files); e.target.value='';
   if(!files.length) return;
-  if(typeof pdfjsLib==='undefined'){
-    alert('PDF import requires an internet connection. Check your connection and try again.');
+
+  // Ensure pdf.js worker is ready before touching any files
+  try {
+    await ensurePDFWorker();
+  } catch(err) {
+    alert('PDF reader failed to initialize.\n\n' + err.message);
     return;
   }
 
@@ -1065,25 +1087,55 @@ function combineResults(results){
 }
 
 async function extractPDFText(file) {
-  const ab=await file.arrayBuffer();
-  const pdf=await pdfjsLib.getDocument({data:new Uint8Array(ab)}).promise;
-  let full='';
-  for(let p=1;p<=pdf.numPages;p++){
-    const page=await pdf.getPage(p);
-    const tc=await page.getTextContent();
-    const lineMap=new Map();
-    for(const item of tc.items){
-      const y=Math.round(item.transform[5]/4)*4;
-      if(!lineMap.has(y))lineMap.set(y,[]);
-      lineMap.get(y).push({x:item.transform[4],str:item.str});
+  const ab = await file.arrayBuffer();
+  const pdf = await pdfjsLib.getDocument({
+    data: new Uint8Array(ab),
+    useSystemFonts: true,
+    disableFontFace: true
+  }).promise;
+
+  let full = '';
+
+  for (let p = 1; p <= pdf.numPages; p++) {
+    const page = await pdf.getPage(p);
+    const tc = await page.getTextContent({ includeMarkedContent: false });
+
+    // Cluster items into visual lines using ±5pt Y tolerance
+    const clusters = [];
+    for (const item of tc.items) {
+      if (!item.str || !item.str.trim()) continue;
+      const y = item.transform[5];
+      const x = item.transform[4];
+      const existing = clusters.find(c => Math.abs(c.y - y) <= 5);
+      if (existing) {
+        existing.items.push({ x, str: item.str });
+        existing.y = (existing.y + y) / 2; // recompute centroid
+      } else {
+        clusters.push({ y, items: [{ x, str: item.str }] });
+      }
     }
-    const ys=[...lineMap.keys()].sort((a,b)=>b-a);
-    for(const y of ys){
-      const items=lineMap.get(y).sort((a,b)=>a.x-b.x);
-      full+=items.map(i=>i.str).join(' ').trim()+'\n';
+
+    // Sort clusters top → bottom (PDF Y is bottom-up so sort descending)
+    clusters.sort((a, b) => b.y - a.y);
+
+    for (const cl of clusters) {
+      cl.items.sort((a, b) => a.x - b.x);
+      // Preserve column gaps: if gap between items > 20pt, insert two spaces
+      let line = '';
+      for (let i = 0; i < cl.items.length; i++) {
+        const item = cl.items[i];
+        if (i > 0) {
+          const gap = item.x - (cl.items[i-1].x + (cl.items[i-1].str.length * 5));
+          line += gap > 20 ? '  ' : ' ';
+        }
+        line += item.str;
+      }
+      const trimmed = line.trim();
+      if (trimmed) full += trimmed + '\n';
     }
-    full+='\n';
+    full += '\n';
   }
+
   return full;
 }
 
@@ -1241,9 +1293,11 @@ function extractFormations(lines,data,tp){
   // (Hudl sometimes exports a separate "formation detail" section)
   scanFormationPlayHeaders(lines,formations,data);
 
-  // Phase C: global fallback if no section header found
-  if(!foundHeader&&formations.length===0){
-    data.extractionLog.push('✗ No formation section header — trying global scan');
+  // Phase C: global fallback — runs when no header found OR header found but nothing parsed
+  if(formations.length===0){
+    data.extractionLog.push(foundHeader
+      ? '✗ Formation section found but no rows parsed — trying global scan'
+      : '✗ No formation section header — trying global scan');
     for(const line of lines){
       const parsed=parseFormLine(line);
       if(parsed&&!formations.find(f=>f.name===parsed.name)){
@@ -1311,44 +1365,37 @@ function parseSubPlayLine(line,formPlayCount){
 function parseFormLine(line){
   // All Hudl formation names are ALL CAPS. Try patterns in order of specificity.
 
-  // Pattern A: "TREY R WEAK  8/125  38%  62%"  (name + fraction + run% + pass%)
-  const pA=line.match(/^([A-Z][A-Z0-9\s\-'\/]{2,40}?)\s+(\d{1,3})\/(\d{1,4})\s+(\d{1,3})%\s+(\d{1,3})%/);
-  if(pA){
-    const name=pA[1].trim(), r=parseInt(pA[4]), p=parseInt(pA[5]);
-    if(isAllCaps(name)&&!isSkipWord(name)&&Math.abs(r+p-100)<=5)
-      return{name,runPct:r,passPct:p,playCount:parseInt(pA[2]),totalPlays:parseInt(pA[3])};
+  // Helper — test a candidate name + two numbers
+  function tryNameRP(name, r, p, pc, tot) {
+    if (!isAllCaps(name) || isSkipWord(name)) return null;
+    if (Math.abs(r + p - 100) > 6 || r > 100 || p > 100) return null;
+    return { name, runPct: r, passPct: p, playCount: pc||null, totalPlays: tot||null };
   }
 
-  // Pattern B: "TREY R WEAK  8/125  38  62"  (fraction + bare numbers)
-  const pB=line.match(/^([A-Z][A-Z0-9\s\-'\/]{2,40}?)\s+(\d{1,3})\/(\d{1,4})\s+(\d{1,3})\s+(\d{1,3})$/);
-  if(pB){
-    const name=pB[1].trim(), r=parseInt(pB[4]), p=parseInt(pB[5]);
-    if(isAllCaps(name)&&!isSkipWord(name)&&Math.abs(r+p-100)<=5)
-      return{name,runPct:r,passPct:p,playCount:parseInt(pB[2]),totalPlays:parseInt(pB[3])};
-  }
+  // Pattern A: "TREY R WEAK  8/125  38%  62%"  — name + fraction + run% + pass%
+  const pA = line.match(/^([A-Z][A-Z0-9\s\-'\/]{2,40}?)\s+(\d{1,3})\/(\d{1,4})\s+(\d{1,3})%\s+(\d{1,3})%/);
+  if (pA) { const r=tryNameRP(pA[1].trim(),+pA[4],+pA[5],+pA[2],+pA[3]); if(r) return r; }
 
-  // Pattern C: "TREY R WEAK  38%  62%"  (name + two percentages summing to ~100)
-  const pC=line.match(/^([A-Z][A-Z0-9\s\-'\/]{2,40}?)\s+(\d{1,3})%\s+(\d{1,3})%/);
-  if(pC){
-    const name=pC[1].trim(), r=parseInt(pC[2]), p=parseInt(pC[3]);
-    if(isAllCaps(name)&&!isSkipWord(name)&&Math.abs(r+p-100)<=5)
-      return{name,runPct:r,passPct:p};
-  }
+  // Pattern B: "TREY R WEAK  8/125  38  62"  — fraction + bare numbers
+  const pB = line.match(/^([A-Z][A-Z0-9\s\-'\/]{2,40}?)\s+(\d{1,3})\/(\d{1,4})\s+(\d{1,3})\s+(\d{1,3})(?:\s|$)/);
+  if (pB) { const r=tryNameRP(pB[1].trim(),+pB[4],+pB[5],+pB[2],+pB[3]); if(r) return r; }
 
-  // Pattern D: "TREY R WEAK  38  62"  (bare numbers, no % sign)
-  const pD=line.match(/^([A-Z][A-Z0-9\s\-'\/]{2,40}?)\s+(\d{1,3})\s+(\d{1,3})$/);
-  if(pD){
-    const name=pD[1].trim(), r=parseInt(pD[2]), p=parseInt(pD[3]);
-    if(isAllCaps(name)&&!isSkipWord(name)&&Math.abs(r+p-100)<=5&&r<=100&&p<=100)
-      return{name,runPct:r,passPct:p};
-  }
+  // Pattern C: "TREY R WEAK  38%  62%"  — name + two percentages
+  const pC = line.match(/^([A-Z][A-Z0-9\s\-'\/]{2,40}?)\s{2,}(\d{1,3})%\s+(\d{1,3})%/);
+  if (pC) { const r=tryNameRP(pC[1].trim(),+pC[2],+pC[3],null,null); if(r) return r; }
 
-  // Pattern E: "TREY R WEAK - Run 38%, Pass 62%"  (labeled format)
-  const pE=line.match(/^([A-Z][A-Z0-9\s\-'\/]{2,40}?)\s*[-–]\s*[Rr]un\s*(\d+)%[,\s]+[Pp]ass\s*(\d+)%/);
-  if(pE){
-    const name=pE[1].trim(), r=parseInt(pE[2]), p=parseInt(pE[3]);
-    if(isAllCaps(name)&&!isSkipWord(name)) return{name,runPct:r,passPct:p};
-  }
+  // Pattern C2: single-space fallback for Pattern C (less reliable but catches missed lines)
+  const pC2 = line.match(/^([A-Z][A-Z0-9\s\-'\/]{2,40}?)\s+(\d{1,3})%\s+(\d{1,3})%/);
+  if (pC2) { const r=tryNameRP(pC2[1].trim(),+pC2[2],+pC2[3],null,null); if(r) return r; }
+
+  // Pattern D: "TREY R WEAK  38  62"  — bare numbers, no % sign (column-separated)
+  const pD = line.match(/^([A-Z][A-Z0-9\s\-'\/]{2,40}?)\s{2,}(\d{1,3})\s+(\d{1,3})(?:\s|$)/);
+  if (pD) { const r=tryNameRP(pD[1].trim(),+pD[2],+pD[3],null,null); if(r) return r; }
+
+  // Pattern E: "TREY R WEAK - Run 38%, Pass 62%"  — labeled format
+  const pE = line.match(/^([A-Z][A-Z0-9\s\-'\/]{2,40}?)\s*[-–]\s*[Rr]un\s*(\d+)%[,\s]+[Pp]ass\s*(\d+)%/);
+  if (pE && isAllCaps(pE[1].trim()) && !isSkipWord(pE[1].trim()))
+    return { name: pE[1].trim(), runPct: +pE[2], passPct: +pE[3] };
 
   return null;
 }
