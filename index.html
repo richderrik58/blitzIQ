@@ -255,6 +255,12 @@
     .pbtn.center{border-radius:5px}
     .pbtn.selected{box-shadow:0 0 0 3px #f0a500;transform:scale(1.1)}
     .pbtn:active{transform:scale(.95)}
+    /* Preset formation buttons */
+    .preset-section{display:flex;flex-direction:column;gap:5px;padding-bottom:6px;border-bottom:1px solid rgba(255,255,255,.08);margin-bottom:4px}
+    .preset-row{display:flex;align-items:center;gap:5px;flex-wrap:wrap}
+    .preset-lbl{font-size:9px;letter-spacing:1.5px;text-transform:uppercase;color:var(--gray);font-weight:700;width:28px;flex-shrink:0}
+    .pbtn-preset{padding:6px 11px;background:rgba(255,255,255,.06);border:1.5px solid rgba(255,255,255,.2);border-radius:20px;color:var(--grayl);font-size:11px;font-weight:700;cursor:pointer;font-family:inherit;white-space:nowrap;transition:all .12s;line-height:1}
+    .pbtn-preset:active{background:rgba(240,165,0,.22);border-color:var(--gold);color:var(--gold);transform:scale(.95)}
     /* Draw tools row */
     .draw-row{display:flex;align-items:center;gap:6px;flex-wrap:wrap}
     .clr-btn{width:26px;height:26px;border-radius:50%;border:2.5px solid transparent;cursor:pointer;flex-shrink:0;transition:border-color .12s,transform .12s}
@@ -361,6 +367,24 @@
     </div>
     <!-- Place Players panel -->
     <div id="placePanel">
+      <!-- Formation presets -->
+      <div class="preset-section">
+        <div class="preset-row">
+          <span class="preset-lbl">DEF</span>
+          <button class="pbtn-preset" onclick="placePreset('4-3')">4-3</button>
+          <button class="pbtn-preset" onclick="placePreset('3-4')">3-4</button>
+          <button class="pbtn-preset" onclick="placePreset('3-3-5')">3-3-5 Stack</button>
+        </div>
+        <div class="preset-row">
+          <span class="preset-lbl">OFF</span>
+          <button class="pbtn-preset" onclick="placePreset('pro-set')">Pro Set</button>
+          <button class="pbtn-preset" onclick="placePreset('trips')">Trips</button>
+          <button class="pbtn-preset" onclick="placePreset('spread')">Spread</button>
+          <button class="pbtn-preset" onclick="placePreset('i-form')">I-Form</button>
+          <button class="pbtn-preset" onclick="placePreset('empty')">Empty</button>
+        </div>
+      </div>
+      <!-- Individual player symbols -->
       <div class="player-panel-row">
         <span class="player-panel-lbl">OFF</span>
         <button class="pbtn off" onclick="selectSymbol('QB','off',this)">QB</button>
@@ -2027,6 +2051,136 @@ function selectSymbol(type,team,btn){
   cvSelectedSymbol={type,team};
   document.querySelectorAll('.pbtn').forEach(b=>b.classList.remove('selected'));
   btn.classList.add('selected');
+}
+
+// ── FORMATION PRESETS ─────────────────────────────────────────────────────────
+// xf = fraction of canvas width (0=left, 1=right, 0.5=center)
+// yd = pixels from line of scrimmage (negative = defensive side, positive = offensive side)
+const CV_PRESETS = {
+  // ── DEFENSIVE ────────────────────────────────────────────────────────────────
+  '4-3':[
+    {type:'DE',  team:'def', xf:0.26, yd:-35},
+    {type:'DT',  team:'def', xf:0.40, yd:-35},
+    {type:'DT',  team:'def', xf:0.60, yd:-35},
+    {type:'DE',  team:'def', xf:0.74, yd:-35},
+    {type:'LB',  team:'def', xf:0.23, yd:-88},
+    {type:'MLB', team:'def', xf:0.50, yd:-88},
+    {type:'LB',  team:'def', xf:0.77, yd:-88},
+    {type:'CB',  team:'def', xf:0.07, yd:-55},
+    {type:'SS',  team:'def', xf:0.38, yd:-148},
+    {type:'FS',  team:'def', xf:0.62, yd:-148},
+    {type:'CB',  team:'def', xf:0.93, yd:-55},
+  ],
+  '3-4':[
+    {type:'DE',  team:'def', xf:0.34, yd:-35},
+    {type:'NT',  team:'def', xf:0.50, yd:-35},
+    {type:'DE',  team:'def', xf:0.66, yd:-35},
+    {type:'LB',  team:'def', xf:0.16, yd:-88},
+    {type:'LB',  team:'def', xf:0.38, yd:-88},
+    {type:'LB',  team:'def', xf:0.62, yd:-88},
+    {type:'LB',  team:'def', xf:0.84, yd:-88},
+    {type:'CB',  team:'def', xf:0.07, yd:-55},
+    {type:'SS',  team:'def', xf:0.38, yd:-155},
+    {type:'FS',  team:'def', xf:0.62, yd:-155},
+    {type:'CB',  team:'def', xf:0.93, yd:-55},
+  ],
+  '3-3-5':[
+    {type:'DE',  team:'def', xf:0.34, yd:-35},
+    {type:'NT',  team:'def', xf:0.50, yd:-35},
+    {type:'DE',  team:'def', xf:0.66, yd:-35},
+    {type:'LB',  team:'def', xf:0.27, yd:-88},
+    {type:'MLB', team:'def', xf:0.50, yd:-88},
+    {type:'LB',  team:'def', xf:0.73, yd:-88},
+    {type:'CB',  team:'def', xf:0.07, yd:-52},
+    {type:'NB',  team:'def', xf:0.30, yd:-140},
+    {type:'FS',  team:'def', xf:0.50, yd:-168},
+    {type:'SS',  team:'def', xf:0.70, yd:-140},
+    {type:'CB',  team:'def', xf:0.93, yd:-52},
+  ],
+  // ── OFFENSIVE ────────────────────────────────────────────────────────────────
+  'pro-set':[
+    {type:'WR', team:'off', xf:0.08, yd:28},
+    {type:'OL', team:'off', xf:0.34, yd:28},
+    {type:'OL', team:'off', xf:0.42, yd:28},
+    {type:'C',  team:'off', xf:0.50, yd:28},
+    {type:'OL', team:'off', xf:0.58, yd:28},
+    {type:'OL', team:'off', xf:0.66, yd:28},
+    {type:'TE', team:'off', xf:0.76, yd:28},
+    {type:'WR', team:'off', xf:0.92, yd:38},
+    {type:'QB', team:'off', xf:0.50, yd:70},
+    {type:'FB', team:'off', xf:0.50, yd:105},
+    {type:'RB', team:'off', xf:0.62, yd:120},
+  ],
+  'trips':[
+    {type:'WR', team:'off', xf:0.08, yd:28},
+    {type:'OL', team:'off', xf:0.34, yd:28},
+    {type:'OL', team:'off', xf:0.42, yd:28},
+    {type:'C',  team:'off', xf:0.50, yd:28},
+    {type:'OL', team:'off', xf:0.58, yd:28},
+    {type:'OL', team:'off', xf:0.66, yd:28},
+    {type:'QB', team:'off', xf:0.50, yd:75},
+    {type:'RB', team:'off', xf:0.61, yd:75},
+    {type:'WR', team:'off', xf:0.76, yd:28},
+    {type:'WR', team:'off', xf:0.85, yd:28},
+    {type:'WR', team:'off', xf:0.94, yd:28},
+  ],
+  'spread':[
+    {type:'WR', team:'off', xf:0.06, yd:28},
+    {type:'WR', team:'off', xf:0.20, yd:28},
+    {type:'OL', team:'off', xf:0.34, yd:28},
+    {type:'OL', team:'off', xf:0.42, yd:28},
+    {type:'C',  team:'off', xf:0.50, yd:28},
+    {type:'OL', team:'off', xf:0.58, yd:28},
+    {type:'OL', team:'off', xf:0.66, yd:28},
+    {type:'WR', team:'off', xf:0.80, yd:28},
+    {type:'WR', team:'off', xf:0.94, yd:28},
+    {type:'QB', team:'off', xf:0.50, yd:75},
+    {type:'RB', team:'off', xf:0.61, yd:75},
+  ],
+  'i-form':[
+    {type:'WR', team:'off', xf:0.08, yd:28},
+    {type:'OL', team:'off', xf:0.34, yd:28},
+    {type:'OL', team:'off', xf:0.42, yd:28},
+    {type:'C',  team:'off', xf:0.50, yd:28},
+    {type:'OL', team:'off', xf:0.58, yd:28},
+    {type:'OL', team:'off', xf:0.66, yd:28},
+    {type:'TE', team:'off', xf:0.76, yd:28},
+    {type:'WR', team:'off', xf:0.92, yd:28},
+    {type:'QB', team:'off', xf:0.50, yd:65},
+    {type:'FB', team:'off', xf:0.50, yd:100},
+    {type:'RB', team:'off', xf:0.50, yd:142},
+  ],
+  'empty':[
+    {type:'WR', team:'off', xf:0.06, yd:28},
+    {type:'WR', team:'off', xf:0.18, yd:28},
+    {type:'OL', team:'off', xf:0.34, yd:28},
+    {type:'OL', team:'off', xf:0.42, yd:28},
+    {type:'C',  team:'off', xf:0.50, yd:28},
+    {type:'OL', team:'off', xf:0.58, yd:28},
+    {type:'OL', team:'off', xf:0.66, yd:28},
+    {type:'TE', team:'off', xf:0.76, yd:28},
+    {type:'WR', team:'off', xf:0.86, yd:28},
+    {type:'WR', team:'off', xf:0.94, yd:28},
+    {type:'QB', team:'off', xf:0.50, yd:75},
+  ],
+};
+
+function placePreset(name){
+  if(!cvCtx) return;
+  const canvas=document.getElementById('playCanvas');
+  const dpr=window.devicePixelRatio||1;
+  const cw=canvas.width/dpr, ch=canvas.height/dpr;
+  const los=ch*0.58;
+  const preset=CV_PRESETS[name];
+  if(!preset) return;
+  // Replace only players of the same team so defense + offense can coexist
+  const team=preset[0].team;
+  cvPlayers=cvPlayers.filter(p=>p.team!==team);
+  preset.forEach(pd=>{
+    cvPlayers.push({id:++cvPid, type:pd.type, team:pd.team,
+      x:Math.round(cw*pd.xf), y:Math.round(los+pd.yd)});
+  });
+  redrawAll();
 }
 
 // ── OPEN / CLOSE / CLEAR / SAVE ───────────────────────────────────────────────
