@@ -294,6 +294,23 @@
     .gen-play-btn:active{background:rgba(240,165,0,.25);transform:scale(.98)}
     .pro-badge{background:var(--gold);color:var(--navy);font-size:9px;font-weight:900;padding:2px 6px;border-radius:10px;letter-spacing:.5px;text-transform:uppercase;margin-left:4px}
     .api-note{font-size:11px;color:var(--gray);text-align:center;margin-bottom:14px;line-height:1.5}
+    /* Assignment panel */
+    .cv-assign{background:var(--navyc);border-top:1px solid rgba(255,255,255,.06);padding:8px 12px;flex-shrink:0;max-height:140px;overflow-y:auto;display:none;-webkit-overflow-scrolling:touch}
+    .cv-assign.show{display:block}
+    .ca-row{display:flex;align-items:flex-start;gap:6px;flex-wrap:wrap;margin-bottom:5px}
+    .ca-hdr{font-size:9px;letter-spacing:1.5px;text-transform:uppercase;font-weight:800;flex-shrink:0;padding-top:2px}
+    .ca-hdr.rush{color:var(--red)}.ca-hdr.cov{color:var(--blue)}.ca-hdr.warn{color:var(--amber)}
+    .ca-badge{font-size:10px;font-weight:700;padding:2px 7px;border-radius:10px}
+    .ca-badge.rush{background:rgba(239,68,68,.2);color:var(--red);border:1px solid rgba(239,68,68,.35)}
+    .ca-badge.cov{background:rgba(96,165,250,.12);color:var(--blue);border:1px solid rgba(96,165,250,.3)}
+    .ca-badge.man{background:rgba(245,158,11,.12);color:var(--amber);border:1px solid rgba(245,158,11,.3)}
+    .ca-badge.high{background:rgba(240,165,0,.15);color:var(--gold);border:1px solid rgba(240,165,0,.4)}
+    .ca-warn-box{font-size:11px;font-weight:700;padding:5px 10px;border-radius:7px;margin-top:3px;line-height:1.4}
+    .ca-warn-thin{background:rgba(245,158,11,.12);color:var(--amber);border:1px solid rgba(245,158,11,.3)}
+    .ca-warn-crit{background:rgba(239,68,68,.15);color:var(--red);border:1px solid rgba(239,68,68,.4)}
+    .ca-warn-c0{background:rgba(239,68,68,.2);color:var(--red);border:1px solid rgba(239,68,68,.5);font-size:12px}
+    .ca-warn-info{background:rgba(240,165,0,.1);color:var(--gold);border:1px solid rgba(240,165,0,.3)}
+    .ca-conflict{background:rgba(239,68,68,.18);color:var(--red);border:1px solid var(--red);border-radius:8px;padding:6px 10px;font-size:11px;font-weight:700;margin-top:4px}
     .draw-play-btn{width:100%;padding:14px;background:rgba(240,165,0,.08);border:1.5px dashed rgba(240,165,0,.4);border-radius:12px;color:var(--gold);font-size:15px;font-weight:700;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:8px;margin-bottom:14px;font-family:inherit}
     .draw-play-btn:active{background:rgba(240,165,0,.18)}
     .play-thumb-wrap{background:var(--navy2);border:1px solid rgba(255,255,255,.08);border-radius:12px;overflow:hidden;margin-bottom:14px;cursor:pointer;position:relative}
@@ -514,6 +531,8 @@
   <div class="canvas-wrap">
     <canvas id="playCanvas"></canvas>
   </div>
+  <!-- Defensive assignment summary panel -->
+  <div class="cv-assign" id="cvAssignPanel"></div>
 </div>
 
 <!-- MODAL: ADD OPPONENT -->
@@ -2536,8 +2555,7 @@ function applyGeneratedPlay(playData){
     }
 
     redrawAll();
-    // Switch to Draw Routes mode AFTER rendering so toolbar height is stable
-    // Use setTimeout(0) to let the browser paint first
+    updateAssignPanel();
     setTimeout(()=>setCanvasMode('draw', document.getElementById('modeDrawBtn')), 0);
   });
 }
@@ -2552,6 +2570,203 @@ function drawRouteArrow(ctx, x1, y1, x2, y2, color){
   ctx.lineTo(x2 - len*Math.cos(angle+0.42), y2 - len*Math.sin(angle+0.42));
   ctx.closePath();
   ctx.fill();
+}
+
+// ── DEFENSIVE ASSIGNMENT ENGINE ──────────────────────────────────────────────
+
+// Identify which canvas players are rushing based on blitz package text
+function identifyRushers(blitz){
+  const b=(blitz||'').toUpperCase();
+  const def=cvPlayers.filter(p=>p.team==='def');
+  const DL=def.filter(p=>['DE','DT','NT'].includes(p.type));
+  const LBs=def.filter(p=>['LB','MLB','OLB'].includes(p.type)).sort((a,c)=>a.x-c.x);
+  const CBs=def.filter(p=>['CB','NB'].includes(p.type)).sort((a,c)=>a.x-c.x);
+
+  const rushers=new Set(DL.map(p=>p.id)); // DL always rush by default
+
+  const isBlitz=/BLITZ|PRESSURE|FIRE|OVERLOAD|DOG/.test(b);
+  const isNoBlitz=/NO BLITZ|BASE\s*4/.test(b);
+  if(isNoBlitz) return rushers; // 4 DL only
+
+  // Mike / A-gap — center LB rushes
+  if(/MIKE|MLB|A.?GAP/.test(b)&&isBlitz){
+    const mlb=LBs.find(p=>p.type==='MLB')||LBs[Math.floor(LBs.length/2)];
+    if(mlb) rushers.add(mlb.id);
+  }
+  // Weak-side / Will / Edge — leftmost LB rushes
+  if(/WEAK|WILL|EDGE|BOUNDARY/.test(b)&&isBlitz){
+    if(LBs[0]) rushers.add(LBs[0].id);
+  }
+  // Strong-side / Sam — rightmost LB rushes
+  if(/SAM|STRONG.SIDE/.test(b)&&isBlitz){
+    if(LBs[LBs.length-1]) rushers.add(LBs[LBs.length-1].id);
+  }
+  // Double A-gap / 5-man — all LBs rush
+  if(/DOUBLE|DBL|5.MAN|OVERLOAD/.test(b)){
+    LBs.forEach(p=>rushers.add(p.id));
+  }
+  // Corner blitz — leftmost CB rushes
+  if(/CORNER/.test(b)&&isBlitz){
+    if(CBs[0]) rushers.add(CBs[0].id);
+  }
+  // Fire zone — drop one DL, one LB rushes instead
+  if(/FIRE.?ZONE/.test(b)){
+    // Remove one DL from rushers (the interior DT), add a LB
+    const dropDT=DL.find(p=>p.type==='DT');
+    if(dropDT) rushers.delete(dropDT.id);
+    if(LBs[0]) rushers.add(LBs[0].id);
+  }
+  // Cover-0 dog blitz
+  if(/COVER.?0|DOG/.test(b)&&isBlitz){
+    const mlb=LBs.find(p=>p.type==='MLB')||LBs[Math.floor(LBs.length/2)];
+    if(mlb) rushers.add(mlb.id);
+  }
+  return rushers;
+}
+
+// Assign each non-rushing defender to a coverage zone
+function buildAssignments(rushers){
+  const coverage=(window._cvDefCall?.coverage||'').toUpperCase();
+  const blitz=(window._cvDefCall?.blitz||'').toUpperCase();
+  const def=cvPlayers.filter(p=>p.team==='def');
+
+  const assignments=[];
+  const coveragePlayers=def.filter(p=>!rushers.has(p.id));
+
+  // Sort coveragePlayers by position type for assignment
+  const getCov=type=>coveragePlayers.filter(p=>p.type===type).sort((a,b)=>a.x-b.x);
+  const cbs=getCov('CB').concat(getCov('NB'));
+  const fs=coveragePlayers.filter(p=>p.type==='FS')[0];
+  const ss=coveragePlayers.filter(p=>p.type==='SS')[0];
+  const lbs=coveragePlayers.filter(p=>['LB','MLB','OLB'].includes(p.type)).sort((a,b)=>a.x-b.x);
+  const dropDL=coveragePlayers.filter(p=>['DE','DT','NT'].includes(p.type));
+
+  // Cover 3 assignments
+  if(/COVER.?3/.test(coverage)){
+    if(cbs[0]) assignments.push({id:cbs[0].id,t:cbs[0].type,role:'COV',zone:'Deep Left ⅓'});
+    if(fs)     assignments.push({id:fs.id,t:'FS',role:'COV',zone:'Deep Middle ⅓'});
+    if(cbs[1]) assignments.push({id:cbs[1].id,t:cbs[1].type,role:'COV',zone:'Deep Right ⅓'});
+    const weakBlitz=/WEAK|WILL|EDGE/.test(blitz)&&/BLITZ|PRESSURE/.test(blitz);
+    const sBlitz=/SAM|STRONG.SIDE/.test(blitz)&&/BLITZ|PRESSURE/.test(blitz);
+    const wFlat=weakBlitz?'Weak Flat (NB/CB rotates)':'Weak Flat';
+    const sFlat=sBlitz?'Strong Flat (NB/CB rotates)':'Strong Flat';
+    if(lbs[0])  assignments.push({id:lbs[0].id,t:lbs[0].type,role:'COV',zone:wFlat,alert:weakBlitz});
+    if(lbs[1])  assignments.push({id:lbs[1]?.id,t:lbs[1]?.type,role:'COV',zone:'Hook/Curl'});
+    if(ss)      assignments.push({id:ss.id,t:'SS',role:'COV',zone:sFlat,alert:sBlitz});
+    if(dropDL[0]) assignments.push({id:dropDL[0].id,t:dropDL[0].type,role:'COV',zone:'Short Zone (Fire)'});
+  }
+  // Cover 4 / Quarters
+  else if(/COVER.?4|QUARTER/.test(coverage)){
+    if(cbs[0]) assignments.push({id:cbs[0].id,t:cbs[0].type,role:'COV',zone:'Deep Left ¼'});
+    if(ss)     assignments.push({id:ss.id,t:'SS',role:'COV',zone:'Deep Left-Mid ¼'});
+    if(fs)     assignments.push({id:fs.id,t:'FS',role:'COV',zone:'Deep Right-Mid ¼'});
+    if(cbs[1]) assignments.push({id:cbs[1].id,t:cbs[1].type,role:'COV',zone:'Deep Right ¼'});
+    lbs.forEach((lb,i)=>assignments.push({id:lb.id,t:lb.type,role:'COV',zone:i===0?'Weak Curl/Flat':'Strong Curl/Flat'}));
+    dropDL.forEach(p=>assignments.push({id:p.id,t:p.type,role:'COV',zone:'Short Zone'}));
+  }
+  // Cover 2
+  else if(/COVER.?2/.test(coverage)){
+    if(ss) assignments.push({id:ss.id,t:'SS',role:'COV',zone:'Deep Left Half'});
+    if(fs) assignments.push({id:fs.id,t:'FS',role:'COV',zone:'Deep Right Half'});
+    if(cbs[0]) assignments.push({id:cbs[0].id,t:cbs[0].type,role:'COV',zone:'Flat Left'});
+    if(cbs[1]) assignments.push({id:cbs[1].id,t:cbs[1].type,role:'COV',zone:'Flat Right'});
+    lbs.forEach((lb,i)=>assignments.push({id:lb.id,t:lb.type,role:'COV',zone:i===0?'Hook Left':'Hook Right'}));
+    dropDL.forEach(p=>assignments.push({id:p.id,t:p.type,role:'COV',zone:'Short Zone'}));
+  }
+  // Cover 1 — single high
+  else if(/COVER.?1/.test(coverage)){
+    if(fs) assignments.push({id:fs.id,t:'FS',role:'HIGH',zone:'Single High (whole field)'});
+    coveragePlayers.filter(p=>p.id!==fs?.id).forEach(p=>
+      assignments.push({id:p.id,t:p.type,role:'MAN',zone:'Man Coverage'}));
+  }
+  // Cover 0 — all man, no help
+  else if(/COVER.?0/.test(coverage)){
+    coveragePlayers.forEach(p=>assignments.push({id:p.id,t:p.type,role:'MAN',zone:'Man — No Help'}));
+  }
+  // Default
+  else {
+    coveragePlayers.forEach(p=>assignments.push({id:p.id,t:p.type,role:'COV',zone:'Zone'}));
+  }
+
+  return assignments;
+}
+
+// Detect conflicts: player in both rush and coverage
+function detectConflicts(rushers, assignments){
+  const conflicts=[];
+  assignments.forEach(a=>{
+    if(rushers.has(a.id))
+      conflicts.push(`Conflict — ${a.t} cannot rush and cover simultaneously. Please reassign.`);
+  });
+  return conflicts;
+}
+
+// Build warning messages
+function buildWarnings(rushCount, coverCount, coverage){
+  const cov=coverage.toUpperCase();
+  const warnings=[];
+  if(rushCount>=6) warnings.push({cls:'ca-warn-crit',msg:`🚨 ${rushCount} RUSHERS — only ${coverCount} in coverage. Extremely thin — one missed assignment = touchdown.`});
+  else if(rushCount>=5) warnings.push({cls:'ca-warn-thin',msg:`⚠ ${rushCount} rushers — ${coverCount} in coverage. Thin coverage. Make sure every receiver is accounted for.`});
+  if(/COVER.?0/.test(cov)) warnings.push({cls:'ca-warn-c0',msg:'🚨 COVER 0 — No safety help. Every defender is in man. Maximum risk. One missed tackle = score.'});
+  else if(/COVER.?1/.test(cov)&&rushCount>=5) warnings.push({cls:'ca-warn-info',msg:'FS is the only safety. If he misses his assignment the deep middle is open.'});
+  return warnings;
+}
+
+// Draw red rush arrows on blitzing players
+function drawRushArrows(ctx, rushers){
+  if(!rushers||!rushers.size) return;
+  cvPlayers.filter(p=>p.team==='def'&&rushers.has(p.id)).forEach(p=>{
+    ctx.save();
+    const ay=p.y-CV_R-8;
+    ctx.strokeStyle='#ef4444'; ctx.lineWidth=2.5; ctx.lineCap='round';
+    ctx.beginPath(); ctx.moveTo(p.x,p.y-CV_R-2); ctx.lineTo(p.x,ay-14); ctx.stroke();
+    // Arrowhead pointing up (toward LOS = toward offense)
+    ctx.fillStyle='#ef4444';
+    ctx.beginPath(); ctx.moveTo(p.x,ay-16); ctx.lineTo(p.x-6,ay-6); ctx.lineTo(p.x+6,ay-6); ctx.closePath(); ctx.fill();
+    // RUSH label
+    ctx.font='bold 8px -apple-system,sans-serif'; ctx.textAlign='center'; ctx.fillStyle='#ef4444';
+    ctx.fillText('RUSH',p.x,p.y-CV_R-24);
+    ctx.restore();
+  });
+}
+
+// Update the DOM assignment panel
+function updateAssignPanel(){
+  const dc=window._cvDefCall;
+  const panel=document.getElementById('cvAssignPanel');
+  if(!dc||!cvPlayers.some(p=>p.team==='def')){
+    panel.classList.remove('show'); return;
+  }
+
+  const rushers=identifyRushers(dc.blitz||'');
+  const assignments=buildAssignments(rushers);
+  const conflicts=detectConflicts(rushers,assignments);
+  const defCount=cvPlayers.filter(p=>p.team==='def').length;
+  const coverCount=defCount-rushers.size;
+  const warnings=buildWarnings(rushers.size,coverCount,dc.coverage||'');
+
+  // Rush badges
+  const rushDefs=cvPlayers.filter(p=>p.team==='def'&&rushers.has(p.id));
+  const rushHTML=rushDefs.length
+    ? rushDefs.map(p=>`<span class="ca-badge rush">${p.type} ↑</span>`).join('')
+    : '<span style="font-size:10px;color:var(--gray)">4 DL only</span>';
+
+  // Coverage badges
+  const covHTML=assignments.map(a=>{
+    const cls=a.role==='HIGH'?'high':a.role==='MAN'?'man':'cov';
+    const alert=a.alert?'background:rgba(245,158,11,.18);':'';
+    return `<span class="ca-badge ${cls}" style="${alert}">${a.t}: ${a.zone}</span>`;
+  }).join('');
+
+  // Conflict warnings
+  const confHTML=conflicts.map(c=>`<div class="ca-conflict">🚫 ${esc(c)}</div>`).join('');
+  const warnHTML=warnings.map(w=>`<div class="ca-warn-box ${w.cls}">${w.msg}</div>`).join('');
+
+  panel.innerHTML=`
+    <div class="ca-row"><span class="ca-hdr rush">RUSH (${rushers.size})</span>${rushHTML}</div>
+    <div class="ca-row"><span class="ca-hdr cov">COVERAGE (${coverCount})</span>${covHTML||'<span style="font-size:10px;color:var(--gray)">—</span>'}</div>
+    ${confHTML}${warnHTML}`;
+  panel.classList.add('show');
 }
 
 // ── ESCAPE HTML ───────────────────────────────────────────────────────────────
@@ -2643,7 +2858,10 @@ function redrawAll(){
   if(window._cvDefCall) drawCoverageZones(cvCtx,cw,ch,los,window._cvDefCall.coverage);
   if(cvRouteCanvas) cvCtx.drawImage(cvRouteCanvas,0,0,cw,ch);
   cvPlayers.forEach(p=>drawPlayerSymbol(cvCtx,p));
-  if(window._cvDefCall) drawGapLabels(cvCtx,cw,los);
+  if(window._cvDefCall){
+    drawGapLabels(cvCtx,cw,los);
+    drawRushArrows(cvCtx, identifyRushers(window._cvDefCall.blitz||''));
+  }
 }
 
 function drawCoverageZones(ctx,cw,ch,los,coverage){
@@ -3040,6 +3258,7 @@ function closeCanvas(){
   document.getElementById('canvasOv').classList.remove('open');
   document.getElementById('cvDefCall').classList.remove('show');
   document.getElementById('canvasSubTitle').textContent='Defensive call diagram';
+  document.getElementById('cvAssignPanel').classList.remove('show');
   window._cvDefCall = null;
   document.body.style.overflow='';
 }
