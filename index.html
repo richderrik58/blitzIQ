@@ -2536,6 +2536,10 @@ function applyGeneratedPlay(playData){
       }));
     }
 
+    // Detect formation strength and adjust SS/SAM to correct side
+    const strength=getFormationStrength(cw);
+    adjustDefenseToStrength(strength, cw);
+
     // Draw routes on the route canvas using canvas-relative coords
     if(cvRouteCanvas && playData.routes){
       const rCtx = cvRouteCanvas.getContext('2d');
@@ -2570,6 +2574,78 @@ function drawRouteArrow(ctx, x1, y1, x2, y2, color){
   ctx.lineTo(x2 - len*Math.cos(angle+0.42), y2 - len*Math.sin(angle+0.42));
   ctx.closePath();
   ctx.fill();
+}
+
+// ── FORMATION STRENGTH DETECTION & ALIGNMENT ──────────────────────────────────
+
+// Parse formation name for explicit side indicator
+function detectStrengthFromName(formName){
+  if(!formName) return null;
+  const n=formName.toUpperCase();
+  // Explicit RIGHT indicators
+  if(/ R(?:\s|$)|RT |RIGHT| STRONG R| TREY R| TRIPS R/.test(n)) return 'right';
+  // Explicit LEFT indicators
+  if(/ L(?:\s|$)|LT |LEFT| STRONG L| TREY L| TRIPS L/.test(n)) return 'left';
+  // WEAK means the back is to the weak side — strength is the other side
+  // e.g. "TREY R WEAK" = trips right + weak back on right → strong is RIGHT
+  if(/TREY|TRIPS/.test(n)){
+    if(/ R/.test(n)) return 'right';
+    if(/ L/.test(n)) return 'left';
+  }
+  return null;
+}
+
+// Detect strength from which side has the TE or more receivers
+function detectStrengthFromPlayers(cw){
+  const off=cvPlayers.filter(p=>p.team==='off');
+  const mid=cw/2;
+  // Priority 1: TE location
+  const te=off.find(p=>p.type==='TE');
+  if(te) return te.x>=mid?'right':'left';
+  // Priority 2: more WRs to one side
+  const rWR=off.filter(p=>p.type==='WR'&&p.x>=mid).length;
+  const lWR=off.filter(p=>p.type==='WR'&&p.x<mid).length;
+  if(rWR>lWR) return 'right';
+  if(lWR>rWR) return 'left';
+  // Priority 3: RB side
+  const rb=off.find(p=>['RB','HB','FB'].includes(p.type));
+  if(rb) return rb.x>=mid?'right':'left';
+  return 'right';
+}
+
+function getFormationStrength(cw){
+  const fromName=detectStrengthFromName(st.form?.name||'');
+  return fromName||detectStrengthFromPlayers(cw);
+}
+
+// After placing def preset, move SS to the strong side and FS to center
+function adjustDefenseToStrength(strength, cw){
+  window._cvStrength=strength;
+  const def=cvPlayers.filter(p=>p.team==='def');
+  const ss=def.find(p=>p.type==='SS');
+  const fs=def.find(p=>p.type==='FS');
+  const lbs=def.filter(p=>['LB','MLB','OLB'].includes(p.type)).sort((a,b)=>a.x-b.x);
+
+  // The default 4-3/3-4 presets place SS at xf≈0.38 (left of center)
+  // which represents STRONG-LEFT alignment.
+  // For STRONG RIGHT: mirror SS to the right side and keep FS in the middle.
+  if(strength==='right'){
+    if(ss&&ss.x<cw*0.5){
+      ss.x=Math.round(cw-ss.x); // mirror to right
+    }
+    if(fs) fs.x=Math.round(cw*0.50);
+    // SAM (rightmost LB) stays right — already correct
+    // WILL (leftmost LB) stays left — already correct
+  } else {
+    // STRONG LEFT: SS already on left — but ensure FS is slightly right of center
+    if(ss&&ss.x>cw*0.5) ss.x=Math.round(cw*0.28);
+    if(fs) fs.x=Math.round(cw*0.52);
+    // For strong left, swap WILL/SAM x positions so SAM is on the left (strong side)
+    if(lbs.length>=2){
+      const will=lbs[0], sam=lbs[lbs.length-1];
+      if(will!==sam){ const tx=will.x; will.x=sam.x; sam.x=tx; }
+    }
+  }
 }
 
 // ── DEFENSIVE ASSIGNMENT ENGINE ──────────────────────────────────────────────
@@ -2641,36 +2717,70 @@ function buildAssignments(rushers){
   const lbs=coveragePlayers.filter(p=>['LB','MLB','OLB'].includes(p.type)).sort((a,b)=>a.x-b.x);
   const dropDL=coveragePlayers.filter(p=>['DE','DT','NT'].includes(p.type));
 
-  // Cover 3 assignments
+  // Determine strong/weak side from stored detection
+  const str=window._cvStrength||'right'; // default strong right
+  const strongSide=str==='right'?'Right':'Left';
+  const weakSide=str==='right'?'Left':'Right';
+
+  // Cover 3 — SS on strong side, FS single-high middle, WILL/NB on weak flat
   if(/COVER.?3/.test(coverage)){
-    if(cbs[0]) assignments.push({id:cbs[0].id,t:cbs[0].type,role:'COV',zone:'Deep Left ⅓'});
-    if(fs)     assignments.push({id:fs.id,t:'FS',role:'COV',zone:'Deep Middle ⅓'});
-    if(cbs[1]) assignments.push({id:cbs[1].id,t:cbs[1].type,role:'COV',zone:'Deep Right ⅓'});
+    // CBs: sort by x; strong-side CB is on the strong side
+    const sCB=str==='right'?cbs[cbs.length-1]:cbs[0];
+    const wCB=str==='right'?cbs[0]:cbs[cbs.length-1];
+    if(wCB) assignments.push({id:wCB.id,t:wCB.type,role:'COV',zone:`Deep ${weakSide} ⅓ (Weak CB)`});
+    if(fs)  assignments.push({id:fs.id,t:'FS',role:'COV',zone:'Deep Middle ⅓ (FS — Single High)'});
+    if(sCB) assignments.push({id:sCB.id,t:sCB.type,role:'COV',zone:`Deep ${strongSide} ⅓ (Strong CB)`});
+
     const weakBlitz=/WEAK|WILL|EDGE/.test(blitz)&&/BLITZ|PRESSURE/.test(blitz);
     const sBlitz=/SAM|STRONG.SIDE/.test(blitz)&&/BLITZ|PRESSURE/.test(blitz);
-    const wFlat=weakBlitz?'Weak Flat (NB/CB rotates)':'Weak Flat';
-    const sFlat=sBlitz?'Strong Flat (NB/CB rotates)':'Strong Flat';
-    if(lbs[0])  assignments.push({id:lbs[0].id,t:lbs[0].type,role:'COV',zone:wFlat,alert:weakBlitz});
-    if(lbs[1])  assignments.push({id:lbs[1]?.id,t:lbs[1]?.type,role:'COV',zone:'Hook/Curl'});
-    if(ss)      assignments.push({id:ss.id,t:'SS',role:'COV',zone:sFlat,alert:sBlitz});
-    if(dropDL[0]) assignments.push({id:dropDL[0].id,t:dropDL[0].type,role:'COV',zone:'Short Zone (Fire)'});
+    // Underneath: weak flat = WILL LB (or NB if blitzing), strong flat = SS
+    const willLB=str==='right'?lbs[0]:lbs[lbs.length-1];  // weak-side LB
+    const samLB=str==='right'?lbs[lbs.length-1]:lbs[0];   // strong-side LB
+    const wFlat=weakBlitz?`${weakSide} Flat (NB/CB rotates — Will blitzing)`:`${weakSide} Flat (Will LB)`;
+    const sFlat=sBlitz?`${strongSide} Flat (NB/CB rotates — Sam blitzing)`:`${strongSide} Flat (SS)`;
+    if(willLB) assignments.push({id:willLB.id,t:willLB.type,role:'COV',zone:wFlat,alert:weakBlitz});
+    if(lbs[1]&&lbs[1]!==willLB&&lbs[1]!==samLB)
+      assignments.push({id:lbs[1].id,t:lbs[1].type,role:'COV',zone:'Hook/Curl (MLB)'});
+    if(ss) assignments.push({id:ss.id,t:'SS',role:'COV',zone:sFlat,alert:sBlitz});
+    if(dropDL[0]) assignments.push({id:dropDL[0].id,t:dropDL[0].type,role:'COV',zone:'Short Zone (Fire Zone drop)'});
   }
-  // Cover 4 / Quarters
+  // Cover 4 / Quarters — CBs and safeties each own a deep quarter
   else if(/COVER.?4|QUARTER/.test(coverage)){
-    if(cbs[0]) assignments.push({id:cbs[0].id,t:cbs[0].type,role:'COV',zone:'Deep Left ¼'});
-    if(ss)     assignments.push({id:ss.id,t:'SS',role:'COV',zone:'Deep Left-Mid ¼'});
-    if(fs)     assignments.push({id:fs.id,t:'FS',role:'COV',zone:'Deep Right-Mid ¼'});
-    if(cbs[1]) assignments.push({id:cbs[1].id,t:cbs[1].type,role:'COV',zone:'Deep Right ¼'});
-    lbs.forEach((lb,i)=>assignments.push({id:lb.id,t:lb.type,role:'COV',zone:i===0?'Weak Curl/Flat':'Strong Curl/Flat'}));
+    const sCB=str==='right'?cbs[cbs.length-1]:cbs[0];
+    const wCB=str==='right'?cbs[0]:cbs[cbs.length-1];
+    const sS=ss; // SS takes the strong deep quarter
+    if(wCB) assignments.push({id:wCB.id,t:wCB.type,role:'COV',zone:`Deep ${weakSide} ¼ (Weak CB)`});
+    if(fs)  assignments.push({id:fs.id,t:'FS',role:'COV',zone:`Deep ${weakSide}-Mid ¼ (FS)`});
+    if(sS)  assignments.push({id:sS.id,t:'SS',role:'COV',zone:`Deep ${strongSide}-Mid ¼ (SS)`});
+    if(sCB) assignments.push({id:sCB.id,t:sCB.type,role:'COV',zone:`Deep ${strongSide} ¼ (Strong CB)`});
+    const will=str==='right'?lbs[0]:lbs[lbs.length-1];
+    const sam=str==='right'?lbs[lbs.length-1]:lbs[0];
+    if(will) assignments.push({id:will.id,t:will.type,role:'COV',zone:`${weakSide} Curl/Flat (Will)`});
+    if(sam&&sam!==will) assignments.push({id:sam.id,t:sam.type,role:'COV',zone:`${strongSide} Curl/Flat (Sam)`});
     dropDL.forEach(p=>assignments.push({id:p.id,t:p.type,role:'COV',zone:'Short Zone'}));
   }
-  // Cover 2
+  // Cover 2 — safeties split deep halves, CBs have flats, LBs hook zones
   else if(/COVER.?2/.test(coverage)){
-    if(ss) assignments.push({id:ss.id,t:'SS',role:'COV',zone:'Deep Left Half'});
-    if(fs) assignments.push({id:fs.id,t:'FS',role:'COV',zone:'Deep Right Half'});
-    if(cbs[0]) assignments.push({id:cbs[0].id,t:cbs[0].type,role:'COV',zone:'Flat Left'});
-    if(cbs[1]) assignments.push({id:cbs[1].id,t:cbs[1].type,role:'COV',zone:'Flat Right'});
-    lbs.forEach((lb,i)=>assignments.push({id:lb.id,t:lb.type,role:'COV',zone:i===0?'Hook Left':'Hook Right'}));
+    if(ss) assignments.push({id:ss.id,t:'SS',role:'COV',zone:`${strongSide} Deep Half (SS)`});
+    if(fs) assignments.push({id:fs.id,t:'FS',role:'COV',zone:`${weakSide} Deep Half (FS)`});
+    const sCB=str==='right'?cbs[cbs.length-1]:cbs[0];
+    const wCB=str==='right'?cbs[0]:cbs[cbs.length-1];
+    if(sCB) assignments.push({id:sCB.id,t:sCB.type,role:'COV',zone:`${strongSide} Flat (Strong CB)`});
+    if(wCB) assignments.push({id:wCB.id,t:wCB.type,role:'COV',zone:`${weakSide} Flat (Weak CB)`});
+    lbs.forEach((lb,i)=>{
+      const side=i===0?(str==='right'?weakSide:strongSide):(str==='right'?strongSide:weakSide);
+      assignments.push({id:lb.id,t:lb.type,role:'COV',zone:`${side} Hook`});
+    });
+    dropDL.forEach(p=>assignments.push({id:p.id,t:p.type,role:'COV',zone:'Short Zone'}));
+  }
+  // Tampa 2 — MLB runs deep seam, CBs have flat/curl, safeties split deep
+  else if(/TAMPA/.test(coverage)){
+    const mlb=lbs.find(p=>p.type==='MLB')||lbs[Math.floor(lbs.length/2)];
+    if(mlb) assignments.push({id:mlb.id,t:'MLB',role:'HIGH',zone:'Deep Middle Seam (Tampa 2)'});
+    if(ss) assignments.push({id:ss.id,t:'SS',role:'COV',zone:`${strongSide} Deep Half`});
+    if(fs) assignments.push({id:fs.id,t:'FS',role:'COV',zone:`${weakSide} Deep Half`});
+    cbs.forEach((cb,i)=>assignments.push({id:cb.id,t:cb.type,role:'COV',zone:i===0?`${weakSide} Flat/Curl`:`${strongSide} Flat/Curl`}));
+    lbs.filter(lb=>lb!==mlb).forEach(lb=>assignments.push({id:lb.id,t:lb.type,role:'COV',zone:'Hook Zone'}));
     dropDL.forEach(p=>assignments.push({id:p.id,t:p.type,role:'COV',zone:'Short Zone'}));
   }
   // Cover 1 — single high
@@ -2831,6 +2941,26 @@ function drawField(ctx,w,h){
   ctx.fillStyle='rgba(34,197,94,0.25)';
   ctx.fillText('OFFENSE',8,h-10);
 
+  // STRONG side indicator
+  if(window._cvStrength){
+    const str=window._cvStrength;
+    const label=`STRONG ${str.toUpperCase()}`;
+    const arrowX=str==='right'?w-10:10;
+    const arrowDir=str==='right'?'→':'←';
+    ctx.save();
+    ctx.textAlign=str==='right'?'right':'left';
+    ctx.fillStyle='rgba(240,165,0,0.85)';
+    ctx.font='bold 11px -apple-system,sans-serif';
+    ctx.fillText(`${str==='right'?'':'◀ '}${label}${str==='right'?' ▶':''}`, arrowX, los-18);
+    // Draw a small arrow on the LOS pointing to the strong side
+    ctx.strokeStyle='rgba(240,165,0,0.6)'; ctx.lineWidth=2; ctx.setLineDash([4,3]);
+    ctx.beginPath();
+    ctx.moveTo(w*0.5,los-12);
+    ctx.lineTo(str==='right'?w*0.85:w*0.15, los-12);
+    ctx.stroke(); ctx.setLineDash([]);
+    ctx.restore();
+  }
+
   // Defensive coverage call overlay (shown after generate)
   if(window._cvDefCall){
     const cov=window._cvDefCall.coverage||'';
@@ -2873,12 +3003,22 @@ function drawCoverageZones(ctx,cw,ch,los,coverage){
   ctx.save();
   ctx.textAlign='center';
 
+  const str=window._cvStrength||'right';
+  const sDir=str==='right'?'right':'left';
+  const wDir=str==='right'?'left':'right';
+  const sLabel=`Strong ${str==='right'?'Right':'Left'}`;
+  const wLabel=`Weak ${str==='right'?'Left':'Right'}`;
+
   if(/COVER.?3|TRIPS.BRACKET/.test(cov)){
-    // Three deep thirds
-    const thirds=[
-      {x1:0,       x2:cw*0.33, label:'CB — Deep ⅓'},
-      {x1:cw*0.33, x2:cw*0.67, label:'FS — Deep ⅓'},
-      {x1:cw*0.67, x2:cw,      label:'CB — Deep ⅓'},
+    // Three deep thirds — strong CB takes the strong-side third
+    const thirds=str==='right'?[
+      {x1:0,       x2:cw*0.33, label:`Weak CB — ${wLabel} ⅓`},
+      {x1:cw*0.33, x2:cw*0.67, label:'FS — Middle ⅓'},
+      {x1:cw*0.67, x2:cw,      label:`Strong CB — ${sLabel} ⅓`},
+    ]:[
+      {x1:0,       x2:cw*0.33, label:`Strong CB — ${sLabel} ⅓`},
+      {x1:cw*0.33, x2:cw*0.67, label:'FS — Middle ⅓'},
+      {x1:cw*0.67, x2:cw,      label:`Weak CB — ${wLabel} ⅓`},
     ];
     thirds.forEach((z,i)=>{
       ctx.fillStyle='rgba(96,165,250,0.10)';
@@ -2901,17 +3041,23 @@ function drawCoverageZones(ctx,cw,ch,los,coverage){
     const strongBlitz=/STRONG|SAM/.test(blitz)&&/BLITZ|PRESSURE|FIRE/.test(blitz);
     const mlbBlitz=/MIKE|MLB|A.GAP|DOUBLE/.test(blitz)&&/BLITZ|PRESSURE|FIRE/.test(blitz);
 
-    // Default Cover 3 underneath assignments
-    let wFlat   = weakBlitz   ? 'NB/CB Rotates' : 'Will LB — FLAT';
-    let wHook   = (weakBlitz||mlbBlitz) ? 'MLB — Expand Hook' : 'Will LB — HOOK';
-    let sHook   = (strongBlitz||mlbBlitz) ? 'MLB — Expand Hook' : 'Sam LB — HOOK';
-    let sFlat   = strongBlitz ? 'NB/CB Rotates' : 'SS — FLAT';
+    // SS is ALWAYS on the strong side; Will LB covers the weak flat
+    let wFlat = weakBlitz   ? `${wLabel} Flat (NB/CB rotates)` : `${wLabel} Flat — Will LB`;
+    let wHook = (weakBlitz||mlbBlitz) ? 'MLB — Expand Hook' : 'Hook — Will LB';
+    let sHook = (strongBlitz||mlbBlitz) ? 'MLB — Expand Hook' : 'Hook — Sam LB';
+    let sFlat = strongBlitz ? `${sLabel} Flat (NB/CB rotates)` : `${sLabel} Flat — SS`;
 
-    const und=[
+    // Position zones based on strength: strong side is always where SS plays
+    const und=str==='right'?[
       {x1:0,       x2:cw*0.22, label:wFlat,  alert:weakBlitz},
       {x1:cw*0.22, x2:cw*0.48, label:wHook,  alert:weakBlitz||mlbBlitz},
       {x1:cw*0.48, x2:cw*0.78, label:sHook,  alert:strongBlitz||mlbBlitz},
       {x1:cw*0.78, x2:cw,      label:sFlat,  alert:strongBlitz},
+    ]:[
+      {x1:0,       x2:cw*0.22, label:sFlat,  alert:strongBlitz},
+      {x1:cw*0.22, x2:cw*0.48, label:sHook,  alert:strongBlitz||mlbBlitz},
+      {x1:cw*0.48, x2:cw*0.78, label:wHook,  alert:weakBlitz||mlbBlitz},
+      {x1:cw*0.78, x2:cw,      label:wFlat,  alert:weakBlitz},
     ];
     und.forEach(z=>{
       ctx.fillStyle=z.alert?'rgba(245,158,11,0.12)':'rgba(34,197,94,0.09)';
@@ -3260,6 +3406,7 @@ function closeCanvas(){
   document.getElementById('canvasSubTitle').textContent='Defensive call diagram';
   document.getElementById('cvAssignPanel').classList.remove('show');
   window._cvDefCall = null;
+  window._cvStrength = null;
   document.body.style.overflow='';
 }
 
