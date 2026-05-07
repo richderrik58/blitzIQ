@@ -2811,6 +2811,7 @@ function toggleCanvasTools(){
 }
 
 function resizeCanvas(){
+  if(!cvCtx) return;
   const canvas=document.getElementById('playCanvas');
   const dpr=window.devicePixelRatio||1;
   const hdrH=document.querySelector('.canvas-hdr')?.offsetHeight||52;
@@ -2818,24 +2819,35 @@ function resizeCanvas(){
   const tbH=document.querySelector('.canvas-toolbar')?.offsetHeight||42;
   const cw=Math.min(window.innerWidth,640);
   const ch=Math.max(200, window.innerHeight-hdrH-defH-tbH);
+
+  // Snapshot routes before resize — setting canvas.width clears it
+  let routeSnap=null;
+  if(cvRouteCanvas&&cvRouteCanvas.width>0){
+    routeSnap=document.createElement('canvas');
+    routeSnap.width=cvRouteCanvas.width; routeSnap.height=cvRouteCanvas.height;
+    routeSnap.getContext('2d').drawImage(cvRouteCanvas,0,0);
+  }
+
   canvas.width=cw*dpr; canvas.height=ch*dpr;
   canvas.style.width=cw+'px'; canvas.style.height=ch+'px';
+  cvCtx=canvas.getContext('2d');
+  cvCtx.scale(dpr,dpr);
+
   if(cvRouteCanvas){
     cvRouteCanvas.width=cw*dpr; cvRouteCanvas.height=ch*dpr;
-    cvRouteCanvas.getContext('2d').scale(dpr,dpr);
+    const rCtx=cvRouteCanvas.getContext('2d');
+    rCtx.scale(dpr,dpr);
+    if(routeSnap) rCtx.drawImage(routeSnap,0,0,cw,ch); // restore routes scaled to new size
   }
-  cvCtx.scale(dpr,dpr);
   redrawAll();
 }
 
 function showDefensiveCall(dc){
   if(!dc) return;
-  const el=document.getElementById('cvDefCall');
   document.getElementById('cvDefCov').textContent='⚡ '+dc.coverage;
   document.getElementById('cvDefBlitz').textContent=dc.blitz;
-  el.classList.add('show');
-  // Resize canvas to account for the new banner height
-  setTimeout(()=>{ if(cvCtx) resizeCanvas(); }, 50);
+  document.getElementById('cvDefCall').classList.add('show');
+  // No canvas resize here — showing the banner doesn't need to redraw the field
 }
 
 function setDrawColor(c,btn){
