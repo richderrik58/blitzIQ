@@ -1459,10 +1459,31 @@ const SKIP_WORDS = new Set([
   'BREAKDOWN','LEFT','RIGHT','SHORT','MEDIUM','LONG','AND','THE','FOR','WITH',
   'YARDS','GAIN','LOSS','FIRST','SECOND','THIRD','FOURTH','GOAL','DATE','SEASON'
 ]);
+
+// Play concept words — if a candidate formation name contains one of these it is a play, not a formation
+const PLAY_WORDS = new Set([
+  'ZONE','POWER','DRAW','SCREEN','OPTION','VERTS','VERTICALS','MESH','SMASH',
+  'CURL','FLAT','SLANT','POST','CORNER','SEAM','CROSS','CROSSING','SNEAK',
+  'SWEEP','COUNTER','TRAP','WEDGE','DIVE','TOSS','PITCH','REVERSE','BOOT',
+  'WAGGLE','NAKED','SPRINT','SCRAMBLE','ROLLOUT','MOTION','JAILBREAK',
+  'BUBBLE','TUNNEL','QUICK','HITCH','COMEBACK','FADE','GO ROUTE','FLY',
+  'INSIDE','OUTSIDE','STRETCH','LEAD','ISO','BLAST','BUCK'
+]);
+
+function isPlayName(s) {
+  const upper = s.trim().toUpperCase();
+  const words = upper.split(/\s+/);
+  // If any word is a known play concept AND the name has no formation keywords, it's a play
+  const hasPlayWord = words.some(w => PLAY_WORDS.has(w));
+  const hasFormWord = /GUN|PISTOL|SHOTGUN|TREY|TRIPS|EMPTY|SPREAD|WING|WILDCAT|I.FORM|SINGLEBACK|PRO|ACE|BUNCH|OFFSET|DIAMOND|HEAVY|JUMBO/.test(upper);
+  return hasPlayWord && !hasFormWord;
+}
+
 function isSkipWord(s) {
   const words = s.trim().toUpperCase().split(/\s+/);
-  // Skip if every word is in the skip list (pure header line)
-  return words.length <= 2 && words.every(w => SKIP_WORDS.has(w));
+  if(words.length <= 2 && words.every(w => SKIP_WORDS.has(w))) return true;
+  if(isPlayName(s)) return true; // reject play names being mistaken for formations
+  return false;
 }
 
 function parseHudl(text,filename) {
