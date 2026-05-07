@@ -249,7 +249,7 @@
     .cbtn-save{padding:7px 16px;background:var(--gold);border:none;border-radius:8px;color:var(--navy);font-size:12px;font-weight:800;cursor:pointer;font-family:inherit}
     .cbtn-save:active{background:var(--goldd)}
     .cbtn-close{padding:7px 12px;background:rgba(255,255,255,.07);border:1px solid rgba(255,255,255,.12);border-radius:8px;color:var(--grayl);font-size:12px;font-weight:700;cursor:pointer;font-family:inherit}
-    .canvas-toolbar{background:var(--navyc);border-bottom:1px solid rgba(255,255,255,.06);padding:8px 12px;display:flex;flex-direction:column;gap:7px;flex-shrink:0}
+    .canvas-toolbar{background:var(--navyc);border-top:1px solid rgba(255,255,255,.1);padding:8px 12px;display:flex;flex-direction:column;gap:7px;flex-shrink:0}
     /* Toolbar collapse */
     .toolbar-body{transition:max-height .25s ease,opacity .25s ease;overflow:hidden;max-height:400px;opacity:1}
     .toolbar-body.collapsed{max-height:0;opacity:0}
@@ -268,7 +268,8 @@
     .player-panel-row{display:flex;align-items:center;gap:5px;flex-wrap:wrap}
     .player-panel-lbl{font-size:9px;letter-spacing:1.5px;text-transform:uppercase;color:var(--gray);font-weight:700;width:32px;flex-shrink:0}
     .pbtn{width:38px;height:38px;border-radius:50%;border:2px solid rgba(255,255,255,.5);color:var(--white);font-size:9px;font-weight:800;cursor:pointer;font-family:inherit;display:flex;align-items:center;justify-content:center;transition:all .12s;flex-shrink:0;background:transparent;line-height:1}
-    .pbtn.off{background:rgba(255,255,255,.92);color:#0a1628;border-color:rgba(255,255,255,.9)}
+    .pbtn.off{background:rgba(34,197,94,.85);color:#ffffff;border-color:rgba(34,197,94,.9)}
+    .cv-del-player{position:absolute;z-index:950;background:var(--red);border:none;border-radius:8px;color:#fff;font-size:12px;font-weight:800;padding:6px 14px;cursor:pointer;pointer-events:all;font-family:inherit;box-shadow:0 2px 10px rgba(0,0,0,.5);transform:translateX(-50%);white-space:nowrap}
     .pbtn.center{border-radius:5px}
     .pbtn.selected{box-shadow:0 0 0 3px #f0a500;transform:scale(1.1)}
     .pbtn:active{transform:scale(.95)}
@@ -456,15 +457,18 @@
     <div class="cv-def-blitz" id="cvDefBlitz"></div>
   </div>
 
+  <div class="canvas-wrap">
+    <canvas id="playCanvas"></canvas>
+  </div>
   <div class="canvas-toolbar">
     <!-- Mode toggle + collapse button -->
     <div class="mode-row">
       <button class="mode-btn active" id="modePlaceBtn" onclick="setCanvasMode('place',this)">&#127952; Place Players</button>
       <button class="mode-btn" id="modeDrawBtn" onclick="setCanvasMode('draw',this)">&#9998; Draw Routes</button>
-      <button class="collapse-btn" id="toolCollapseBtn" onclick="toggleCanvasTools()" title="Show/hide tools">&#8964;</button>
+      <button class="collapse-btn" id="toolCollapseBtn" onclick="toggleCanvasTools()" title="Show/hide tools">&#8963;</button>
     </div>
     <!-- Collapsible body -->
-    <div class="toolbar-body" id="toolbarBody">
+    <div class="toolbar-body collapsed" id="toolbarBody">
     <!-- Place Players panel -->
     <div id="placePanel">
       <!-- Formation presets -->
@@ -507,7 +511,7 @@
         <button class="pbtn" onclick="selectSymbol('FS','def',this)">FS</button>
         <button class="pbtn" onclick="selectSymbol('NB','def',this)">NB</button>
       </div>
-      <div style="font-size:10px;color:var(--gray);padding:2px 0">Tap symbol → tap field to place &nbsp;·&nbsp; Drag to move &nbsp;·&nbsp; Double-tap to delete</div>
+      <div style="font-size:10px;color:var(--gray);padding:2px 0">Tap symbol → tap field to place &nbsp;·&nbsp; Tap placed player to select &nbsp;·&nbsp; Drag to move</div>
     </div>
     <!-- Draw Routes panel (hidden by default) -->
     <div id="drawPanel" style="display:none">
@@ -528,11 +532,10 @@
     </div>
     </div><!-- end toolbar-body -->
   </div><!-- end canvas-toolbar -->
-  <div class="canvas-wrap">
-    <canvas id="playCanvas"></canvas>
-  </div>
   <!-- Defensive assignment summary panel -->
   <div class="cv-assign" id="cvAssignPanel"></div>
+  <!-- Floating delete button for selected player -->
+  <button class="cv-del-player" id="cvDeletePlayerBtn" style="display:none" onclick="deleteSelectedPlayer()">✕ Delete</button>
 </div>
 
 <!-- MODAL: ADD OPPONENT -->
@@ -2827,15 +2830,15 @@ function drawRushArrows(ctx, rushers){
   if(!rushers||!rushers.size) return;
   cvPlayers.filter(p=>p.team==='def'&&rushers.has(p.id)).forEach(p=>{
     ctx.save();
-    const ay=p.y-CV_R-8;
+    const ay=p.y-CV_R-6;
     ctx.strokeStyle='#ef4444'; ctx.lineWidth=2.5; ctx.lineCap='round';
-    ctx.beginPath(); ctx.moveTo(p.x,p.y-CV_R-2); ctx.lineTo(p.x,ay-14); ctx.stroke();
-    // Arrowhead pointing up (toward LOS = toward offense)
+    ctx.beginPath(); ctx.moveTo(p.x,p.y-CV_R-2); ctx.lineTo(p.x,ay-12); ctx.stroke();
+    // Arrowhead pointing up
     ctx.fillStyle='#ef4444';
-    ctx.beginPath(); ctx.moveTo(p.x,ay-16); ctx.lineTo(p.x-6,ay-6); ctx.lineTo(p.x+6,ay-6); ctx.closePath(); ctx.fill();
-    // RUSH label
+    ctx.beginPath(); ctx.moveTo(p.x,ay-14); ctx.lineTo(p.x-5,ay-5); ctx.lineTo(p.x+5,ay-5); ctx.closePath(); ctx.fill();
+    // RUSH label above arrow
     ctx.font='bold 8px -apple-system,sans-serif'; ctx.textAlign='center'; ctx.fillStyle='#ef4444';
-    ctx.fillText('RUSH',p.x,p.y-CV_R-24);
+    ctx.fillText('RUSH',p.x,p.y-CV_R-28);
     ctx.restore();
   });
 }
@@ -2888,12 +2891,12 @@ let cvCtx=null, cvDrawing=false, cvColor='#ef4444', cvWidth=3, cvTool='pen', cvL
 let cvMode='place';                   // 'place' | 'draw'
 let cvPlayers=[];                     // [{id,type,team,x,y}]
 let cvSelectedSymbol=null;            // {type,team} currently selected from toolbar
+let cvSelectedPlayer=null;            // player currently selected (tap-to-select)
 let cvDragging=null;                  // player being dragged
 let cvDragOffX=0, cvDragOffY=0;
 let cvRouteCanvas=null;               // offscreen canvas storing ONLY freehand routes
-let cvLastTap=0, cvLastTapX=0, cvLastTapY=0; // double-tap detection
 let cvPid=0;                          // player ID counter
-const CV_R=16;                        // player symbol radius (logical px)
+const CV_R=22;                        // player symbol radius — 44px touch target
 
 function drawField(ctx,w,h){
   // Field background
@@ -3149,47 +3152,46 @@ function drawGapLabels(ctx,cw,los){
 function drawPlayerSymbol(ctx,p){
   const r=CV_R;
   ctx.save();
-  ctx.font=`bold ${p.type.length>2?9:11}px -apple-system,Helvetica,sans-serif`;
+  ctx.font=`bold ${p.type.length>2?11:13}px -apple-system,Helvetica,sans-serif`;
   ctx.textAlign='center'; ctx.textBaseline='middle';
+
+  // Selection / drag ring
+  if(cvSelectedPlayer===p||cvDragging===p){
+    ctx.beginPath();
+    ctx.arc(p.x,p.y,r+6,0,Math.PI*2);
+    ctx.strokeStyle='#f0a500';
+    ctx.lineWidth=2.5;
+    ctx.setLineDash(cvDragging===p?[5,3]:[]);
+    ctx.stroke();
+    ctx.setLineDash([]);
+  }
 
   if(p.team==='off'){
     ctx.beginPath();
     if(p.type==='C'){
-      // Center = filled square
       ctx.rect(p.x-r,p.y-r,r*2,r*2);
     } else {
       ctx.arc(p.x,p.y,r,0,Math.PI*2);
     }
-    ctx.fillStyle='rgba(255,255,255,0.93)';
+    ctx.fillStyle='rgba(34,197,94,0.90)';   // green fill
     ctx.fill();
-    ctx.strokeStyle='rgba(0,0,0,0.55)';
+    ctx.strokeStyle='rgba(0,0,0,0.4)';
     ctx.lineWidth=1.5;
     ctx.stroke();
-    ctx.fillStyle='#0a1628';
+    ctx.fillStyle='#ffffff';
     ctx.fillText(p.type,p.x,p.y+0.5);
   } else {
-    // Defensive = open circle — high-contrast for visibility on dark field
+    // Defensive = open circle — high-contrast
     ctx.beginPath();
     ctx.arc(p.x,p.y,r,0,Math.PI*2);
-    ctx.fillStyle='rgba(0,10,28,0.92)';  // nearly opaque dark navy
+    ctx.fillStyle='rgba(0,10,28,0.92)';
     ctx.fill();
-    ctx.strokeStyle='#ffffff';            // solid white border
+    ctx.strokeStyle='#ffffff';
     ctx.lineWidth=2.5;
     ctx.stroke();
     ctx.fillStyle='#ffffff';
-    ctx.font=`bold ${p.type.length>2?9:11}px -apple-system,Helvetica,sans-serif`;
+    ctx.font=`bold ${p.type.length>2?11:13}px -apple-system,Helvetica,sans-serif`;
     ctx.fillText(p.type,p.x,p.y+0.5);
-  }
-
-  // Gold ring when being dragged
-  if(cvDragging===p){
-    ctx.beginPath();
-    ctx.arc(p.x,p.y,r+5,0,Math.PI*2);
-    ctx.strokeStyle='#f0a500';
-    ctx.lineWidth=2;
-    ctx.setLineDash([5,3]);
-    ctx.stroke();
-    ctx.setLineDash([]);
   }
   ctx.restore();
 }
@@ -3210,6 +3212,7 @@ function setCanvasMode(mode,btn){
   document.getElementById('placePanel').style.display=mode==='place'?'':'none';
   document.getElementById('drawPanel').style.display=mode==='draw'?'':'none';
   document.getElementById('playCanvas').style.cursor=mode==='draw'?(cvTool==='erase'?'cell':'crosshair'):'default';
+  if(mode==='draw'){ cvSelectedPlayer=null; hidePlayerDeleteBtn(); redrawAll(); }
 }
 
 function selectSymbol(type,team,btn){
@@ -3405,6 +3408,7 @@ function closeCanvas(){
   document.getElementById('cvDefCall').classList.remove('show');
   document.getElementById('canvasSubTitle').textContent='Defensive call diagram';
   document.getElementById('cvAssignPanel').classList.remove('show');
+  cvSelectedPlayer=null; hidePlayerDeleteBtn();
   window._cvDefCall = null;
   window._cvStrength = null;
   document.body.style.overflow='';
@@ -3440,6 +3444,7 @@ function clearCanvas(){
   if(!cvCtx) return;
   cvPlayers=[];
   cvSelectedSymbol=null;
+  cvSelectedPlayer=null; hidePlayerDeleteBtn();
   document.querySelectorAll('.pbtn').forEach(b=>b.classList.remove('selected'));
   if(cvRouteCanvas){
     const rCtx=cvRouteCanvas.getContext('2d');
@@ -3545,6 +3550,32 @@ function cvGetPos(e){
   };
 }
 
+// ── TAP-TO-SELECT helpers ──────────────────────────────────────────────────────
+function showPlayerDeleteBtn(player){
+  const btn=document.getElementById('cvDeletePlayerBtn');
+  btn.style.display='block';
+  _posDeleteBtn(player);
+}
+function _posDeleteBtn(player){
+  const canvas=document.getElementById('playCanvas');
+  const rect=canvas.getBoundingClientRect();
+  const btn=document.getElementById('cvDeletePlayerBtn');
+  const bx=rect.left+player.x;
+  const by=rect.top+player.y-CV_R-38;
+  btn.style.left=Math.max(rect.left+40,Math.min(rect.right-40,bx))+'px';
+  btn.style.top=Math.max(rect.top+4,by)+'px';
+}
+function hidePlayerDeleteBtn(){
+  document.getElementById('cvDeletePlayerBtn').style.display='none';
+}
+function deleteSelectedPlayer(){
+  if(!cvSelectedPlayer) return;
+  cvPlayers=cvPlayers.filter(p=>p!==cvSelectedPlayer);
+  cvSelectedPlayer=null;
+  hidePlayerDeleteBtn();
+  redrawAll();
+}
+
 function cvStart(e){
   e.preventDefault();
   const p=cvGetPos(e);
@@ -3552,19 +3583,19 @@ function cvStart(e){
   if(cvMode==='place'){
     const hit=playerAt(p.x,p.y);
     if(hit){
-      // Double-tap to delete
-      const now=Date.now();
-      if(now-cvLastTap<380&&Math.hypot(p.x-cvLastTapX,p.y-cvLastTapY)<22){
-        cvPlayers=cvPlayers.filter(pl=>pl!==hit);
-        redrawAll(); cvLastTap=0; return;
-      }
-      cvLastTap=now; cvLastTapX=p.x; cvLastTapY=p.y;
-      // Start drag
+      // Select player and start drag immediately
+      cvSelectedPlayer=hit;
       cvDragging=hit;
       cvDragOffX=p.x-hit.x; cvDragOffY=p.y-hit.y;
-    } else if(cvSelectedSymbol){
-      // Place new player
-      cvPlayers.push({id:++cvPid,...cvSelectedSymbol,x:p.x,y:p.y});
+      showPlayerDeleteBtn(hit);
+      redrawAll();
+    } else {
+      // Tap on empty field — deselect and optionally place
+      cvSelectedPlayer=null;
+      hidePlayerDeleteBtn();
+      if(cvSelectedSymbol){
+        cvPlayers.push({id:++cvPid,...cvSelectedSymbol,x:p.x,y:p.y});
+      }
       redrawAll();
     }
     return;
@@ -3594,6 +3625,7 @@ function cvMove(e){
   if(cvMode==='place'&&cvDragging){
     cvDragging.x=p.x-cvDragOffX;
     cvDragging.y=p.y-cvDragOffY;
+    if(cvSelectedPlayer===cvDragging) _posDeleteBtn(cvDragging);
     redrawAll(); return;
   }
 
