@@ -427,6 +427,7 @@
       <div class="canvas-hdr-sub" id="canvasSubTitle">Defensive call diagram</div>
     </div>
     <div class="canvas-btns">
+      <button class="cbtn-clear" onclick="flipCanvas()" title="Mirror play left/right">&#8596; Flip</button>
       <button class="cbtn-clear" onclick="clearCanvas()">Clear</button>
       <button class="cbtn-save" onclick="saveCanvas()">Save</button>
       <button class="cbtn-close" onclick="closeCanvas()">&#10005;</button>
@@ -3041,6 +3042,32 @@ function closeCanvas(){
   document.getElementById('canvasSubTitle').textContent='Defensive call diagram';
   window._cvDefCall = null;
   document.body.style.overflow='';
+}
+
+function flipCanvas(){
+  if(!cvCtx) return;
+  const canvas=document.getElementById('playCanvas');
+  const dpr=window.devicePixelRatio||1;
+  const cw=canvas.width/dpr;
+
+  // Mirror all player X positions
+  cvPlayers.forEach(p=>{ p.x=Math.round(cw-p.x); });
+
+  // Mirror route canvas horizontally
+  if(cvRouteCanvas){
+    const snap=document.createElement('canvas');
+    snap.width=cvRouteCanvas.width; snap.height=cvRouteCanvas.height;
+    snap.getContext('2d').drawImage(cvRouteCanvas,0,0);
+    const rCtx=cvRouteCanvas.getContext('2d');
+    rCtx.clearRect(0,0,cvRouteCanvas.width,cvRouteCanvas.height);
+    rCtx.save();
+    rCtx.translate(cvRouteCanvas.width,0);
+    rCtx.scale(-1,1);
+    rCtx.drawImage(snap,0,0);
+    rCtx.restore();
+  }
+
+  redrawAll();
 }
 
 function clearCanvas(){
