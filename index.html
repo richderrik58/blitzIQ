@@ -3015,20 +3015,42 @@ function buildWarnings(rushCount, coverCount, coverage){
   return warnings;
 }
 
-// Draw red rush arrows on blitzing players
+// Draw rush arrows pointing DOWN toward the offense (defense is above LOS)
 function drawRushArrows(ctx, rushers){
   if(!rushers||!rushers.size) return;
+  const canvas=document.getElementById('playCanvas');
+  const cw=canvas.width/(window.devicePixelRatio||1);
+
   cvPlayers.filter(p=>p.team==='def'&&rushers.has(p.id)).forEach(p=>{
     ctx.save();
-    const ay=p.y-CV_R-6;
-    ctx.strokeStyle='#ef4444'; ctx.lineWidth=2.5; ctx.lineCap='round';
-    ctx.beginPath(); ctx.moveTo(p.x,p.y-CV_R-2); ctx.lineTo(p.x,ay-12); ctx.stroke();
-    // Arrowhead pointing up
+    // Edge rushers (DE, OLB) angle diagonally toward the center gap
+    // Inside rushers (DT, NT, LB, MLB) go straight down through the gap
+    const isEdge=['DE','OLB'].includes(p.type);
+    const dx=isEdge?(p.x>cw/2?-14:14):0; // angle toward interior
+    const arrowLen=24;
+    const sx=p.x,          sy=p.y+CV_R+2;   // start at bottom of circle
+    const ex=p.x+dx,       ey=sy+arrowLen;  // end pointing down/diagonal
+
+    ctx.strokeStyle='#ef4444'; ctx.fillStyle='#ef4444';
+    ctx.lineWidth=2.5; ctx.lineCap='round';
+
+    // Shaft
+    ctx.beginPath(); ctx.moveTo(sx,sy); ctx.lineTo(ex,ey); ctx.stroke();
+
+    // Arrowhead at tip (pointing in travel direction)
+    const angle=Math.atan2(ey-sy,ex-sx);
+    const hl=9;
+    ctx.beginPath();
+    ctx.moveTo(ex,ey);
+    ctx.lineTo(ex-hl*Math.cos(angle-0.45),ey-hl*Math.sin(angle-0.45));
+    ctx.lineTo(ex-hl*Math.cos(angle+0.45),ey-hl*Math.sin(angle+0.45));
+    ctx.closePath(); ctx.fill();
+
+    // RUSH label above the player circle (stays in the defensive backfield)
+    ctx.font='bold 7px -apple-system,sans-serif';
+    ctx.textAlign='center'; ctx.textBaseline='bottom';
     ctx.fillStyle='#ef4444';
-    ctx.beginPath(); ctx.moveTo(p.x,ay-14); ctx.lineTo(p.x-5,ay-5); ctx.lineTo(p.x+5,ay-5); ctx.closePath(); ctx.fill();
-    // RUSH label above arrow
-    ctx.font='bold 8px -apple-system,sans-serif'; ctx.textAlign='center'; ctx.fillStyle='#ef4444';
-    ctx.fillText('RUSH',p.x,p.y-CV_R-28);
+    ctx.fillText('RUSH',p.x,p.y-CV_R-3);
     ctx.restore();
   });
 }
@@ -3423,7 +3445,7 @@ function drawGapLabels(ctx,cw,los){
   ctx.textAlign='center'; ctx.textBaseline='middle';
   ctx.font='bold 9px -apple-system,sans-serif';
 
-  // A/B/C gap letters on the line of scrimmage
+  // A/B/C/D gap letters just below the LOS line — clear of defensive players above
   const cx=cw/2;
   [
     {x:cx,          label:'A'}, {x:cx-cw*0.09,  label:'A'},
@@ -3431,8 +3453,8 @@ function drawGapLabels(ctx,cw,los){
     {x:cx+cw*0.225, label:'C'}, {x:cx-cw*0.225, label:'C'},
     {x:cx+cw*0.31,  label:'D'}, {x:cx-cw*0.31,  label:'D'},
   ].forEach(g=>{
-    ctx.fillStyle='rgba(240,165,0,0.45)';
-    ctx.fillText(g.label, g.x, los-4);
+    ctx.fillStyle='rgba(240,165,0,0.5)';
+    ctx.fillText(g.label, g.x, los+11); // below LOS, in offensive zone
   });
 
   // TE DETECTED badge (top-right corner)
