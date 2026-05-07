@@ -312,6 +312,7 @@
     .ca-warn-c0{background:rgba(239,68,68,.2);color:var(--red);border:1px solid rgba(239,68,68,.5);font-size:12px}
     .ca-warn-info{background:rgba(240,165,0,.1);color:var(--gold);border:1px solid rgba(240,165,0,.3)}
     .ca-conflict{background:rgba(239,68,68,.18);color:var(--red);border:1px solid var(--red);border-radius:8px;padding:6px 10px;font-size:11px;font-weight:700;margin-top:4px}
+    .ca-warn-gap{background:rgba(239,68,68,.12);color:var(--red);border:1px solid rgba(239,68,68,.4)}
     .draw-play-btn{width:100%;padding:14px;background:rgba(240,165,0,.08);border:1.5px dashed rgba(240,165,0,.4);border-radius:12px;color:var(--gold);font-size:15px;font-weight:700;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:8px;margin-bottom:14px;font-family:inherit}
     .draw-play-btn:active{background:rgba(240,165,0,.18)}
     .play-thumb-wrap{background:var(--navy2);border:1px solid rgba(255,255,255,.08);border-radius:12px;overflow:hidden;margin-bottom:14px;cursor:pointer;position:relative}
@@ -2537,6 +2538,7 @@ function applyGeneratedPlay(playData){
         id:++cvPid, type:pd.type, team:pd.team,
         x:Math.round(cw*pd.xf), y:Math.round(los+pd.yd)
       }));
+      window._cvPresetType=defKey; // track for gap assignment labels
     }
 
     // Detect formation strength and adjust SS/SAM to correct side
@@ -2843,6 +2845,106 @@ function drawRushArrows(ctx, rushers){
   });
 }
 
+// ── TE DETECTION & GAP ASSIGNMENTS ───────────────────────────────────────────
+function detectTE(){
+  const n=(window._cvFormName||'').toUpperCase();
+  // Formation names indicating a TE on the strong side
+  return /\bTE\b|\bWING\b|\bKING\b|\bPRO\b|\bI.?FORM\b|\bTIGHT/.test(n);
+}
+
+function computeGapAssignments(){
+  const preset=window._cvPresetType;
+  const gap=new Map();
+  if(!preset||!['4-3','3-4','3-3-5'].includes(preset)) return gap;
+
+  const str=window._cvStrength||'right';
+  const te=detectTE();
+  // TE adjustments only apply to 3-4 base
+  window._cvTeDetected=(te&&preset==='3-4');
+
+  const def=cvPlayers.filter(p=>p.team==='def');
+  const DEs=def.filter(p=>p.type==='DE').sort((a,b)=>a.x-b.x);
+  const DTs=def.filter(p=>p.type==='DT').sort((a,b)=>a.x-b.x);
+  const NTs=def.filter(p=>p.type==='NT');
+  const LBs=def.filter(p=>['LB','MLB','OLB'].includes(p.type)).sort((a,b)=>a.x-b.x);
+
+  const sDE=str==='right'?DEs[DEs.length-1]:DEs[0];
+  const wDE=str==='right'?DEs[0]:DEs[DEs.length-1];
+
+  if(preset==='4-3'){
+    // 4-3: sDE=5-tech C-gap contain, wDE=5-tech C-gap, sDT=3-tech B-gap, wDT=1-tech A-gap
+    // MLB=A-gap, sLB(Sam)=B-gap force, wLB(Will)=B-gap/flat
+    if(sDE) gap.set(sDE.id,'C-cnt');
+    if(wDE&&wDE!==sDE) gap.set(wDE.id,'C-cnt');
+    const sDT=DTs.length>=2?(str==='right'?DTs[DTs.length-1]:DTs[0]):null;
+    const wDT=DTs.length>=2?(str==='right'?DTs[0]:DTs[DTs.length-1]):DTs[0];
+    if(sDT) gap.set(sDT.id,'B');
+    if(wDT&&wDT!==sDT) gap.set(wDT.id,'A');
+    const mlb=LBs.find(p=>p.type==='MLB')||LBs[Math.floor(LBs.length/2)];
+    if(mlb) gap.set(mlb.id,'A');
+    const rest=LBs.filter(p=>p!==mlb);
+    const sLB=rest.length?(str==='right'?rest[rest.length-1]:rest[0]):null;
+    const wLB=rest.length?(str==='right'?rest[0]:rest[rest.length-1]):null;
+    if(sLB) gap.set(sLB.id,'B-frc');
+    if(wLB&&wLB!==sLB) gap.set(wLB.id,'B-flt');
+
+  } else if(preset==='3-4'){
+    // NT=strong-A-gap; sDE=B(no TE) or C(TE); wDE=B-weak
+    // sOLB=C(no TE) or D(TE); wOLB=C-edge
+    // sILB=B-flow (hit-and-run, flows to ball); wILB=A-weak
+    NTs.forEach(p=>gap.set(p.id,'A'));
+    if(sDE) gap.set(sDE.id,window._cvTeDetected?'C':'B');
+    if(wDE&&wDE!==sDE) gap.set(wDE.id,'B');
+    if(LBs.length>=4){
+      const sOLB=str==='right'?LBs[LBs.length-1]:LBs[0];
+      const wOLB=str==='right'?LBs[0]:LBs[LBs.length-1];
+      const mid=LBs.slice(1,LBs.length-1);
+      const sILB=mid.length?(str==='right'?mid[mid.length-1]:mid[0]):null;
+      const wILB=mid.length?(str==='right'?mid[0]:mid[mid.length-1]):null;
+      if(sOLB) gap.set(sOLB.id,window._cvTeDetected?'D-edge':'C-edge');
+      if(wOLB&&wOLB!==sOLB) gap.set(wOLB.id,'C-edge');
+      if(sILB) gap.set(sILB.id,'B-flow');
+      if(wILB&&wILB!==sILB) gap.set(wILB.id,'A');
+    } else if(LBs.length===3){
+      // Partial lineup — best-effort
+      const sOLB=str==='right'?LBs[LBs.length-1]:LBs[0];
+      const wOLB=str==='right'?LBs[0]:LBs[LBs.length-1];
+      const mid=LBs[1];
+      if(sOLB) gap.set(sOLB.id,window._cvTeDetected?'D-edge':'C-edge');
+      if(wOLB&&wOLB!==sOLB) gap.set(wOLB.id,'C-edge');
+      if(mid&&mid!==sOLB&&mid!==wOLB) gap.set(mid.id,'A');
+    }
+
+  } else if(preset==='3-3-5'){
+    // DEs crash inside (4i) → B gap; NT=both A gaps; MLB=A-flow
+    // Strong OLB=C-edge contain; Weak OLB=C-edge contain
+    NTs.forEach(p=>gap.set(p.id,'A/A'));
+    if(sDE) gap.set(sDE.id,'B-4i');
+    if(wDE&&wDE!==sDE) gap.set(wDE.id,'B-4i');
+    const mlb=LBs.find(p=>p.type==='MLB')||LBs[Math.floor(LBs.length/2)];
+    if(mlb) gap.set(mlb.id,'A-flow');
+    const rest=LBs.filter(p=>p!==mlb);
+    const sOLB=rest.length?(str==='right'?rest[rest.length-1]:rest[0]):null;
+    const wOLB=rest.length?(str==='right'?rest[0]:rest[rest.length-1]):null;
+    if(sOLB) gap.set(sOLB.id,'C-edge');
+    if(wOLB&&wOLB!==sOLB) gap.set(wOLB.id,'C-edge');
+  }
+
+  return gap;
+}
+
+function getGapWarnings(gapMap){
+  if(!window._cvPresetType||!['4-3','3-4','3-3-5'].includes(window._cvPresetType)) return [];
+  if(!gapMap||!gapMap.size) return [];
+  const labels=[...gapMap.values()];
+  const w=[];
+  if(!labels.some(l=>/^A/.test(l))) w.push('GAP A UNCOVERED');
+  if(!labels.some(l=>/^B/.test(l))) w.push('GAP B UNCOVERED');
+  if(!labels.some(l=>/^C/.test(l))) w.push('GAP C UNCOVERED');
+  if(window._cvTeDetected&&!labels.some(l=>/^D/.test(l))) w.push('D GAP (TE EDGE) UNCOVERED');
+  return w;
+}
+
 // Update the DOM assignment panel
 function updateAssignPanel(){
   const dc=window._cvDefCall;
@@ -2874,11 +2976,13 @@ function updateAssignPanel(){
   // Conflict warnings
   const confHTML=conflicts.map(c=>`<div class="ca-conflict">🚫 ${esc(c)}</div>`).join('');
   const warnHTML=warnings.map(w=>`<div class="ca-warn-box ${w.cls}">${w.msg}</div>`).join('');
+  const gapWarns=getGapWarnings(window._cvGapMap||new Map());
+  const gapWarnHTML=gapWarns.map(w=>`<div class="ca-warn-box ca-warn-gap">⛔ ${esc(w)}</div>`).join('');
 
   panel.innerHTML=`
     <div class="ca-row"><span class="ca-hdr rush">RUSH (${rushers.size})</span>${rushHTML}</div>
     <div class="ca-row"><span class="ca-hdr cov">COVERAGE (${coverCount})</span>${covHTML||'<span style="font-size:10px;color:var(--gray)">—</span>'}</div>
-    ${confHTML}${warnHTML}`;
+    ${confHTML}${warnHTML}${gapWarnHTML}`;
   panel.classList.add('show');
 }
 
@@ -2986,13 +3090,14 @@ function redrawAll(){
   const dpr=window.devicePixelRatio||1;
   const cw=canvas.width/dpr, ch=canvas.height/dpr;
   const los=ch*0.58;
+  window._cvGapMap=computeGapAssignments(); // compute before drawing players
   cvCtx.clearRect(0,0,cw,ch);
   drawField(cvCtx,cw,ch);
   if(window._cvDefCall) drawCoverageZones(cvCtx,cw,ch,los,window._cvDefCall.coverage);
   if(cvRouteCanvas) cvCtx.drawImage(cvRouteCanvas,0,0,cw,ch);
   cvPlayers.forEach(p=>drawPlayerSymbol(cvCtx,p));
+  drawGapLabels(cvCtx,cw,los); // always — shows gap labels + TE badge + warnings
   if(window._cvDefCall){
-    drawGapLabels(cvCtx,cw,los);
     drawRushArrows(cvCtx, identifyRushers(window._cvDefCall.blitz||''));
   }
 }
@@ -3132,20 +3237,56 @@ function drawCoverageZones(ctx,cw,ch,los,coverage){
 }
 
 function drawGapLabels(ctx,cw,los){
-  // A/B/C gap labels on the LOS — always drawn with a generated play
-  const cx=cw/2;
-  const gaps=[
-    {x:cx,    label:'A'}, {x:cx-cw*0.09, label:'A'},
-    {x:cx+cw*0.145, label:'B'}, {x:cx-cw*0.145, label:'B'},
-    {x:cx+cw*0.225, label:'C'}, {x:cx-cw*0.225, label:'C'},
-  ];
   ctx.save();
   ctx.textAlign='center'; ctx.textBaseline='middle';
   ctx.font='bold 9px -apple-system,sans-serif';
-  gaps.forEach(g=>{
-    ctx.fillStyle='rgba(240,165,0,0.55)';
+
+  // A/B/C gap letters on the line of scrimmage
+  const cx=cw/2;
+  [
+    {x:cx,          label:'A'}, {x:cx-cw*0.09,  label:'A'},
+    {x:cx+cw*0.145, label:'B'}, {x:cx-cw*0.145, label:'B'},
+    {x:cx+cw*0.225, label:'C'}, {x:cx-cw*0.225, label:'C'},
+    {x:cx+cw*0.31,  label:'D'}, {x:cx-cw*0.31,  label:'D'},
+  ].forEach(g=>{
+    ctx.fillStyle='rgba(240,165,0,0.45)';
     ctx.fillText(g.label, g.x, los-4);
   });
+
+  // TE DETECTED badge (top-right corner)
+  if(window._cvTeDetected){
+    ctx.textAlign='right'; ctx.textBaseline='top';
+    ctx.font='bold 9px -apple-system,sans-serif';
+    // pill background
+    const txt='TE DETECTED — gaps adjusted';
+    const tw=ctx.measureText(txt).width;
+    ctx.fillStyle='rgba(240,165,0,0.18)';
+    ctx.beginPath();
+    if(ctx.roundRect) ctx.roundRect(cw-tw-20,4,tw+14,16,4);
+    else ctx.rect(cw-tw-20,4,tw+14,16);
+    ctx.fill();
+    ctx.strokeStyle='rgba(240,165,0,0.55)';
+    ctx.lineWidth=1;
+    ctx.stroke();
+    ctx.fillStyle='rgba(240,165,0,0.95)';
+    ctx.fillText(txt, cw-8, 6);
+  }
+
+  // GAP WARNINGs (top-left corner, stacked)
+  const gapWarns=getGapWarnings(window._cvGapMap||new Map());
+  if(gapWarns.length){
+    ctx.textAlign='left'; ctx.textBaseline='top';
+    ctx.font='bold 9px -apple-system,sans-serif';
+    gapWarns.forEach((w,i)=>{
+      const txt=`⚠ ${w}`;
+      const tw=ctx.measureText(txt).width;
+      ctx.fillStyle='rgba(239,68,68,0.2)';
+      ctx.fillRect(4, 4+i*14, tw+10, 13);
+      ctx.fillStyle='#ef4444';
+      ctx.fillText(txt, 8, 5+i*14);
+    });
+  }
+
   ctx.restore();
 }
 
@@ -3193,6 +3334,18 @@ function drawPlayerSymbol(ctx,p){
     ctx.font=`bold ${p.type.length>2?11:13}px -apple-system,Helvetica,sans-serif`;
     ctx.fillText(p.type,p.x,p.y+0.5);
   }
+
+  // Gap assignment label below defensive players
+  if(p.team==='def'){
+    const gLbl=window._cvGapMap?.get(p.id);
+    if(gLbl){
+      ctx.font='bold 8px -apple-system,sans-serif';
+      ctx.textBaseline='top';
+      ctx.fillStyle='rgba(240,165,0,0.92)';
+      ctx.fillText(gLbl, p.x, p.y+r+3);
+    }
+  }
+
   ctx.restore();
 }
 
@@ -3348,6 +3501,7 @@ function placePreset(name){
     cvPlayers.push({id:++cvPid, type:pd.type, team:pd.team,
       x:Math.round(cw*pd.xf), y:Math.round(los+pd.yd)});
   });
+  if(team==='def') window._cvPresetType=name;
   redrawAll();
 }
 
@@ -3396,6 +3550,8 @@ function openCanvas(onReady){
 
     if(st.sit) document.getElementById('canvasSubTitle').textContent=
       `${st.form?.name||''} — ${st.sit.distLabel}`;
+    window._cvFormName=st.form?.name||'';
+    window._cvPresetType=st.sit?.dc?.cvPresetType||null;
 
     // Default to Place Players mode
     setCanvasMode('place',document.getElementById('modePlaceBtn'));
@@ -3409,8 +3565,9 @@ function closeCanvas(){
   document.getElementById('canvasSubTitle').textContent='Defensive call diagram';
   document.getElementById('cvAssignPanel').classList.remove('show');
   cvSelectedPlayer=null; hidePlayerDeleteBtn();
-  window._cvDefCall = null;
-  window._cvStrength = null;
+  window._cvDefCall=null; window._cvStrength=null;
+  window._cvFormName=null; window._cvPresetType=null;
+  window._cvTeDetected=false; window._cvGapMap=null;
   document.body.style.overflow='';
 }
 
@@ -3457,9 +3614,10 @@ function saveCanvas(){
   if(!cvCtx||!st.sit) return;
   redrawAll();
   const canvas=document.getElementById('playCanvas');
-  st.sit.dc.playCanvas=canvas.toDataURL('image/png');  // composite thumbnail
+  st.sit.dc.playCanvas=canvas.toDataURL('image/png');
   st.sit.dc.cvRoutes=cvRouteCanvas?cvRouteCanvas.toDataURL('image/png'):null;
   st.sit.dc.cvPlayers=JSON.parse(JSON.stringify(cvPlayers));
+  st.sit.dc.cvPresetType=window._cvPresetType||null;
   saveDB();
   closeCanvas();
   renderDefCall();
