@@ -2614,6 +2614,20 @@ function drawField(ctx,w,h){
   ctx.fillText('DEFENSE',8,20);
   ctx.fillStyle='rgba(34,197,94,0.25)';
   ctx.fillText('OFFENSE',8,h-10);
+
+  // Defensive coverage call overlay (shown after generate)
+  if(window._cvDefCall){
+    const cov=window._cvDefCall.coverage||'';
+    ctx.save();
+    ctx.textAlign='right';
+    ctx.fillStyle='rgba(240,165,0,0.7)';
+    ctx.font='bold 13px -apple-system,sans-serif';
+    ctx.fillText('⚡ '+cov, w-8, 18);
+    ctx.fillStyle='rgba(255,255,255,0.45)';
+    ctx.font='11px -apple-system,sans-serif';
+    ctx.fillText(window._cvDefCall.blitz||'', w-8, 34);
+    ctx.restore();
+  }
 }
 
 // ── CANVAS FIELD & COMPOSITE ──────────────────────────────────────────────────
@@ -2885,6 +2899,8 @@ function openCanvas(onReady){
 function closeCanvas(){
   document.getElementById('canvasOv').classList.remove('open');
   document.getElementById('cvDefCall').classList.remove('show');
+  document.getElementById('canvasSubTitle').textContent='Defensive call diagram';
+  window._cvDefCall = null;
   document.body.style.overflow='';
 }
 
@@ -2957,10 +2973,15 @@ function resizeCanvas(){
 
 function showDefensiveCall(dc){
   if(!dc) return;
+  // Store for use in drawField overlay
+  window._cvDefCall = dc;
+  // Show in the header subtitle — always visible, no flex layout dependency
+  document.getElementById('canvasSubTitle').innerHTML =
+    `<span style="color:var(--gold);font-weight:800">&#9889; ${esc(dc.coverage)}</span>&nbsp;&nbsp;<span style="color:var(--grayl)">${esc(dc.blitz)}</span>`;
+  // Also update the banner element as fallback
   document.getElementById('cvDefCov').textContent='⚡ '+dc.coverage;
   document.getElementById('cvDefBlitz').textContent=dc.blitz;
   document.getElementById('cvDefCall').classList.add('show');
-  // No canvas resize here — showing the banner doesn't need to redraw the field
 }
 
 function setDrawColor(c,btn){
