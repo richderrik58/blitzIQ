@@ -2371,20 +2371,25 @@ Return ONLY valid JSON with no extra text:
 }
 
 function applyGeneratedPlay(playData){
-  // Show defensive call banner before opening canvas
   if(playData.defensiveCall) showDefensiveCall(playData.defensiveCall);
   openCanvas((cw, ch) => {
-    const sx = cw / 600, sy = ch / 400; // scale from prompt dims to canvas
+    const sx = cw / 600;
+    // LOS-aware Y scaling: prompt uses LOS=250 in a 400px field;
+    // canvas uses LOS=ch×0.58. Scale each zone independently so
+    // defenders always land above the LOS regardless of canvas height.
+    const pLOS = 250, cLOS = ch * 0.58;
+    const scaleY = y => y < pLOS
+      ? Math.round(y * (cLOS / pLOS))                          // defensive zone
+      : Math.round(cLOS + (y - pLOS) * ((ch - cLOS) / (400 - pLOS))); // offensive zone
 
-    // Place players (replace existing)
     cvPlayers = [];
     (playData.offense||[]).forEach(p => {
       cvPlayers.push({id:++cvPid, type:p.type, team:'off',
-        x:Math.round(p.x*sx), y:Math.round(p.y*sy)});
+        x:Math.round(p.x*sx), y:scaleY(p.y)});
     });
     (playData.defense||[]).forEach(p => {
       cvPlayers.push({id:++cvPid, type:p.type, team:'def',
-        x:Math.round(p.x*sx), y:Math.round(p.y*sy)});
+        x:Math.round(p.x*sx), y:scaleY(p.y)});
     });
 
     // Draw routes and blitz paths on the route canvas
@@ -2401,13 +2406,12 @@ function applyGeneratedPlay(playData){
         rCtx.lineCap='round'; rCtx.lineJoin='round';
         rCtx.beginPath();
         pts.forEach((pt,i) => i===0
-          ? rCtx.moveTo(pt.x*sx, pt.y*sy)
-          : rCtx.lineTo(pt.x*sx, pt.y*sy));
+          ? rCtx.moveTo(pt.x*sx, scaleY(pt.y))
+          : rCtx.lineTo(pt.x*sx, scaleY(pt.y)));
         rCtx.stroke();
-        // Arrowhead at last segment
         if(pts.length>=2){
           const a=pts[pts.length-2], b=pts[pts.length-1];
-          drawRouteArrow(rCtx, a.x*sx, a.y*sy, b.x*sx, b.y*sy, '#ef4444');
+          drawRouteArrow(rCtx, a.x*sx, scaleY(a.y), b.x*sx, scaleY(b.y), '#ef4444');
         }
         rCtx.restore();
       });
@@ -2418,10 +2422,10 @@ function applyGeneratedPlay(playData){
         rCtx.strokeStyle='#f0a500'; rCtx.lineWidth=2.5;
         rCtx.setLineDash([7,4]);
         rCtx.beginPath();
-        rCtx.moveTo(bp.from.x*sx, bp.from.y*sy);
-        rCtx.lineTo(bp.to.x*sx, bp.to.y*sy);
+        rCtx.moveTo(bp.from.x*sx, scaleY(bp.from.y));
+        rCtx.lineTo(bp.to.x*sx, scaleY(bp.to.y));
         rCtx.stroke(); rCtx.setLineDash([]);
-        drawRouteArrow(rCtx, bp.from.x*sx, bp.from.y*sy, bp.to.x*sx, bp.to.y*sy, '#f0a500');
+        drawRouteArrow(rCtx, bp.from.x*sx, scaleY(bp.from.y), bp.to.x*sx, scaleY(bp.to.y), '#f0a500');
         rCtx.restore();
       });
     }
