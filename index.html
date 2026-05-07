@@ -296,8 +296,12 @@
     .pro-badge{background:var(--gold);color:var(--navy);font-size:9px;font-weight:900;padding:2px 6px;border-radius:10px;letter-spacing:.5px;text-transform:uppercase;margin-left:4px}
     .api-note{font-size:11px;color:var(--gray);text-align:center;margin-bottom:14px;line-height:1.5}
     /* Assignment panel */
-    .cv-assign{background:var(--navyc);border-top:1px solid rgba(255,255,255,.06);padding:8px 12px;flex-shrink:0;max-height:140px;overflow-y:auto;display:none;-webkit-overflow-scrolling:touch}
+    .cv-assign{background:var(--navyc);border-top:1px solid rgba(255,255,255,.06);flex-shrink:0;display:none}
     .cv-assign.show{display:block}
+    .cv-assign-hdr{padding:5px 12px;display:flex;align-items:center;justify-content:space-between;cursor:pointer;user-select:none}
+    .cv-assign-hdr:active{background:rgba(255,255,255,.03)}
+    #cvAssignBody{padding:4px 12px 6px;max-height:110px;overflow-y:auto;-webkit-overflow-scrolling:touch}
+    #cvAssignBody.collapsed{display:none}
     .ca-row{display:flex;align-items:flex-start;gap:6px;flex-wrap:wrap;margin-bottom:5px}
     .ca-hdr{font-size:9px;letter-spacing:1.5px;text-transform:uppercase;font-weight:800;flex-shrink:0;padding-top:2px}
     .ca-hdr.rush{color:var(--red)}.ca-hdr.cov{color:var(--blue)}.ca-hdr.warn{color:var(--amber)}
@@ -534,7 +538,13 @@
     </div><!-- end toolbar-body -->
   </div><!-- end canvas-toolbar -->
   <!-- Defensive assignment summary panel -->
-  <div class="cv-assign" id="cvAssignPanel"></div>
+  <div class="cv-assign" id="cvAssignPanel">
+    <div class="cv-assign-hdr" onclick="toggleAssignPanel()">
+      <span style="font-size:9px;letter-spacing:1.5px;text-transform:uppercase;font-weight:800;color:var(--gray)">Rush / Coverage</span>
+      <span id="assignToggleBtn" style="font-size:11px;color:var(--gray)">&#9660;</span>
+    </div>
+    <div id="cvAssignBody"></div>
+  </div>
   <!-- Floating delete button for selected player -->
   <button class="cv-del-player" id="cvDeletePlayerBtn" style="display:none" onclick="deleteSelectedPlayer()">✕ Delete</button>
 </div>
@@ -3009,6 +3019,13 @@ function getGapWarnings(gapMap){
   return w;
 }
 
+function toggleAssignPanel(){
+  const body=document.getElementById('cvAssignBody');
+  const btn=document.getElementById('assignToggleBtn');
+  const collapsed=body.classList.toggle('collapsed');
+  btn.innerHTML=collapsed?'&#9658;':'&#9660;'; // ▶ collapsed, ▼ expanded
+}
+
 // Update the DOM assignment panel
 function updateAssignPanel(){
   const dc=window._cvDefCall;
@@ -3043,7 +3060,7 @@ function updateAssignPanel(){
   const gapWarns=getGapWarnings(window._cvGapMap||new Map());
   const gapWarnHTML=gapWarns.map(w=>`<div class="ca-warn-box ca-warn-gap">⛔ ${esc(w)}</div>`).join('');
 
-  panel.innerHTML=`
+  document.getElementById('cvAssignBody').innerHTML=`
     <div class="ca-row"><span class="ca-hdr rush">RUSH (${rushers.size})</span>${rushHTML}</div>
     <div class="ca-row"><span class="ca-hdr cov">COVERAGE (${coverCount})</span>${covHTML||'<span style="font-size:10px;color:var(--gray)">—</span>'}</div>
     ${confHTML}${warnHTML}${gapWarnHTML}`;
@@ -3064,17 +3081,17 @@ let cvDragging=null;                  // player being dragged
 let cvDragOffX=0, cvDragOffY=0;
 let cvRouteCanvas=null;               // offscreen canvas storing ONLY freehand routes
 let cvPid=0;                          // player ID counter
-const CV_R=22;                        // player symbol radius — 44px touch target
+let CV_R=18;                           // player radius — set in openCanvas (18=36px, 20=40px)
 
 function drawField(ctx,w,h){
   // Field background
   ctx.fillStyle='#15391f';
   ctx.fillRect(0,0,w,h);
-  // Yard lines
+  // Yard lines — 8 lines gives wider spacing between them
   ctx.strokeStyle='rgba(255,255,255,0.12)';
   ctx.lineWidth=1;
-  const spacing=h/12;
-  for(let i=0;i<=12;i++){
+  const spacing=h/8;
+  for(let i=0;i<=8;i++){
     ctx.beginPath();ctx.moveTo(0,i*spacing);ctx.lineTo(w,i*spacing);ctx.stroke();
   }
   // Vertical sideline guides
@@ -3085,7 +3102,7 @@ function drawField(ctx,w,h){
   // Hash marks
   const hL=w*0.33, hR=w*0.67;
   ctx.strokeStyle='rgba(255,255,255,0.18)';
-  for(let i=0;i<=12;i++){
+  for(let i=0;i<=8;i++){
     const y=i*spacing;
     ctx.beginPath();ctx.moveTo(hL-9,y);ctx.lineTo(hL+9,y);ctx.stroke();
     ctx.beginPath();ctx.moveTo(hR-9,y);ctx.lineTo(hR+9,y);ctx.stroke();
@@ -3132,19 +3149,6 @@ function drawField(ctx,w,h){
     ctx.restore();
   }
 
-  // Defensive coverage call overlay (shown after generate)
-  if(window._cvDefCall){
-    const cov=window._cvDefCall.coverage||'';
-    ctx.save();
-    ctx.textAlign='right';
-    ctx.fillStyle='rgba(240,165,0,0.7)';
-    ctx.font='bold 13px -apple-system,sans-serif';
-    ctx.fillText('⚡ '+cov, w-8, 18);
-    ctx.fillStyle='rgba(255,255,255,0.45)';
-    ctx.font='11px -apple-system,sans-serif';
-    ctx.fillText(window._cvDefCall.blitz||'', w-8, 34);
-    ctx.restore();
-  }
 }
 
 // ── CANVAS FIELD & COMPOSITE ──────────────────────────────────────────────────
@@ -3357,7 +3361,7 @@ function drawGapLabels(ctx,cw,los){
 function drawPlayerSymbol(ctx,p){
   const r=CV_R;
   ctx.save();
-  ctx.font=`bold ${p.type.length>2?11:13}px -apple-system,Helvetica,sans-serif`;
+  ctx.font='bold 9px -apple-system,Helvetica,sans-serif';
   ctx.textAlign='center'; ctx.textBaseline='middle';
 
   // Selection / drag ring
@@ -3395,7 +3399,7 @@ function drawPlayerSymbol(ctx,p){
     ctx.lineWidth=2.5;
     ctx.stroke();
     ctx.fillStyle='#ffffff';
-    ctx.font=`bold ${p.type.length>2?11:13}px -apple-system,Helvetica,sans-serif`;
+    ctx.font='bold 9px -apple-system,Helvetica,sans-serif';
     ctx.fillText(p.type,p.x,p.y+0.5);
   }
 
@@ -3576,12 +3580,10 @@ function openCanvas(onReady){
   document.getElementById('canvasOv').classList.add('open');
   document.body.style.overflow='hidden';
   requestAnimationFrame(()=>{
-    const hdrH=document.querySelector('.canvas-hdr')?.offsetHeight||52;
-    const defH=document.getElementById('cvDefCall')?.classList.contains('show')
-               ? (document.getElementById('cvDefCall')?.offsetHeight||0) : 0;
-    const tbH=document.querySelector('.canvas-toolbar')?.offsetHeight||130;
+    const wrap=document.querySelector('.canvas-wrap');
     const cw=Math.min(window.innerWidth,640);
-    const ch=Math.max(200, window.innerHeight-hdrH-defH-tbH);
+    const ch=Math.max(200, wrap?.clientHeight||window.innerHeight-104);
+    CV_R=cw>=600?20:18; // 40px on tablet, 36px on phone/narrow
     canvas.width=cw*dpr; canvas.height=ch*dpr;
     canvas.style.width=cw+'px'; canvas.style.height=ch+'px';
     cvCtx=canvas.getContext('2d');
@@ -3627,7 +3629,12 @@ function closeCanvas(){
   document.getElementById('canvasOv').classList.remove('open');
   document.getElementById('cvDefCall').classList.remove('show');
   document.getElementById('canvasSubTitle').textContent='Defensive call diagram';
-  document.getElementById('cvAssignPanel').classList.remove('show');
+  const ap=document.getElementById('cvAssignPanel');
+  ap.classList.remove('show');
+  const ab=document.getElementById('cvAssignBody');
+  if(ab){ ab.innerHTML=''; ab.classList.remove('collapsed'); }
+  const atb=document.getElementById('assignToggleBtn');
+  if(atb) atb.innerHTML='&#9660;';
   cvSelectedPlayer=null; hidePlayerDeleteBtn();
   window._cvDefCall=null; window._cvStrength=null;
   window._cvFormName=null; window._cvPresetType=null;
@@ -3701,12 +3708,10 @@ function toggleCanvasTools(){
 function resizeCanvas(){
   if(!cvCtx) return;
   const canvas=document.getElementById('playCanvas');
+  const wrap=document.querySelector('.canvas-wrap');
   const dpr=window.devicePixelRatio||1;
-  const hdrH=document.querySelector('.canvas-hdr')?.offsetHeight||52;
-  const defH=document.getElementById('cvDefCall')?.offsetHeight||0;
-  const tbH=document.querySelector('.canvas-toolbar')?.offsetHeight||42;
   const cw=Math.min(window.innerWidth,640);
-  const ch=Math.max(200, window.innerHeight-hdrH-defH-tbH);
+  const ch=Math.max(200, wrap?.clientHeight||window.innerHeight-104);
 
   // Snapshot routes before resize — setting canvas.width clears it
   let routeSnap=null;
