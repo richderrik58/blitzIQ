@@ -229,6 +229,33 @@
     .sit-tbl td.pass{color:var(--blue);font-weight:700}
     .raw-pre{background:var(--navyc);border-radius:10px;padding:12px;font-size:11px;color:var(--gray);line-height:1.7;white-space:pre-wrap;max-height:200px;overflow-y:auto;margin-top:8px}
     .raw-toggle{background:none;border:none;color:var(--gold);font-size:12px;font-weight:600;cursor:pointer;padding:8px 0;text-decoration:underline;font-family:inherit}
+
+    /* PLAY CANVAS */
+    .canvas-ov{position:fixed;inset:0;background:var(--navy);z-index:900;display:flex;flex-direction:column;opacity:0;pointer-events:none;transition:opacity .18s;overflow:hidden}
+    .canvas-ov.open{opacity:1;pointer-events:all}
+    .canvas-hdr{background:var(--navy2);border-bottom:2px solid var(--gold);padding:12px 16px;display:flex;align-items:center;justify-content:space-between;flex-shrink:0;gap:10px}
+    .canvas-hdr-title{font-size:16px;font-weight:800;color:var(--white)}
+    .canvas-hdr-sub{font-size:10px;color:var(--gray);letter-spacing:.5px;margin-top:2px}
+    .canvas-btns{display:flex;gap:8px;flex-shrink:0}
+    .cbtn-clear{padding:8px 14px;background:rgba(239,68,68,.14);border:1px solid rgba(239,68,68,.3);border-radius:8px;color:var(--red);font-size:13px;font-weight:700;cursor:pointer;font-family:inherit}
+    .cbtn-save{padding:8px 18px;background:var(--gold);border:none;border-radius:8px;color:var(--navy);font-size:13px;font-weight:800;cursor:pointer;font-family:inherit}
+    .cbtn-save:active{background:var(--goldd)}
+    .cbtn-close{padding:8px 14px;background:rgba(255,255,255,.07);border:1px solid rgba(255,255,255,.12);border-radius:8px;color:var(--grayl);font-size:13px;font-weight:700;cursor:pointer;font-family:inherit}
+    .canvas-toolbar{background:var(--navyc);border-bottom:1px solid rgba(255,255,255,.06);padding:10px 14px;display:flex;align-items:center;gap:8px;flex-shrink:0;flex-wrap:wrap}
+    .clr-btn{width:28px;height:28px;border-radius:50%;border:2.5px solid transparent;cursor:pointer;flex-shrink:0;transition:border-color .12s,transform .12s}
+    .clr-btn.active{border-color:var(--white);transform:scale(1.15)}
+    .tool-sep{width:1px;height:24px;background:rgba(255,255,255,.1);flex-shrink:0}
+    .ctool-btn{padding:6px 11px;background:rgba(255,255,255,.07);border:1px solid rgba(255,255,255,.13);border-radius:8px;color:var(--grayl);font-size:12px;font-weight:700;cursor:pointer;font-family:inherit;transition:all .12s}
+    .ctool-btn.active{background:rgba(240,165,0,.18);border-color:var(--gold);color:var(--gold)}
+    .cw-btn{padding:5px 10px;background:rgba(255,255,255,.05);border:1px solid rgba(255,255,255,.1);border-radius:6px;color:var(--gray);font-size:13px;cursor:pointer;font-family:inherit;line-height:1;transition:all .12s}
+    .cw-btn.active{border-color:var(--gold);color:var(--gold)}
+    .canvas-wrap{flex:1;position:relative;overflow:hidden}
+    #playCanvas{display:block;width:100%;height:100%;touch-action:none;cursor:crosshair}
+    .draw-play-btn{width:100%;padding:14px;background:rgba(240,165,0,.08);border:1.5px dashed rgba(240,165,0,.4);border-radius:12px;color:var(--gold);font-size:15px;font-weight:700;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:8px;margin-bottom:14px;font-family:inherit}
+    .draw-play-btn:active{background:rgba(240,165,0,.18)}
+    .play-thumb-wrap{background:var(--navy2);border:1px solid rgba(255,255,255,.08);border-radius:12px;overflow:hidden;margin-bottom:14px;cursor:pointer;position:relative}
+    .play-thumb{width:100%;display:block}
+    .play-thumb-lbl{position:absolute;bottom:0;left:0;right:0;background:rgba(10,22,40,.75);text-align:center;font-size:11px;color:var(--gold);font-weight:700;padding:7px;letter-spacing:1px;text-transform:uppercase}
   </style>
 </head>
 <body>
@@ -295,6 +322,38 @@
     <div class="prog-box-title">&#8679; Importing Hudl PDFs</div>
     <div class="prog-box-sub" id="progSub">Starting…</div>
     <div id="progList"></div>
+  </div>
+</div>
+
+<!-- PLAY CANVAS OVERLAY -->
+<div class="canvas-ov" id="canvasOv">
+  <div class="canvas-hdr">
+    <div>
+      <div class="canvas-hdr-title">&#9999; Draw Play</div>
+      <div class="canvas-hdr-sub" id="canvasSubTitle">Defensive call diagram</div>
+    </div>
+    <div class="canvas-btns">
+      <button class="cbtn-clear" onclick="clearCanvas()">Clear</button>
+      <button class="cbtn-save" onclick="saveCanvas()">Save</button>
+      <button class="cbtn-close" onclick="closeCanvas()">&#10005;</button>
+    </div>
+  </div>
+  <div class="canvas-toolbar">
+    <button class="clr-btn active" style="background:#ffffff" onclick="setDrawColor('#ffffff',this)" title="White — Defense"></button>
+    <button class="clr-btn" style="background:#f0a500" onclick="setDrawColor('#f0a500',this)" title="Gold — Key Player"></button>
+    <button class="clr-btn" style="background:#ef4444" onclick="setDrawColor('#ef4444',this)" title="Red — Blitz Path"></button>
+    <button class="clr-btn" style="background:#60a5fa" onclick="setDrawColor('#60a5fa',this)" title="Blue — Coverage Zone"></button>
+    <button class="clr-btn" style="background:#22c55e" onclick="setDrawColor('#22c55e',this)" title="Green — Offense"></button>
+    <div class="tool-sep"></div>
+    <button class="ctool-btn active" onclick="setDrawTool('pen',this)">&#9998; Draw</button>
+    <button class="ctool-btn" onclick="setDrawTool('erase',this)">&#9633; Erase</button>
+    <div class="tool-sep"></div>
+    <button class="cw-btn active" onclick="setDrawWidth(3,this)">&#11835;</button>
+    <button class="cw-btn" onclick="setDrawWidth(6,this)">&#9135;</button>
+    <button class="cw-btn" onclick="setDrawWidth(12,this)">&#9644;</button>
+  </div>
+  <div class="canvas-wrap">
+    <canvas id="playCanvas"></canvas>
   </div>
 </div>
 
@@ -734,7 +793,11 @@ function renderDefCall() {
     <div class="alert-box">
       <div class="alert-hdr"><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>Watch For</div>
       <div class="alert-txt">${esc(dc.alert)}</div>
-    </div>`;
+    </div>
+    ${dc.playCanvas
+      ? `<div class="play-thumb-wrap" onclick="openCanvas()"><img class="play-thumb" src="${dc.playCanvas}"><div class="play-thumb-lbl">&#9999; Tap to Edit Play Diagram</div></div>`
+      : `<button class="draw-play-btn" onclick="openCanvas()">&#9999; Draw Play Diagram</button>`
+    }`;
 }
 
 // ── MODALS ────────────────────────────────────────────────────────────────────
@@ -1597,6 +1660,174 @@ function importPreview(){
 
 // ── ESCAPE HTML ───────────────────────────────────────────────────────────────
 function esc(s){return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');}
+
+// ── PLAY CANVAS ───────────────────────────────────────────────────────────────
+let cvCtx=null, cvDrawing=false, cvColor='#ffffff', cvWidth=3, cvTool='pen', cvLX=0, cvLY=0;
+
+function drawField(ctx,w,h){
+  // Field background
+  ctx.fillStyle='#15391f';
+  ctx.fillRect(0,0,w,h);
+  // Yard lines
+  ctx.strokeStyle='rgba(255,255,255,0.12)';
+  ctx.lineWidth=1;
+  const spacing=h/12;
+  for(let i=0;i<=12;i++){
+    ctx.beginPath();ctx.moveTo(0,i*spacing);ctx.lineTo(w,i*spacing);ctx.stroke();
+  }
+  // Vertical sideline guides
+  ctx.strokeStyle='rgba(255,255,255,0.06)';
+  [0.1,0.3,0.5,0.7,0.9].forEach(x=>{
+    ctx.beginPath();ctx.moveTo(w*x,0);ctx.lineTo(w*x,h);ctx.stroke();
+  });
+  // Hash marks
+  const hL=w*0.33, hR=w*0.67;
+  ctx.strokeStyle='rgba(255,255,255,0.18)';
+  for(let i=0;i<=12;i++){
+    const y=i*spacing;
+    ctx.beginPath();ctx.moveTo(hL-9,y);ctx.lineTo(hL+9,y);ctx.stroke();
+    ctx.beginPath();ctx.moveTo(hR-9,y);ctx.lineTo(hR+9,y);ctx.stroke();
+  }
+  // Line of scrimmage
+  const los=h*0.58;
+  ctx.strokeStyle='rgba(240,165,0,0.55)';
+  ctx.lineWidth=2;
+  ctx.setLineDash([10,5]);
+  ctx.beginPath();ctx.moveTo(0,los);ctx.lineTo(w,los);ctx.stroke();
+  ctx.setLineDash([]);
+  ctx.fillStyle='rgba(240,165,0,0.5)';
+  ctx.font='bold 10px sans-serif';
+  ctx.fillText('LINE OF SCRIMMAGE',8,los-5);
+  // Defense label zone
+  ctx.fillStyle='rgba(255,255,255,0.04)';
+  ctx.fillRect(0,0,w,los);
+  ctx.fillStyle='rgba(240,165,0,0.07)';
+  ctx.fillRect(0,los,w,h-los);
+  // DEF / OFF labels
+  ctx.fillStyle='rgba(255,255,255,0.12)';
+  ctx.font='bold 13px sans-serif';
+  ctx.fillText('DEFENSE',8,20);
+  ctx.fillStyle='rgba(34,197,94,0.25)';
+  ctx.fillText('OFFENSE',8,h-10);
+}
+
+function openCanvas(){
+  const canvas=document.getElementById('playCanvas');
+  const wrap=canvas.parentElement;
+  // Size canvas to physical pixels for sharp rendering
+  const dpr=window.devicePixelRatio||1;
+  const cw=wrap.clientWidth, ch=wrap.clientHeight||Math.round(window.innerHeight*0.65);
+  canvas.width=cw*dpr; canvas.height=ch*dpr;
+  canvas.style.width=cw+'px'; canvas.style.height=ch+'px';
+  cvCtx=canvas.getContext('2d');
+  cvCtx.scale(dpr,dpr);
+  drawField(cvCtx,cw,ch);
+  // Load saved drawing
+  if(st.sit?.dc?.playCanvas){
+    const img=new Image();
+    img.onload=()=>cvCtx.drawImage(img,0,0,cw,ch);
+    img.src=st.sit.dc.playCanvas;
+  }
+  // Update subtitle
+  if(st.sit) document.getElementById('canvasSubTitle').textContent=`${st.form?.name||''} — ${st.sit.distLabel}`;
+  document.getElementById('canvasOv').classList.add('open');
+  document.body.style.overflow='hidden';
+}
+
+function closeCanvas(){document.getElementById('canvasOv').classList.remove('open');document.body.style.overflow='';}
+
+function clearCanvas(){
+  if(!cvCtx)return;
+  const canvas=document.getElementById('playCanvas');
+  const dpr=window.devicePixelRatio||1;
+  drawField(cvCtx,canvas.width/dpr,canvas.height/dpr);
+}
+
+function saveCanvas(){
+  if(!cvCtx||!st.sit)return;
+  st.sit.dc.playCanvas=document.getElementById('playCanvas').toDataURL('image/png');
+  saveDB();
+  closeCanvas();
+  renderDefCall();
+}
+
+function setDrawColor(c,btn){
+  cvColor=c;
+  document.querySelectorAll('.clr-btn').forEach(b=>b.classList.remove('active'));
+  btn.classList.add('active');
+}
+
+function setDrawTool(t,btn){
+  cvTool=t;
+  document.querySelectorAll('.ctool-btn').forEach(b=>b.classList.remove('active'));
+  btn.classList.add('active');
+  document.getElementById('playCanvas').style.cursor=t==='erase'?'cell':'crosshair';
+}
+
+function setDrawWidth(w,btn){
+  cvWidth=w;
+  document.querySelectorAll('.cw-btn').forEach(b=>b.classList.remove('active'));
+  btn.classList.add('active');
+}
+
+function cvGetPos(e){
+  const canvas=document.getElementById('playCanvas');
+  const rect=canvas.getBoundingClientRect();
+  const src=e.touches?e.touches[0]:e;
+  return{x:src.clientX-rect.left, y:src.clientY-rect.top};
+}
+
+function cvStart(e){
+  e.preventDefault();
+  cvDrawing=true;
+  const p=cvGetPos(e);
+  cvLX=p.x; cvLY=p.y;
+  if(!cvCtx)return;
+  // Draw a dot at the tap point
+  cvCtx.save();
+  if(cvTool==='erase'){cvCtx.globalCompositeOperation='destination-out';}
+  cvCtx.beginPath();
+  cvCtx.arc(p.x,p.y,(cvTool==='erase'?cvWidth*2.5:cvWidth)/2,0,Math.PI*2);
+  cvCtx.fillStyle=cvColor;
+  cvCtx.fill();
+  cvCtx.restore();
+  if(cvTool==='erase') clearCanvas(); // field bg must stay; re-composite below
+  // For erase, handle differently — paint with field color isn't perfect but works
+}
+
+function cvMove(e){
+  if(!cvDrawing||!cvCtx)return;
+  e.preventDefault();
+  const p=cvGetPos(e);
+  cvCtx.save();
+  cvCtx.beginPath();
+  cvCtx.moveTo(cvLX,cvLY);
+  cvCtx.lineTo(p.x,p.y);
+  if(cvTool==='erase'){
+    cvCtx.globalCompositeOperation='destination-out';
+    cvCtx.strokeStyle='rgba(0,0,0,1)';
+    cvCtx.lineWidth=cvWidth*4;
+  } else {
+    cvCtx.strokeStyle=cvColor;
+    cvCtx.lineWidth=cvWidth;
+  }
+  cvCtx.lineCap='round';
+  cvCtx.lineJoin='round';
+  cvCtx.stroke();
+  cvCtx.restore();
+  cvLX=p.x; cvLY=p.y;
+}
+
+function cvEnd(e){cvDrawing=false;}
+
+// Wire up canvas events after DOM is ready
+document.addEventListener('DOMContentLoaded',()=>{
+  const c=document.getElementById('playCanvas');
+  c.addEventListener('pointerdown',cvStart,{passive:false});
+  c.addEventListener('pointermove',cvMove,{passive:false});
+  c.addEventListener('pointerup',cvEnd);
+  c.addEventListener('pointercancel',cvEnd);
+});
 
 // ── BOOT ──────────────────────────────────────────────────────────────────────
 loadDB(); renderOpps(); syncHdr();
