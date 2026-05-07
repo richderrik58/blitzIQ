@@ -956,7 +956,10 @@ function renderForms() {
   const o = st.opp;
   document.getElementById('oppOv').innerHTML = `<div class="ov-ttl">${esc(o.name)} ${esc(o.season)} — Overall Tendency</div>${sbar(o.runPct,o.passPct)}<div class="ov-note">${esc(o.notes)}</div>`;
   // Game notes card
+  // Import log (only for Hudl-imported opponents)
+  const logEl=document.getElementById('gameNotesCard');
   const gn = o.gameNotes || '';
+  // importLog section rendered below game notes card — see end of this block
   document.getElementById('gameNotesCard').innerHTML = `
     <div class="def-block" style="margin-bottom:14px">
       <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:${gn?'10px':'0'}">
@@ -966,7 +969,15 @@ function renderForms() {
         </button>
       </div>
       ${gn ? `<div style="font-size:13px;color:rgba(255,255,255,.82);line-height:1.65;white-space:pre-wrap">${esc(gn)}</div>` : ''}
-    </div>`;
+    </div>
+    ${o.importLog ? `
+    <div style="margin-bottom:14px">
+      <button onclick="this.nextElementSibling.style.display=this.nextElementSibling.style.display==='none'?'block':'none';this.textContent=this.textContent.includes('Show')?'&#128196; Hide Import Log':'&#128196; Show Import Log'"
+        style="background:none;border:none;color:var(--gray);font-size:11px;cursor:pointer;text-decoration:underline;font-family:inherit;padding:0">
+        &#128196; Show Import Log
+      </button>
+      <div style="display:none;margin-top:8px;background:var(--navyc);border-radius:10px;padding:12px;font-size:11px;color:var(--gray);line-height:1.7;white-space:pre-wrap;max-height:220px;overflow-y:auto">${esc(o.importLog)}</div>
+    </div>` : ''}`;
   const el = document.getElementById('formList');
   if (!o.formations.length) {
     el.innerHTML = `<div class="empty"><div class="empty-icon">🏈</div><div class="empty-txt">No formations scouted yet.<br>Tap below to add this team's formations.</div></div>`;
@@ -2095,13 +2106,16 @@ function importPreview(){
     formations.push({id:uid(),name:fname||'Unnamed Formation',runPct:frun,passPct:100-frun,
       favoriteRunPlay:ffrun||'Not specified',favoritePassPlay:ffpass||'Not specified',
       downTendency:'Imported from Hudl. Add tendency notes in app.',
-      situations:f.situations.map(s=>({...s,id:uid(),dc:s.dc||{coverage:'',blitz:'',reason:'',alert:''}}))});
+      situations:f.situations.map(s=>({...s,id:uid(),dc:{coverage:'',blitz:'',reason:'',alert:''}}))});
   });
   const newOpp={id:uid(),name,season:season||String(new Date().getFullYear()),
     runPct:run,passPct:100-run,
     notes:document.getElementById('p_notes').value.trim()||'Imported from Hudl scouting report.',
-    gameNotes:'',formations};
-  applyRecommendations(newOpp);
+    gameNotes:'',
+    importLog:(prevData.extractionLog||[]).join('\n'), // save extraction log for review
+    formations};
+  applyRecommendations(newOpp);      // generate formation-level recommendations
+  autoFillSituationDC(newOpp);       // auto-fill defensive calls for each situation
   DB.opponents.push(newOpp);
   saveDB(); closePreview(); renderOpps(); showScreen(1);
 }
@@ -2162,6 +2176,59 @@ function generateRecommendation(f){
 function applyRecommendations(opp){
   if(!opp||!opp.formations) return;
   opp.formations.forEach(f=>{ if(!f.recommendation) f.recommendation=generateRecommendation(f); });
+}
+
+function autoFillSituationDC(opp){
+  if(!opp||!opp.formations) return;
+  opp.formations.forEach(f=>{
+    const formRec=f.recommendation||generateRecommendation(f);
+    (f.situations||[]).forEach(s=>{
+      if(s.dc&&(s.dc.coverage||s.dc.blitz)) return; // already filled
+      s.dc=generateSituationDC(f,s,formRec);
+    });
+  });
+}
+
+function generateSituationDC(f,s,formRec){
+  const pass=s.passPct||0, run=s.runPct||0;
+  const dist=(s.distLabel||'').toLowerCase();
+  const favPass=f.favoritePassPlay||'their top pass play';
+  const favRun=f.favoriteRunPlay||'their top run play';
+
+  // 3rd & Long — almost always pass
+  if(s.down===3&&/long/i.test(dist)&&pass>=85)
+    return{coverage:'Cover 4 (Quarters)',blitz:'Corner Blitz',
+      reason:`${pass}% pass on ${s.distLabel} — Quarters carries every receiver vertically. Corner blitz arrives at the same time routes break, forcing a quick decision.`,
+      alert:`Watch for 4-verticals or ${favPass}. Safeties must carry #1 deep — do NOT bail early.`};
+
+  // 3rd & Short — run or sneak threat
+  if(s.down===3&&/short/i.test(dist)&&run>=55)
+    return{coverage:'Cover 1 Man',blitz:'Double A-Gap Pressure',
+      reason:`${run}% run on ${s.distLabel} — stack the box and attack both A-gaps. Cover 1 frees all defenders near the line.`,
+      alert:`QB sneak or ${favRun} — MLB must fill the center gap immediately at the snap.`};
+
+  // 2nd & Short — run heavy
+  if(s.down===2&&/short/i.test(dist)&&run>=65)
+    return{coverage:'Cover 1 Man',blitz:'Mike LB Blitz',
+      reason:`${run}% run on ${s.distLabel} — commit to stopping the run. Mike blitz attacks the most likely gap before the double-team sets.`,
+      alert:`Watch for ${favRun}. DE must stay in their run lane — no upfield penetration that opens cutback.`};
+
+  // 2nd & Long — pass heavy
+  if(s.down===2&&/long/i.test(dist)&&pass>=70)
+    return{coverage:'Cover 2',blitz:'Weak-side Edge Pressure',
+      reason:`${pass}% pass on ${s.distLabel} — Cover 2 brackets the field and protects both deep halves. Edge pressure disrupts timing.`,
+      alert:`Screen pass is the check-down on 2nd & long — nickelback must stay home and not jump routes.`};
+
+  // 1st down — use formation tendency
+  if(s.down===1)
+    return{coverage:formRec.coverage,blitz:formRec.blitz,
+      reason:`${pass}% pass / ${run}% run on ${s.distLabel}. ${formRec.reason}`,
+      alert:`Watch for pre-snap motion — identify run strength or trips alignment before the snap.`};
+
+  // Default — mirror formation recommendation
+  return{coverage:formRec.coverage,blitz:formRec.blitz,
+    reason:formRec.reason,
+    alert:`Watch for ${pass>=60?favPass:favRun} — their most common call from ${f.name}.`};
 }
 
 function dismissRec(){
