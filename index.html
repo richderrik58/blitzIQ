@@ -2305,6 +2305,7 @@ function showGamePlan(){
       f.favoriteRunPlay&&f.favoriteRunPlay!=='Not specified'?`<span class="tag tag-r" style="font-size:10px">&#127939; ${esc(f.favoriteRunPlay)}</span>`:'',
       f.favoritePassPlay&&f.favoritePassPlay!=='Not specified'?`<span class="tag tag-p" style="font-size:10px">&#9992; ${esc(f.favoritePassPlay)}</span>`:'',
     ].filter(Boolean).join('');
+    const gapHTML=getFormationGapHTML(f);
     return`<div style="background:var(--navy2);border:1px solid rgba(255,255,255,.07);border-radius:12px;padding:14px 16px;margin-bottom:10px">
       <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
         <div style="font-size:16px;font-weight:800">${esc(f.name)}</div>
@@ -2313,7 +2314,8 @@ function showGamePlan(){
       <div style="font-size:10px;letter-spacing:2px;text-transform:uppercase;color:var(--gold);font-weight:800;margin-bottom:5px">&#9889; BlitzIQ Call</div>
       <div style="font-size:20px;font-weight:900;color:var(--gold);line-height:1.1">${esc(rec.coverage)}</div>
       <div style="font-size:14px;font-weight:700;color:var(--white);margin:3px 0 8px">${esc(rec.blitz)}</div>
-      ${plays?`<div class="ptags">${plays}</div>`:''}
+      ${plays?`<div class="ptags" style="margin-bottom:2px">${plays}</div>`:''}
+      ${gapHTML}
     </div>`;
   }).join('');
 
@@ -2399,6 +2401,71 @@ async function generatePlayCard(){
   }
 }
 
+// ── DEFENSIVE PRESET SELECTOR ─────────────────────────────────────────────────
+function getDefPreset(f){
+  const nm=(f.name||'').toUpperCase();
+  if(f.passPct>=75)                    return '3-3-5';
+  if(/TRIPS|TREY|EMPTY/.test(nm))      return '3-4';
+  return '4-3';
+}
+
+// ── GAP ASSIGNMENT HTML (for game plan cheat sheet) ───────────────────────────
+function getFormationGapHTML(f){
+  const preset=getDefPreset(f);
+  const nm=(f.name||'').toUpperCase();
+  const teAdj=preset==='3-4'&&/\bTE\b|\bWING\b|\bKING\b|\bPRO\b|\bI.?FORM\b|\bTIGHT/.test(nm);
+
+  let rows=[];
+  if(preset==='4-3'){
+    rows=[
+      {pos:'DE (strong)',    gap:'C',         note:'5-tech contain — never crashes inside'},
+      {pos:'DT (3-tech)',    gap:'B',          note:'strong side'},
+      {pos:'DT (1-tech)',    gap:'A',          note:'weak side'},
+      {pos:'DE (weak)',      gap:'C',          note:'5-tech contain — never crashes inside'},
+      {pos:'MLB',            gap:'A',          note:''},
+      {pos:'Sam LB',         gap:'B',          note:'force player'},
+      {pos:'Will LB',        gap:'B / Flat',   note:''},
+    ];
+  } else if(preset==='3-4'){
+    rows=[
+      {pos:'NT',             gap:'A',                       note:'strong A gap'},
+      {pos:'DE (strong)',    gap:teAdj?'C':'B',             note:teAdj?'bumped out — TE present':''},
+      {pos:'DE (weak)',      gap:'B',                       note:''},
+      {pos:'OLB (strong)',   gap:teAdj?'D — edge':'C — edge',note:teAdj?'bumped — TE accounts for C':''},
+      {pos:'ILB (strong)',   gap:'B / Flow',                note:'hit-and-run — flows to ball'},
+      {pos:'ILB (weak)',     gap:'A',                       note:'weak A gap'},
+      {pos:'OLB (weak)',     gap:'C — edge',                note:''},
+    ];
+  } else {
+    rows=[
+      {pos:'NT',             gap:'A / A',     note:'covers both A gaps'},
+      {pos:'DE (strong)',    gap:'B',          note:'4i tech — crashes inside'},
+      {pos:'DE (weak)',      gap:'B',          note:'4i tech — crashes inside'},
+      {pos:'MLB',            gap:'A',          note:'A gap priority — reads flow'},
+      {pos:'OLB (strong)',   gap:'C',          note:'edge contain'},
+      {pos:'OLB (weak)',     gap:'C',          note:'edge contain'},
+    ];
+  }
+
+  const presetLabel={'4-3':'4-3 BASE','3-4':'3-4 BASE','3-3-5':'3-3-5 STACK'}[preset];
+  const teFlag=teAdj
+    ?`<span style="background:rgba(240,165,0,.18);border:1px solid rgba(240,165,0,.5);border-radius:4px;padding:1px 5px;color:var(--gold);font-weight:800;margin-left:6px;font-size:8px;letter-spacing:.5px">TE — GAPS ADJUSTED</span>`
+    :'';
+
+  const tableRows=rows.map(r=>`<tr>
+    <td style="color:var(--grayl);padding:2px 8px 2px 0;font-size:10px;white-space:nowrap">${esc(r.pos)}</td>
+    <td style="color:var(--gold);font-weight:800;padding:2px 8px 2px 0;font-size:10px;white-space:nowrap">${esc(r.gap)}</td>
+    <td style="color:rgba(255,255,255,.4);font-size:9px;font-style:italic">${esc(r.note)}</td>
+  </tr>`).join('');
+
+  return `<div style="margin-top:10px;padding-top:10px;border-top:1px solid rgba(255,255,255,.07)">
+    <div style="font-size:9px;letter-spacing:1.5px;text-transform:uppercase;color:var(--gray);font-weight:700;margin-bottom:6px">
+      Gap Assignments — ${esc(presetLabel)}${teFlag}
+    </div>
+    <table style="border-collapse:collapse;width:100%">${tableRows}</table>
+  </div>`;
+}
+
 // ── MOCK PLAY GENERATOR (no API key required) ─────────────────────────────────
 // Uses CV_PRESETS for player placement (same tested coordinate system)
 // Routes are canvas-relative: x as fraction of cw, y as pixels from LOS (negative=def side)
@@ -2413,10 +2480,7 @@ function generateMockPlay(f){
   else if(/PISTOL|STRONG/.test(nm))   offPreset='pro-set';
   else if(/I.FORM|IFORM/.test(nm))    offPreset='i-form';
 
-  // Pick defensive preset to counter
-  let defPreset='4-3';
-  if(f.passPct>=75)                   defPreset='3-3-5';
-  else if(/TRIPS|TREY|EMPTY/.test(nm)) defPreset='3-4';
+  const defPreset=getDefPreset(f);
 
   // Routes — xf=fraction of field width, yd=pixels from LOS (negative=upfield/toward defense)
   let routes=[];
