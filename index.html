@@ -78,9 +78,11 @@
     .card-tend{font-size:12px;color:var(--grayl);font-style:italic;margin-top:10px;padding-top:10px;border-top:1px solid rgba(255,255,255,.05);line-height:1.5}
     .season-badge{background:var(--gold);color:var(--navy);font-size:11px;font-weight:800;padding:4px 10px;border-radius:20px;flex-shrink:0}
 
-    /* DELETE BTN */
+    /* DELETE / EDIT BTN */
     .del-btn{position:absolute;top:14px;right:14px;width:30px;height:30px;background:rgba(239,68,68,.1);border:1px solid rgba(239,68,68,.25);border-radius:7px;color:var(--red);font-size:13px;cursor:pointer;display:flex;align-items:center;justify-content:center;z-index:10}
     .del-btn:active{background:rgba(239,68,68,.3)}
+    .edit-btn{position:absolute;top:14px;right:50px;width:30px;height:30px;background:rgba(240,165,0,.1);border:1px solid rgba(240,165,0,.25);border-radius:7px;color:var(--gold);font-size:13px;cursor:pointer;display:flex;align-items:center;justify-content:center;z-index:10}
+    .edit-btn:active{background:rgba(240,165,0,.3)}
 
     /* SIT GRID */
     .sit-grid{display:grid;grid-template-columns:1fr 1fr;gap:12px}
@@ -241,8 +243,8 @@
     /* PLAY CANVAS */
     .canvas-ov{position:fixed;inset:0;background:var(--navy);z-index:900;display:flex;flex-direction:column;opacity:0;pointer-events:none;transition:opacity .18s;overflow:hidden}
     .canvas-ov.open{opacity:1;pointer-events:all}
-    .canvas-hdr{background:var(--navy2);border-bottom:2px solid var(--gold);padding:7px 12px;display:flex;align-items:center;justify-content:space-between;flex-shrink:0;gap:8px}
-    @media (orientation:landscape) and (max-height:540px){.canvas-hdr{padding:4px 10px}}
+    .canvas-hdr{background:var(--navy2);border-bottom:2px solid var(--gold);padding:5px 12px;height:44px;display:flex;align-items:center;justify-content:space-between;flex-shrink:0;gap:8px}
+    @media (orientation:landscape) and (max-height:540px){.canvas-hdr{padding:3px 10px;height:40px}}
     .toast{position:fixed;bottom:90px;left:50%;transform:translateX(-50%);background:rgba(34,197,94,.92);color:#fff;font-size:12px;font-weight:700;padding:8px 18px;border-radius:20px;z-index:9999;pointer-events:none;opacity:0;transition:opacity .2s}
     .toast.show{opacity:1}
     /* ── PRINT ── hide app chrome, show only #printPage ──────────────────── */
@@ -279,7 +281,7 @@
     .cbtn-save{padding:7px 16px;background:var(--gold);border:none;border-radius:8px;color:var(--navy);font-size:12px;font-weight:800;cursor:pointer;font-family:inherit}
     .cbtn-save:active{background:var(--goldd)}
     .cbtn-close{padding:7px 12px;background:rgba(255,255,255,.07);border:1px solid rgba(255,255,255,.12);border-radius:8px;color:var(--grayl);font-size:12px;font-weight:700;cursor:pointer;font-family:inherit}
-    .canvas-toolbar{background:var(--navyc);border-top:1px solid rgba(255,255,255,.1);padding:8px 12px;display:flex;flex-direction:column;gap:7px;flex-shrink:0}
+    .canvas-toolbar{background:var(--navyc);border-top:1px solid rgba(255,255,255,.1);padding:6px 12px;min-height:50px;display:flex;flex-direction:column;gap:6px;flex-shrink:0}
     /* Toolbar collapse */
     .toolbar-body{transition:max-height .25s ease,opacity .25s ease;overflow:hidden;max-height:400px;opacity:1}
     .toolbar-body.collapsed{max-height:0;opacity:0}
@@ -376,6 +378,7 @@
     <button class="act-pri" onclick="openModal('mOpp')">+ Add Opponent</button>
     <button class="act-sec" onclick="document.getElementById('pdfIn').click()">&#8679; Import Hudl PDFs</button>
   </div>
+  <button class="act-sec" style="width:100%;margin-bottom:14px" onclick="showBlitzLib()">&#9889; Blitz Library — 12 Packages</button>
   <!-- Hudl export guide -->
   <div style="background:var(--navy2);border:1px solid rgba(240,165,0,.2);border-radius:12px;margin-bottom:18px;overflow:hidden">
     <button onclick="toggleHudlGuide()" style="width:100%;padding:12px 16px;background:none;border:none;color:var(--gold);font-size:12px;font-weight:700;cursor:pointer;display:flex;justify-content:space-between;align-items:center;font-family:inherit;letter-spacing:.5px;text-transform:uppercase">
@@ -498,6 +501,18 @@
     </div>
   </div>
   <div class="prev-body" id="scriptBody"></div>
+</div>
+
+<!-- BLITZ LIBRARY OVERLAY -->
+<div class="prev-ov" id="blitzLibOv">
+  <div class="prev-hdr">
+    <div class="prev-hdr-l">
+      <div class="prev-title">&#9889; Blitz Library</div>
+      <div class="prev-file">12 Defensive Packages</div>
+    </div>
+    <button class="cbtn-close" onclick="closeBlitzLib()">&#10005;</button>
+  </div>
+  <div class="prev-body" id="blitzLibBody"></div>
 </div>
 
 <!-- PLAY CANVAS OVERLAY -->
@@ -1041,6 +1056,7 @@ function renderOpps() {
       ${sbar(o.runPct,o.passPct)}
       <div class="card-note">${esc(o.notes)}</div>
       <button class="del-btn" onclick="delOpp(${o.id},event)">✕</button>
+      <button class="edit-btn" onclick="editOpp(${o.id},event)" title="Edit">&#9998;</button>
     </div>`).join('');
 }
 function selOpp(id) { st.opp=DB.opponents.find(o=>o.id===id); renderForms(); showScreen(2); }
@@ -1087,6 +1103,7 @@ function renderForms() {
       </div>
       <div class="card-tend">${esc(f.downTendency)}</div>
       <button class="del-btn" onclick="delForm(${f.id},event)">✕</button>
+      <button class="edit-btn" onclick="editForm(${f.id},event)" title="Edit">&#9998;</button>
     </div>`).join('');
 }
 function selForm(id) { st.form=st.opp.formations.find(f=>f.id===id); renderSits(); showScreen(3); }
@@ -2897,12 +2914,21 @@ function generateMockPlay(f){
   const nm=f.name.toUpperCase();
   const rec=generateRecommendation(f);
 
-  // Pick offensive preset
+  // Pick offensive preset — Broad Run specific formations map to custom presets
   let offPreset='spread';
-  if(/TRIPS|TREY/.test(nm))           offPreset='trips';
-  else if(/EMPTY/.test(nm))           offPreset='empty';
-  else if(/PISTOL|STRONG/.test(nm))   offPreset='pro-set';
-  else if(/I.FORM|IFORM/.test(nm))    offPreset='i-form';
+  if(/TREY\s+R\s+WEAK/i.test(nm))                   offPreset='trey-r-weak';
+  else if(/TRIPS\s+L\s+STRONG/i.test(nm))            offPreset='trips-l-strong';
+  else if(/PRO\s+L\s+TWINS\s+R\s+STRONG/i.test(nm)) offPreset='pro-l-twins-r-strong';
+  else if(/TRIPS\s+L\s+WEAK/i.test(nm))              offPreset='trips-l-weak';
+  else if(/TREY\s+L\s+STRONG/i.test(nm))             offPreset='trey-l-strong';
+  else if(/PRO\s+R\s+TWINS\s+L\s+WEAK/i.test(nm))   offPreset='pro-r-twins-l-weak';
+  else if(/TREY\s+R\s+STRONG/i.test(nm))             offPreset='trey-r-strong';
+  else if(/PRO\s+L\s+WING\s+L\s+TWINS\s+R\s+WEAK/i.test(nm)) offPreset='pro-l-wing-l-twins-r-weak';
+  else if(/PRO\s+L\s+TWINS\s+R\s+WEAK/i.test(nm))   offPreset='pro-l-twins-r-weak';
+  else if(/TRIPS|TREY/.test(nm))                     offPreset='trips';
+  else if(/EMPTY/.test(nm))                          offPreset='empty';
+  else if(/PISTOL|STRONG/.test(nm))                  offPreset='pro-set';
+  else if(/I.FORM|IFORM/.test(nm))                   offPreset='i-form';
 
   const defPreset=getDefPreset(f);
 
@@ -3544,7 +3570,7 @@ function drawField(ctx,w,h){
     ctx.beginPath();ctx.moveTo(hR-10,y);ctx.lineTo(hR+10,y);ctx.stroke();
   }
   // Line of scrimmage
-  const los=h*0.65;
+  const los=h*0.62;
   ctx.strokeStyle='rgba(240,165,0,0.55)';
   ctx.lineWidth=2;
   ctx.setLineDash([10,5]);
@@ -3593,7 +3619,7 @@ function redrawAll(){
   const canvas=document.getElementById('playCanvas');
   const dpr=window.devicePixelRatio||1;
   const cw=canvas.width/dpr, ch=canvas.height/dpr;
-  const los=ch*0.65;
+  const los=ch*0.62;
   window._cvGapMap=computeGapAssignments(); // compute before drawing players
   cvCtx.clearRect(0,0,cw,ch);
   drawField(cvCtx,cw,ch);
@@ -3922,71 +3948,192 @@ const CV_PRESETS = {
     {type:'SS',  team:'def', xf:0.72, yd:-148},
     {type:'CB',  team:'def', xf:0.96, yd:-58},  // near sideline
   ],
-  // ── OFFENSIVE — WRs to sidelines, OL evenly spaced ───────────────────────────
+  // ── OFFENSIVE — WRs at sidelines, OL tighter (18px gap / 46px c-to-c) ──────────
+  // OL at center±0.072 increments (46px on 640px canvas)
   'pro-set':[
-    {type:'WR', team:'off', xf:0.04, yd:30},    // X receiver — far sideline
-    {type:'OL', team:'off', xf:0.31, yd:30},
-    {type:'OL', team:'off', xf:0.405,yd:30},
+    {type:'WR', team:'off', xf:0.04, yd:30},
+    {type:'OL', team:'off', xf:0.356,yd:30},
+    {type:'OL', team:'off', xf:0.428,yd:30},
     {type:'C',  team:'off', xf:0.50, yd:30},
-    {type:'OL', team:'off', xf:0.595,yd:30},
-    {type:'OL', team:'off', xf:0.69, yd:30},
-    {type:'TE', team:'off', xf:0.79, yd:30},    // TE tight to OL
-    {type:'WR', team:'off', xf:0.96, yd:30},    // Z receiver — far sideline
+    {type:'OL', team:'off', xf:0.572,yd:30},
+    {type:'OL', team:'off', xf:0.644,yd:30},
+    {type:'TE', team:'off', xf:0.742,yd:30},
+    {type:'WR', team:'off', xf:0.96, yd:30},
     {type:'QB', team:'off', xf:0.50, yd:72},
     {type:'FB', team:'off', xf:0.50, yd:108},
     {type:'RB', team:'off', xf:0.60, yd:130},
   ],
   'trips':[
-    {type:'WR', team:'off', xf:0.04, yd:30},    // weak-side X — far left
-    {type:'OL', team:'off', xf:0.31, yd:30},
-    {type:'OL', team:'off', xf:0.405,yd:30},
+    {type:'WR', team:'off', xf:0.04, yd:30},
+    {type:'OL', team:'off', xf:0.356,yd:30},
+    {type:'OL', team:'off', xf:0.428,yd:30},
     {type:'C',  team:'off', xf:0.50, yd:30},
-    {type:'OL', team:'off', xf:0.595,yd:30},
-    {type:'OL', team:'off', xf:0.69, yd:30},
+    {type:'OL', team:'off', xf:0.572,yd:30},
+    {type:'OL', team:'off', xf:0.644,yd:30},
     {type:'QB', team:'off', xf:0.50, yd:72},
     {type:'RB', team:'off', xf:0.60, yd:72},
-    {type:'WR', team:'off', xf:0.78, yd:30},    // trips #1
-    {type:'WR', team:'off', xf:0.87, yd:30},    // trips #2
-    {type:'WR', team:'off', xf:0.96, yd:30},    // trips #3 at sideline
+    {type:'WR', team:'off', xf:0.77, yd:30},
+    {type:'WR', team:'off', xf:0.87, yd:30},
+    {type:'WR', team:'off', xf:0.96, yd:30},
   ],
   'spread':[
-    {type:'WR', team:'off', xf:0.04, yd:30},    // far left sideline
-    {type:'WR', team:'off', xf:0.16, yd:30},    // slot left
-    {type:'OL', team:'off', xf:0.31, yd:30},
-    {type:'OL', team:'off', xf:0.405,yd:30},
+    {type:'WR', team:'off', xf:0.04, yd:30},
+    {type:'WR', team:'off', xf:0.17, yd:30},
+    {type:'OL', team:'off', xf:0.356,yd:30},
+    {type:'OL', team:'off', xf:0.428,yd:30},
     {type:'C',  team:'off', xf:0.50, yd:30},
-    {type:'OL', team:'off', xf:0.595,yd:30},
-    {type:'OL', team:'off', xf:0.69, yd:30},
-    {type:'WR', team:'off', xf:0.84, yd:30},    // slot right
-    {type:'WR', team:'off', xf:0.96, yd:30},    // far right sideline
+    {type:'OL', team:'off', xf:0.572,yd:30},
+    {type:'OL', team:'off', xf:0.644,yd:30},
+    {type:'WR', team:'off', xf:0.83, yd:30},
+    {type:'WR', team:'off', xf:0.96, yd:30},
     {type:'QB', team:'off', xf:0.50, yd:72},
     {type:'RB', team:'off', xf:0.60, yd:72},
   ],
   'i-form':[
-    {type:'WR', team:'off', xf:0.04, yd:30},    // far left
-    {type:'OL', team:'off', xf:0.31, yd:30},
-    {type:'OL', team:'off', xf:0.405,yd:30},
+    {type:'WR', team:'off', xf:0.04, yd:30},
+    {type:'OL', team:'off', xf:0.356,yd:30},
+    {type:'OL', team:'off', xf:0.428,yd:30},
     {type:'C',  team:'off', xf:0.50, yd:30},
-    {type:'OL', team:'off', xf:0.595,yd:30},
-    {type:'OL', team:'off', xf:0.69, yd:30},
-    {type:'TE', team:'off', xf:0.79, yd:30},
-    {type:'WR', team:'off', xf:0.96, yd:30},    // far right
+    {type:'OL', team:'off', xf:0.572,yd:30},
+    {type:'OL', team:'off', xf:0.644,yd:30},
+    {type:'TE', team:'off', xf:0.742,yd:30},
+    {type:'WR', team:'off', xf:0.96, yd:30},
     {type:'QB', team:'off', xf:0.50, yd:68},
     {type:'FB', team:'off', xf:0.50, yd:105},
     {type:'RB', team:'off', xf:0.50, yd:148},
   ],
   'empty':[
-    {type:'WR', team:'off', xf:0.04, yd:30},    // far left
-    {type:'WR', team:'off', xf:0.16, yd:30},    // slot left
-    {type:'OL', team:'off', xf:0.31, yd:30},
-    {type:'OL', team:'off', xf:0.405,yd:30},
+    {type:'WR', team:'off', xf:0.04, yd:30},
+    {type:'WR', team:'off', xf:0.17, yd:30},
+    {type:'OL', team:'off', xf:0.356,yd:30},
+    {type:'OL', team:'off', xf:0.428,yd:30},
     {type:'C',  team:'off', xf:0.50, yd:30},
-    {type:'OL', team:'off', xf:0.595,yd:30},
-    {type:'OL', team:'off', xf:0.69, yd:30},
-    {type:'WR', team:'off', xf:0.79, yd:30},    // slot right (TE as WR)
+    {type:'OL', team:'off', xf:0.572,yd:30},
+    {type:'OL', team:'off', xf:0.644,yd:30},
+    {type:'WR', team:'off', xf:0.78, yd:30},
     {type:'WR', team:'off', xf:0.87, yd:30},
-    {type:'WR', team:'off', xf:0.96, yd:30},    // far right
+    {type:'WR', team:'off', xf:0.96, yd:30},
     {type:'QB', team:'off', xf:0.50, yd:72},
+  ],
+  // ── BROAD RUN 2025 SPECIFIC FORMATIONS (Issues 2 & 6) ─────────────────────────
+  'trey-r-weak':[  // TE right, 2 WRs right stacked, 1 WR far left, RB left
+    {type:'WR', team:'off', xf:0.04, yd:30},
+    {type:'OL', team:'off', xf:0.356,yd:30},
+    {type:'OL', team:'off', xf:0.428,yd:30},
+    {type:'C',  team:'off', xf:0.50, yd:30},
+    {type:'OL', team:'off', xf:0.572,yd:30},
+    {type:'OL', team:'off', xf:0.644,yd:30},
+    {type:'TE', team:'off', xf:0.742,yd:30},
+    {type:'WR', team:'off', xf:0.84, yd:30},
+    {type:'WR', team:'off', xf:0.93, yd:30},
+    {type:'QB', team:'off', xf:0.50, yd:72},
+    {type:'RB', team:'off', xf:0.38, yd:72},
+  ],
+  'trips-l-strong':[ // 3 WRs left, 1 WR right, RB right
+    {type:'WR', team:'off', xf:0.07, yd:30},
+    {type:'WR', team:'off', xf:0.16, yd:30},
+    {type:'WR', team:'off', xf:0.25, yd:30},
+    {type:'OL', team:'off', xf:0.356,yd:30},
+    {type:'OL', team:'off', xf:0.428,yd:30},
+    {type:'C',  team:'off', xf:0.50, yd:30},
+    {type:'OL', team:'off', xf:0.572,yd:30},
+    {type:'OL', team:'off', xf:0.644,yd:30},
+    {type:'WR', team:'off', xf:0.96, yd:30},
+    {type:'QB', team:'off', xf:0.50, yd:72},
+    {type:'RB', team:'off', xf:0.65, yd:72},
+  ],
+  'pro-l-twins-r-strong':[ // TE left, 2 WRs right, 1 WR left, FB+RB behind QB
+    {type:'WR', team:'off', xf:0.04, yd:30},
+    {type:'TE', team:'off', xf:0.258,yd:30},
+    {type:'OL', team:'off', xf:0.356,yd:30},
+    {type:'OL', team:'off', xf:0.428,yd:30},
+    {type:'C',  team:'off', xf:0.50, yd:30},
+    {type:'OL', team:'off', xf:0.572,yd:30},
+    {type:'OL', team:'off', xf:0.644,yd:30},
+    {type:'WR', team:'off', xf:0.83, yd:30},
+    {type:'WR', team:'off', xf:0.96, yd:30},
+    {type:'QB', team:'off', xf:0.50, yd:72},
+    {type:'FB', team:'off', xf:0.50, yd:108},
+    {type:'RB', team:'off', xf:0.63, yd:130},
+  ],
+  'trips-l-weak':[ // 3 WRs left, 1 WR right, RB weak (right)
+    {type:'WR', team:'off', xf:0.07, yd:30},
+    {type:'WR', team:'off', xf:0.16, yd:30},
+    {type:'WR', team:'off', xf:0.25, yd:30},
+    {type:'OL', team:'off', xf:0.356,yd:30},
+    {type:'OL', team:'off', xf:0.428,yd:30},
+    {type:'C',  team:'off', xf:0.50, yd:30},
+    {type:'OL', team:'off', xf:0.572,yd:30},
+    {type:'OL', team:'off', xf:0.644,yd:30},
+    {type:'WR', team:'off', xf:0.96, yd:30},
+    {type:'QB', team:'off', xf:0.50, yd:72},
+    {type:'RB', team:'off', xf:0.62, yd:72},
+  ],
+  'trey-l-strong':[ // TE left, 2 WRs left stacked, 1 WR right, RB strong (left)
+    {type:'WR', team:'off', xf:0.96, yd:30},
+    {type:'OL', team:'off', xf:0.356,yd:30},
+    {type:'OL', team:'off', xf:0.428,yd:30},
+    {type:'C',  team:'off', xf:0.50, yd:30},
+    {type:'OL', team:'off', xf:0.572,yd:30},
+    {type:'OL', team:'off', xf:0.644,yd:30},
+    {type:'TE', team:'off', xf:0.258,yd:30},
+    {type:'WR', team:'off', xf:0.16, yd:30},
+    {type:'WR', team:'off', xf:0.07, yd:30},
+    {type:'QB', team:'off', xf:0.50, yd:72},
+    {type:'RB', team:'off', xf:0.38, yd:72},
+  ],
+  'pro-r-twins-l-weak':[ // TE right, 2 WRs left, 1 WR right, RB weak (left)
+    {type:'WR', team:'off', xf:0.04, yd:30},
+    {type:'WR', team:'off', xf:0.17, yd:30},
+    {type:'OL', team:'off', xf:0.356,yd:30},
+    {type:'OL', team:'off', xf:0.428,yd:30},
+    {type:'C',  team:'off', xf:0.50, yd:30},
+    {type:'OL', team:'off', xf:0.572,yd:30},
+    {type:'OL', team:'off', xf:0.644,yd:30},
+    {type:'TE', team:'off', xf:0.742,yd:30},
+    {type:'WR', team:'off', xf:0.96, yd:30},
+    {type:'QB', team:'off', xf:0.50, yd:72},
+    {type:'RB', team:'off', xf:0.38, yd:72},
+  ],
+  'trey-r-strong':[ // TE right, 2 WRs right, 1 WR left, RB strong (right)
+    {type:'WR', team:'off', xf:0.04, yd:30},
+    {type:'OL', team:'off', xf:0.356,yd:30},
+    {type:'OL', team:'off', xf:0.428,yd:30},
+    {type:'C',  team:'off', xf:0.50, yd:30},
+    {type:'OL', team:'off', xf:0.572,yd:30},
+    {type:'OL', team:'off', xf:0.644,yd:30},
+    {type:'TE', team:'off', xf:0.742,yd:30},
+    {type:'WR', team:'off', xf:0.84, yd:30},
+    {type:'WR', team:'off', xf:0.93, yd:30},
+    {type:'QB', team:'off', xf:0.50, yd:72},
+    {type:'RB', team:'off', xf:0.65, yd:72},
+  ],
+  'pro-l-wing-l-twins-r-weak':[ // TE left, wing WR left, 2 WRs right, RB weak (right)
+    {type:'WR', team:'off', xf:0.04, yd:30},
+    {type:'WR', team:'off', xf:0.17, yd:50}, // wing left slightly behind LOS
+    {type:'TE', team:'off', xf:0.258,yd:30},
+    {type:'OL', team:'off', xf:0.356,yd:30},
+    {type:'OL', team:'off', xf:0.428,yd:30},
+    {type:'C',  team:'off', xf:0.50, yd:30},
+    {type:'OL', team:'off', xf:0.572,yd:30},
+    {type:'OL', team:'off', xf:0.644,yd:30},
+    {type:'WR', team:'off', xf:0.83, yd:30},
+    {type:'WR', team:'off', xf:0.96, yd:30},
+    {type:'QB', team:'off', xf:0.50, yd:72},
+    {type:'RB', team:'off', xf:0.62, yd:72},
+  ],
+  'pro-l-twins-r-weak':[ // TE left, 2 WRs right, 1 WR left, RB weak (right)
+    {type:'WR', team:'off', xf:0.04, yd:30},
+    {type:'TE', team:'off', xf:0.258,yd:30},
+    {type:'OL', team:'off', xf:0.356,yd:30},
+    {type:'OL', team:'off', xf:0.428,yd:30},
+    {type:'C',  team:'off', xf:0.50, yd:30},
+    {type:'OL', team:'off', xf:0.572,yd:30},
+    {type:'OL', team:'off', xf:0.644,yd:30},
+    {type:'WR', team:'off', xf:0.83, yd:30},
+    {type:'WR', team:'off', xf:0.96, yd:30},
+    {type:'QB', team:'off', xf:0.50, yd:72},
+    {type:'RB', team:'off', xf:0.62, yd:72},
   ],
 };
 
@@ -3995,7 +4142,7 @@ function placePreset(name){
   const canvas=document.getElementById('playCanvas');
   const dpr=window.devicePixelRatio||1;
   const cw=canvas.width/dpr, ch=canvas.height/dpr;
-  const los=ch*0.65;
+  const los=ch*0.62;
   const preset=CV_PRESETS[name];
   if(!preset) return;
   // Replace only players of the same team so defense + offense can coexist
@@ -4697,6 +4844,171 @@ function copyPracticeScript(){
     document.execCommand('copy'); document.body.removeChild(ta);
     showToast('✓ Practice script copied');
   }
+}
+
+// ── EDIT FUNCTIONALITY (Issue 8) ─────────────────────────────────────────────
+function editOpp(id,e){
+  e.stopPropagation();
+  const o=DB.opponents.find(x=>x.id===id); if(!o) return;
+  document.getElementById('o_name').value=o.name;
+  document.getElementById('o_season').value=o.season;
+  document.getElementById('o_run').value=o.runPct;
+  document.getElementById('o_pass').value=o.passPct;
+  document.getElementById('o_notes').value=o.notes||'';
+  // Switch save button to update mode
+  const btn=document.querySelector('#mOpp .btn-save');
+  btn.textContent='Update Opponent';
+  btn.onclick=()=>{
+    o.name=document.getElementById('o_name').value.trim()||o.name;
+    o.season=document.getElementById('o_season').value.trim()||o.season;
+    o.runPct=parseInt(document.getElementById('o_run').value)||50;
+    o.passPct=parseInt(document.getElementById('o_pass').value)||50;
+    o.notes=document.getElementById('o_notes').value.trim();
+    saveDB(); closeModal('mOpp'); resetOpp(); renderOpps();
+    btn.textContent='Save Opponent'; btn.onclick=saveOpp;
+  };
+  openModal('mOpp');
+}
+
+function editForm(id,e){
+  e.stopPropagation();
+  const f=st.opp.formations.find(x=>x.id===id); if(!f) return;
+  document.getElementById('f_name').value=f.name;
+  document.getElementById('f_run').value=f.runPct;
+  document.getElementById('f_pass').value=f.passPct;
+  document.getElementById('f_runplay').value=f.favoriteRunPlay||'';
+  document.getElementById('f_passplay').value=f.favoritePassPlay||'';
+  document.getElementById('f_tend').value=f.downTendency||'';
+  const btn=document.querySelector('#mForm .btn-save');
+  btn.textContent='Update Formation';
+  btn.onclick=()=>{
+    f.name=document.getElementById('f_name').value.trim()||f.name;
+    f.runPct=parseInt(document.getElementById('f_run').value)||50;
+    f.passPct=parseInt(document.getElementById('f_pass').value)||50;
+    f.favoriteRunPlay=document.getElementById('f_runplay').value.trim();
+    f.favoritePassPlay=document.getElementById('f_passplay').value.trim();
+    f.downTendency=document.getElementById('f_tend').value.trim();
+    saveDB(); closeModal('mForm'); resetForm(); renderForms();
+    btn.textContent='Save Formation'; btn.onclick=saveForm;
+  };
+  openModal('mForm');
+}
+
+// ── BLITZ LIBRARY (Issue 3) ────────────────────────────────────────────────────
+const BLITZ_PACKAGES=[
+  {name:'Spike',    num:1,  type:'Double A-Gap Inside Blitz',
+   desc:'Both ILBs shoot the A gaps simultaneously on snap count. MLB and Will crash inside.',
+   best:'Short yardage, goal line, inside run downs (1st & short, 2nd & 1)',
+   counters:['Pro L Twins R Weak','Pro R Twins L Weak','any under-center formation'],
+   coverage:'Cover 1 Man — CB locked, FS single-high',
+   def:'3-4', alert:'OG must pick both blitzers — any hesitation gets sack or TFL'},
+  {name:'Vault',    num:2,  type:'Delayed A-Gap Counter Blitz',
+   desc:'ILB fakes zone drop, delays one count then attacks A gap opposite initial movement.',
+   best:'RPO teams, zone read, QB reads the linebacker key',
+   counters:['Trips L Strong','Trips L Weak','any spread RPO'],
+   coverage:'Cover 2 Zone — SS and FS split halves',
+   def:'4-3', alert:'LB must sell the drop first — fire on second beat'},
+  {name:'Razor',    num:3,  type:'Dual Edge Speed Rush',
+   desc:'Both DEs execute speed rush outside — pin DTs inside and attack both edges.',
+   best:'Pass-heavy formations, 3rd & medium, two-minute drill',
+   counters:['Pro L Wing L Twins R Weak','empty backfield','4-wide spread'],
+   coverage:'Cover 4 Quarters — CB and safety each own a deep quarter',
+   def:'4-3', alert:'DEs must win edge — no containment responsibility, pure rush'},
+  {name:'Tank',     num:4,  type:'DE Pinch with Edge Contain',
+   desc:'Both DEs pinch inside hard, OLBs seal the edge. Stuffs every inside run.',
+   best:'Run-only formations, Pro R King Weak, any heavy-box offense',
+   counters:['Pro R King Weak','I-Form Strong','Single Wing'],
+   coverage:'Cover 1 Man',
+   def:'4-3', alert:'OLBs own the edge contain — DEs collapse inside, never get washed out'},
+  {name:'Pirouette',num:5,  type:'Strong-Side Overload with Spin Stunt',
+   desc:'DE and OLB overload strong side, DE spins inside to B gap, OLB takes C gap edge.',
+   best:'Trips formations, strong-side runs, TE blocking schemes',
+   counters:['Trey R Weak','Trey R Strong','Pro L Twins R Strong'],
+   coverage:'Cover 3 Bracket — trips side bracketed',
+   def:'3-4', alert:'Timing must be perfect — DE initiates, OLB fires on DE spin'},
+  {name:'Compass',  num:6,  type:'DL Loop Stunt with LB Fill',
+   desc:'Interior DL loop around each other, opening lane for ILB to shoot the gap.',
+   best:'Spread formations, zone-blocking teams, gap exchange offenses',
+   counters:['Trips L Strong','Spread formations','any outside zone team'],
+   coverage:'Cover 2 Zone',
+   def:'4-3', alert:'LB reads the loop — fills whichever gap opens behind the stunt'},
+  {name:'Sidearm',  num:7,  type:'Weak-Side Edge with CB Support',
+   desc:'Will LB attacks C gap weak side, boundary CB provides run support from outside.',
+   best:'Boundary run plays, weak-side toss, outside zone to the boundary',
+   counters:['Pro L Twins R Weak','Pro R Twins L Weak','any boundary-run formation'],
+   coverage:'Cover 1 Man — field CB locked, FS high',
+   def:'4-3', alert:'CB must set hard edge — never get reached. LB and CB must time the fire together'},
+  {name:'Pounce',   num:8,  type:'Weak Edge with Safety Run Support',
+   desc:'DE attacks C gap weak, SS rotates down to alley. Creates 8-man box to weak side.',
+   best:'Outside zone weak side, toss sweep, jet motion to weak side',
+   counters:['Trey L Strong','Trey R Weak','any toss-sweep team'],
+   coverage:'Cover 3 — FS single-high, strong CB deep third',
+   def:'3-4', alert:'SS must read run key before rotating — cannot bite on play-action'},
+  {name:'Hawk',     num:9,  type:'Triple Pressure — 3-Man Edge Rush',
+   desc:'Both DEs and one OLB attack simultaneously with maximum edge speed.',
+   best:'4th down pass situations, backed up inside 20, must-pass downs',
+   counters:['Any pass-heavy formation','4-wide empty','3rd & long'],
+   coverage:'Cover 0 — all man, no safety help, must get home',
+   def:'3-4', alert:'Cover 0 — every DB locked man. Must get home in under 2.5 seconds or big play'},
+  {name:'Rocket',   num:10, type:'Motion-Triggered Blitz on Jet Motion',
+   desc:'Pre-snap alignment disguised. Fires on jet motion — times snap to attack backfield.',
+   best:'Jet sweep teams, motion-heavy offenses, teams that snap on motion',
+   counters:['Pro L Wing L Twins R Weak','Single Wing formations','Wing-T'],
+   coverage:'Cover 2 Zone — safeties read run/pass key',
+   def:'4-3', alert:'MUST identify jet motion pre-snap — call "JET JET JET" and fire on movement'},
+  {name:'Thunder',  num:11, type:'All-Out Zero Coverage — Max Pressure',
+   desc:'Every available rusher attacks. 6-man pressure minimum. Cover 0, no safety.',
+   best:'Backed up inside own 10, goal line stand, must-stop 4th down',
+   counters:['Any formation inside the 10','short yardage','goal line'],
+   coverage:'Cover 0 — every defender locked man, maximum risk/reward',
+   def:'3-4', alert:'🚨 MAXIMUM RISK — one missed assignment = touchdown. Use only when field position demands it'},
+  {name:'Cyclone',  num:12, type:'Disguised Coverage with Delayed 5-Man Pressure',
+   desc:'Shows Cover 2 shell, then 5 rushers fire at snap — CBs rotate to Cover 0 late.',
+   best:'RPO-heavy teams, QBs who read pre-snap coverage, 2nd & medium',
+   counters:['Trips L Strong','Trips L Weak','any RPO team'],
+   coverage:'Disguised Cover 0 — looks Cover 2, converts to man at snap',
+   def:'4-3', alert:'Disguise is everything — hold Cover 2 look until last second before snap'},
+];
+
+function showBlitzLib(){
+  const cards=BLITZ_PACKAGES.map(b=>{
+    const defColors={'4-3':'rgba(96,165,250,.12)','3-4':'rgba(34,197,94,.1)','3-3-5':'rgba(245,158,11,.1)'};
+    const defBorder={'4-3':'rgba(96,165,250,.3)','3-4':'rgba(34,197,94,.25)','3-3-5':'rgba(245,158,11,.3)'};
+    return `<div style="background:var(--navy2);border:1px solid rgba(255,255,255,.07);border-radius:12px;padding:14px 16px;margin-bottom:12px">
+      <div style="display:flex;align-items:center;gap:10px;margin-bottom:8px">
+        <div style="background:var(--gold);color:var(--navy);font-size:13px;font-weight:900;width:28px;height:28px;border-radius:50%;display:flex;align-items:center;justify-content:center;flex-shrink:0">${b.num}</div>
+        <div>
+          <div style="font-size:17px;font-weight:900;color:var(--white)">${esc(b.name)}</div>
+          <div style="font-size:10px;color:var(--gold);letter-spacing:.5px;text-transform:uppercase">${esc(b.type)}</div>
+        </div>
+        <span style="margin-left:auto;background:${defColors[b.def]||'rgba(255,255,255,.05)'};border:1px solid ${defBorder[b.def]||'rgba(255,255,255,.15)'};border-radius:6px;padding:2px 8px;font-size:10px;font-weight:700;color:var(--grayl);white-space:nowrap">${b.def}</span>
+      </div>
+      <div style="font-size:12px;color:var(--grayl);line-height:1.6;margin-bottom:10px">${esc(b.desc)}</div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:8px">
+        <div style="background:rgba(34,197,94,.08);border:1px solid rgba(34,197,94,.2);border-radius:8px;padding:8px 10px">
+          <div style="font-size:9px;letter-spacing:1.5px;text-transform:uppercase;color:var(--green);font-weight:700;margin-bottom:3px">Best Against</div>
+          <div style="font-size:11px;color:var(--grayl)">${esc(b.best)}</div>
+        </div>
+        <div style="background:rgba(96,165,250,.08);border:1px solid rgba(96,165,250,.2);border-radius:8px;padding:8px 10px">
+          <div style="font-size:9px;letter-spacing:1.5px;text-transform:uppercase;color:var(--blue);font-weight:700;margin-bottom:3px">Coverage Shell</div>
+          <div style="font-size:11px;color:var(--grayl)">${esc(b.coverage)}</div>
+        </div>
+      </div>
+      <div style="background:rgba(239,68,68,.08);border:1px solid rgba(239,68,68,.2);border-radius:8px;padding:7px 10px;margin-bottom:8px">
+        <div style="font-size:9px;letter-spacing:1.5px;text-transform:uppercase;color:var(--red);font-weight:700;margin-bottom:2px">&#9888; Alert</div>
+        <div style="font-size:11px;color:var(--grayl)">${esc(b.alert)}</div>
+      </div>
+      <div style="font-size:10px;color:var(--gray)">Counters: ${b.counters.map(c=>`<span style="background:rgba(240,165,0,.1);border:1px solid rgba(240,165,0,.2);border-radius:4px;padding:1px 6px;margin-right:4px;color:var(--gold)">${esc(c)}</span>`).join('')}</div>
+    </div>`;
+  }).join('');
+  document.getElementById('blitzLibBody').innerHTML=cards;
+  document.getElementById('blitzLibOv').classList.add('open');
+  document.body.style.overflow='hidden';
+}
+
+function closeBlitzLib(){
+  document.getElementById('blitzLibOv').classList.remove('open');
+  document.body.style.overflow='';
 }
 
 // ── PRINT ─────────────────────────────────────────────────────────────────────
