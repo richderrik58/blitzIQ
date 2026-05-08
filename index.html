@@ -1093,18 +1093,33 @@ function renderForms() {
     el.innerHTML = `<div class="empty"><div class="empty-icon">🏈</div><div class="empty-txt">No formations scouted yet.<br>Tap below to add this team's formations.</div></div>`;
     return;
   }
-  el.innerHTML = o.formations.map(f => `
-    <div class="card" onclick="selForm(${f.id})">
-      <div class="card-name-sm">${esc(f.name)}</div>
+  el.innerHTML = o.formations.map(f => {
+    const runs=(f.runPlays&&f.runPlays.length?f.runPlays:[f.favoriteRunPlay].filter(Boolean));
+    const passes=(f.passPlays&&f.passPlays.length?f.passPlays:[f.favoritePassPlay].filter(Boolean));
+    const runHTML=runs.length
+      ?runs.map(p=>`<div style="font-size:10px;color:var(--grayl);padding:1px 0;line-height:1.4">&#127939; ${esc(p)}</div>`).join('')
+      :'<div style="font-size:10px;color:var(--gray);font-style:italic">—</div>';
+    const passHTML=passes.length
+      ?passes.map(p=>`<div style="font-size:10px;color:var(--grayl);padding:1px 0;line-height:1.4">&#9992; ${esc(p)}</div>`).join('')
+      :'<div style="font-size:10px;color:var(--gray);font-style:italic">—</div>';
+    const usage=f.playCount&&f.totalPlays?`<span style="font-size:10px;color:var(--gray);margin-left:8px">${f.playCount}/${f.totalPlays} plays</span>`:'';
+    return `<div class="card" onclick="selForm(${f.id})">
+      <div class="card-name-sm">${esc(f.name)}${usage}</div>
       ${sbar(f.runPct,f.passPct)}
-      <div class="ptags">
-        <span class="tag tag-r">&#127939; ${esc(f.favoriteRunPlay)}</span>
-        <span class="tag tag-p">&#9992; ${esc(f.favoritePassPlay)}</span>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:10px">
+        <div>
+          <div style="font-size:9px;letter-spacing:1px;text-transform:uppercase;color:var(--green);font-weight:700;margin-bottom:4px">Run Plays</div>
+          ${runHTML}
+        </div>
+        <div>
+          <div style="font-size:9px;letter-spacing:1px;text-transform:uppercase;color:var(--blue);font-weight:700;margin-bottom:4px">Pass Plays</div>
+          ${passHTML}
+        </div>
       </div>
-      <div class="card-tend">${esc(f.downTendency)}</div>
       <button class="del-btn" onclick="delForm(${f.id},event)">✕</button>
       <button class="edit-btn" onclick="editForm(${f.id},event)" title="Edit">&#9998;</button>
-    </div>`).join('');
+    </div>`;
+  }).join('');
 }
 function selForm(id) { st.form=st.opp.formations.find(f=>f.id===id); renderSits(); showScreen(3); }
 
@@ -1361,6 +1376,8 @@ async function handlePDF(e) {
     return;
   }
 
+  // Sort files largest-first — the Formation Breakdown PDF is always the biggest file
+  files.sort((a,b)=>b.size-a.size);
   initProgress(files);
   const results=[];
 
@@ -1847,108 +1864,47 @@ function extractFormations(lines,data,tp){
     }
   }
 
-  data.extractionLog.push(`→ Phase 1: ${anchors.length} formation anchor(s) identified across all pages`);
+  // Sort anchors by usage (playCount descending) and keep only top 9
+  const sortedAnchors=anchors
+    .filter(a=>a.playCount>0)
+    .sort((a,b)=>(b.playCount||0)-(a.playCount||0));
+  // Include anchors with no playCount as lower-priority fallbacks
+  const noCount=anchors.filter(a=>!a.playCount);
+  const top9=[...sortedAnchors,...noCount].slice(0,9);
 
-  // ── Phase 2: detail scan ──────────────────────────────────────────────────
-  // For each anchor, scan from its line to the next anchor's line to extract
-  // FAV RUNS, FAV PASSES section plays, and per-formation D&D situations.
+  data.extractionLog.push(`→ Phase 1: ${anchors.length} anchor(s) found — keeping top ${top9.length} by usage`);
 
-  for(let ai=0;ai<anchors.length;ai++){
-    const a=anchors[ai];
+  // ── Phase 2: build formation records from top 9 anchors ──────────────────
+  for(const a of top9){
     if(seenNames.has(a.name)) continue;
     seenNames.add(a.name);
-
-    const detailStart=a.lineIdx+1;
-    const detailEnd=ai+1<anchors.length?anchors[ai+1].lineIdx:lines.length;
-
-    let favRun=tp.run||'', favPass=tp.pass||'';
-    const sitList=[], sitSeen=new Set();
-    let inFavRun=false, inFavPass=false;
-    let runTotal=0, passTotal=0, sitCount=0;
-
-    for(let i=detailStart;i<detailEnd&&i<lines.length;i++){
-      const sub=lines[i].trim();
-      if(!sub){ inFavRun=false; inFavPass=false; continue; }
-
-      // FAV RUNS / FAV PASSES section headers
-      if(/FAV(?:ORITE)?\s*RUNS?/i.test(sub)){ inFavRun=true; inFavPass=false; continue; }
-      if(/FAV(?:ORITE)?\s*PASS/i.test(sub)){ inFavPass=true; inFavRun=false; continue; }
-      // Reset on new major section header
-      if(/^(DOWN\s*(AND|&)\s*DISTANCE|PLAY\s+TYPE|PERSONNEL|OVERVIEW|TENDENCY)/i.test(sub)){
-        inFavRun=false; inFavPass=false;
-      }
-
-      // Play extraction in FAV RUNS/PASSES section.
-      // IMPORTANT: do NOT use isSkipWord here — play names like "JET SWEEP L" are
-      // correctly flagged as plays by isPlayName, but in the FAV context we want them.
-      if(inFavRun||inFavPass){
-        const w0=sub.split(/\s+/)[0];
-        if(isAllCaps(sub)&&!_HEADER_RE.test(sub.toUpperCase())&&w0.length>=2){
-          let playName=null;
-          if(!/\d/.test(sub)){
-            // Clean name-only line: "JET SWEEP L"
-            playName=sub;
-          } else {
-            // Combined name+stats line: "JET SWEEP L  2/13  15%  11  5.5  -"
-            const m=sub.match(/^([A-Z][A-Z\s\-'\(\)#]{2,45}?)(?:\s{2,}|\s+\d)/);
-            if(m) playName=m[1].trim();
-          }
-          if(playName&&playName.length>=3){
-            if(inFavRun&&!favRun){ favRun=playName; data.extractionLog.push(`  ↳ Run play "${a.name}": "${playName}"`); }
-            else if(inFavPass&&!favPass){ favPass=playName; data.extractionLog.push(`  ↳ Pass play "${a.name}": "${playName}"`); }
-          }
-        }
-      }
-
-      // Down/distance situations
-      for(const pat of SIT_PATS){
-        if(!pat.re.test(sub)||sitSeen.has(pat.label)) continue;
-        let pct=extractPctPair(sub);
-        if(!pct&&i+1<detailEnd) pct=extractPctPair(lines[i+1]);
-        if(pct){
-          sitSeen.add(pat.label);
-          sitList.push({down:pat.down,distLabel:pat.label,runPct:pct.run,passPct:pct.pass,
-            notes:'Extracted from Hudl.',dc:{}});
-          runTotal+=pct.run; passTotal+=pct.pass; sitCount++;
-        }
-        break;
-      }
-    }
-
-    // If runPct/passPct were 50/50 (placeholder), derive from D&D average
-    let runPct=a.runPct, passPct=a.passPct;
-    if(runPct===50&&passPct===50&&sitCount>0){
-      runPct=Math.round(runTotal/sitCount);
-      passPct=100-runPct;
-    }
-
     formations.push({
-      name:a.name, runPct, passPct,
+      name:a.name, runPct:a.runPct, passPct:a.passPct,
       playCount:a.playCount, totalPlays:a.totalPlays,
-      favoriteRunPlay:favRun, favoritePassPlay:favPass,
-      downTendency:'Imported from Hudl.', situations:sitList
+      favoriteRunPlay:'', favoritePassPlay:'',
+      runPlays:[], passPlays:[],          // arrays for all plays
+      downTendency:'Imported from Hudl.',
+      situations:[]
     });
-
     const badge=a.playCount?` (${a.playCount}/${a.totalPlays} plays)`:'';
-    data.extractionLog.push(`✓ ${a.name}${badge} — Run ${runPct}% / Pass ${passPct}%${sitList.length?` · ${sitList.length} D&D rows`:''}`);
+    data.extractionLog.push(`✓ ${a.name}${badge} — Run ${a.runPct}% / Pass ${a.passPct}%`);
   }
 
-  // ── Fallback: header-table scan if Phase 1 found nothing ─────────────────
+  // ── Fallback: table-only scan if Phase 1 found nothing ───────────────────
   if(formations.length===0){
-    data.extractionLog.push('✗ Phase 1 found 0 anchors — running table-only scan');
+    data.extractionLog.push('✗ No anchors — running table-only scan');
     for(const line of lines){
       const parsed=parseFormLine(line);
       if(parsed&&!seenNames.has(parsed.name)){
         seenNames.add(parsed.name);
-        parsed.favoriteRunPlay=tp.run||''; parsed.favoritePassPlay=tp.pass||'';
+        parsed.favoriteRunPlay=''; parsed.favoritePassPlay='';
+        parsed.runPlays=[]; parsed.passPlays=[];
         parsed.downTendency='Imported from Hudl.'; parsed.situations=[];
         formations.push(parsed);
-        data.extractionLog.push(`✓ Formation (table): "${parsed.name}" — Run ${parsed.runPct}% / Pass ${parsed.passPct}%`);
+        if(formations.length>=9) break; // cap at 9
       }
     }
   }
-
-  scanFormationPlayHeaders(lines,formations,data);
 
   const total=formations.length;
   data.extractionLog.push(total===0
@@ -1959,73 +1915,95 @@ function extractFormations(lines,data,tp){
 }
 
 // ── Phase 3: document-wide detail scan ────────────────────────────────────────
-// Backfills plays + run/pass tendency from per-formation DETAIL SECTIONS by
-// scanning backward from every FAV RUNS/PASSES header to identify which
-// formation it belongs to — avoids the "false context switch" problem where
-// formation names appearing as play names inside other FAV sections would
-// incorrectly reset the context.
+// Extracts per-formation play arrays (runPlays[], passPlays[]), run/pass tendency,
+// and per-down D&D situations from the formation DETAIL SECTIONS in the PDF.
 //
-// Formation identification uses playCount + /totalPlays as a fingerprint:
-//   detail header layout: "[NAME(split)]\n[playCount]\n[rank]\n.../[totalPlays]"
-//   backward from /N: collect TWO numbers — n1=rank (closer), n2=playCount
-// Play names may start with digits ("22 SPINNER TRAP") — handled explicitly.
-// FAV RUNS and FAV PASSES headers often appear together before play data,
-// so the forward scan skips FAV headers rather than stopping at them.
+// KEY FIX: FAV RUNS and FAV PASSES are separate sections — plays under FAV RUNS
+// go to runPlays[], plays under FAV PASSES go to passPlays[]. Do NOT mix them.
+// Stops FAV RUNS extraction at BACKFIELDS (not just at the next FAV header).
+//
+// Formation identification: backward scan from FAV RUNS finds /totalPlays,
+// then collects two standalone integers: n1=rank (closer), n2=playCount (further).
 function updateFormationsFromDetails(lines,formations,data){
 
-  // Helper: extract play name from a line (handles 3 formats)
+  // Extract a play name from a line — handles 3 formats:
+  //   "JET SWEEP L"  (all caps, no digits)
+  //   "29 OUTSIDE ZONE"  (numbered play call)
+  //   "JET SWEEP L  2/13  15%  11"  (combined name+stats on one line)
   function _pn(s){
     const w0=s.split(/\s+/)[0];
-    if(!isAllCaps(s)||_HEADER_RE.test(s.toUpperCase())||w0.length<2||s.length<4) return null;
-    if(!/\d/.test(s)) return s; // "JET SWEEP L"
-    if(/^\d{1,2}\s+[A-Z]/.test(s)) return s.replace(/\s+\d+\/.*$|\s+\d+\s+\d.*$/,'').trim(); // "22 SPINNER TRAP"
-    const m=s.match(/^([A-Z][A-Z\s\-'\(\)#]{2,45}?)(?:\s{2,}|\s+\d)/); return m?m[1].trim():null; // "JET SWEEP L  2/13"
+    if(!isAllCaps(s)||_HEADER_RE.test(s.toUpperCase())||w0.length<2||s.length<3) return null;
+    if(!/\d/.test(s)) return s;
+    if(/^\d{1,2}\s+[A-Z]/.test(s)) return s.replace(/\s+\d+\/.*$|\s+\d+\s+\d.*$/,'').trim();
+    const m=s.match(/^([A-Z][A-Z\s\-'\(\)#]{2,50}?)(?:\s{2,}|\s+\d)/); return m?m[1].trim():null;
   }
 
-  // Helper: identify formation by scanning backward from idx.
-  // Collects up to two standalone integers after finding /N:
-  //   n1 = rank (closest to /N), n2 = playCount (further)
-  // Tries n2 first (the actual play count), falls back to n1 and exact name match.
+  // Identify formation by scanning backward from idx.
+  // Detail block layout: "[name]\n[playCount]\n[rank]\n.../[totalPlays]"
+  // Scanning backward: hits /totalPlays first, then rank (n1), then playCount (n2).
   function _findForm(idx){
     let tot=null,n1=null,n2=null;
-    for(let k=idx-1;k>=Math.max(0,idx-500);k--){
+    for(let k=idx-1;k>=Math.max(0,idx-600);k--){
       const s=lines[k].trim(); if(!s) continue;
-      const slashM=s.match(/^\/(\d{1,4})$/);
-      if(slashM&&tot===null) tot=+slashM[1];
+      const slM=s.match(/^\/(\d{1,4})$/);
+      if(slM&&tot===null) tot=+slM[1];
       if(tot!==null){
-        const numM=s.match(/^(\d{1,3})$/);
-        if(numM){ if(n1===null)n1=+numM[1]; else{n2=+numM[1];break;} }
+        const nM=s.match(/^(\d{1,3})$/);
+        if(nM){ if(n1===null)n1=+nM[1]; else{n2=+nM[1];break;} }
       }
     }
     let f=null;
     if(n2!==null&&tot!==null) f=formations.find(x=>x.playCount===n2&&x.totalPlays===tot);
     if(!f&&n1!==null&&tot!==null) f=formations.find(x=>x.playCount===n1&&x.totalPlays===tot);
-    if(!f){ for(let k=idx-1;k>=Math.max(0,idx-600);k--){const s=lines[k].trim();const m=formations.find(x=>x.name===s);if(m){f=m;break;}} }
+    // Fallback: exact name match scanning backward
+    if(!f) for(let k=idx-1;k>=Math.max(0,idx-700);k--){
+      const s=lines[k].trim(); const m=formations.find(x=>x.name===s); if(m){f=m;break;}
+    }
     return f;
   }
 
-  // ── Play extraction: scan from every FAV RUNS section ────────────────────
-  const processed=new Set();
+  // ── Extract plays from FAV RUNS sections ─────────────────────────────────
+  // STOP at BACKFIELDS — that marks the end of the run plays list.
+  // Do NOT continue into FAV PASSES (different section = different plays).
   for(let i=0;i<lines.length;i++){
     if(!/^FAV(?:ORITE)?\s*RUNS?$/i.test(lines[i].trim())) continue;
     const f=_findForm(i);
-    if(!f||processed.has(f.name)) continue;
-    processed.add(f.name);
-    // Scan forward: skip (not stop at) FAV PASSES headers — plays from both
-    // columns often appear after BOTH headers in pdftotext output
-    for(let k=i+1;k<Math.min(i+60,lines.length);k++){
+    if(!f||!f.runPlays) continue;
+    for(let k=i+1;k<Math.min(i+50,lines.length);k++){
       const s=lines[k].trim(); if(!s) continue;
+      // BACKFIELDS marks the end of FAV RUNS
       if(/^(BACKFIELDS|MOTION|STRENGTH|BOUNDARY|CREATED)\b/i.test(s)) break;
-      if(/^FAV(?:ORITE)?\s*(RUNS?|PASS)/i.test(s)) continue; // skip, don't stop
+      // Another FAV header = done with this section
+      if(/^FAV(?:ORITE)?\s*(RUNS?|PASS)/i.test(s)) break;
       const pn=_pn(s);
-      if(pn&&pn.length>=3){
-        if(!f.favoriteRunPlay){ f.favoriteRunPlay=pn; data.extractionLog.push(`  ↳ Run play "${f.name}": "${pn}"`); }
-        else if(!f.favoritePassPlay&&pn!==f.favoriteRunPlay){ f.favoritePassPlay=pn; data.extractionLog.push(`  ↳ Pass play "${f.name}": "${pn}"`); break; }
+      if(pn&&pn.length>=3&&!f.runPlays.includes(pn)){
+        f.runPlays.push(pn);
+        if(!f.favoriteRunPlay) f.favoriteRunPlay=pn;
+        data.extractionLog.push(`  ↳ Run "${f.name}": "${pn}"`);
       }
     }
   }
 
-  // ── Tendency: scan from every "RUN" header ────────────────────────────────
+  // ── Extract plays from FAV PASSES sections ───────────────────────────────
+  // STOP at MOTION/STRENGTH/BOUNDARY — marks end of pass plays.
+  for(let i=0;i<lines.length;i++){
+    if(!/^FAV(?:ORITE)?\s*PASS/i.test(lines[i].trim())) continue;
+    const f=_findForm(i);
+    if(!f||!f.passPlays) continue;
+    for(let k=i+1;k<Math.min(i+50,lines.length);k++){
+      const s=lines[k].trim(); if(!s) continue;
+      if(/^(MOTION|STRENGTH|BOUNDARY|BACKFIELDS|CREATED)\b/i.test(s)) break;
+      if(/^FAV(?:ORITE)?\s*(RUNS?|PASS)/i.test(s)) break;
+      const pn=_pn(s);
+      if(pn&&pn.length>=3&&!f.passPlays.includes(pn)){
+        f.passPlays.push(pn);
+        if(!f.favoritePassPlay) f.favoritePassPlay=pn;
+        data.extractionLog.push(`  ↳ Pass "${f.name}": "${pn}"`);
+      }
+    }
+  }
+
+  // ── Run/pass tendency from standalone "RUN" header ────────────────────────
   for(let i=0;i<lines.length;i++){
     if(lines[i].trim()!=='RUN') continue;
     const f=_findForm(i);
@@ -2033,42 +2011,48 @@ function updateFormationsFromDetails(lines,formations,data){
     let rc=null,pc=null;
     for(let k=i+1;k<Math.min(i+30,lines.length);k++){
       const s=lines[k].trim();
-      if(/^FAV(?:ORITE)?\s*(RUNS?|PASS)/i.test(s)) break;
+      if(/^FAV/i.test(s)) break;
       const fM=s.match(/^(\d{1,3})\/(\d{1,4})/);
       if(fM){ if(rc===null)rc=+fM[1]; else{pc=+fM[1];break;} }
     }
     if(rc!==null&&pc!==null){
       const tot=rc+pc;
       if(tot>0){ f.runPct=Math.round(rc/tot*100); f.passPct=100-f.runPct;
-        data.extractionLog.push(`  ↳ Tendency "${f.name}": ${f.runPct}% run / ${f.passPct}% pass`); }
+        data.extractionLog.push(`  ↳ Tendency "${f.name}": ${f.runPct}% R / ${f.passPct}% P`); }
     }
   }
 
-  // ── Per-formation D&D: plain "1st/2nd/3rd/4th" rows ─────────────────────
-  let dCur=null;
+  // ── Per-formation D&D (plain 1st/2nd/3rd/4th rows) ────────────────────────
+  // Use the same _findForm logic for context: scan backward from each down row
+  // to find which formation's detail block it belongs to.
   for(let i=0;i<lines.length;i++){
-    const line=lines[i].trim(); if(!line) continue;
-    if(isAllCaps(line)&&!isSkipWord(line)){
-      const m=formations.find(f=>f.name===line); if(m) dCur=m;
+    const line=lines[i].trim();
+    if(!/^(1\s*st|2\s*nd|3\s*rd|4\s*th)\b/i.test(line)) continue;
+    // Look ahead for pct pair (run% pass%) on this line or next few lines
+    let pct=null;
+    for(let k=0;k<=3;k++){
+      pct=extractPctPair(lines[i+k]||'');
+      if(pct) break;
     }
-    if(!dCur) continue;
-    if(/^(1\s*st|2\s*nd|3\s*rd|4\s*th)\b/i.test(line)){
-      const pct=extractPctPair(line)||(i+1<lines.length?extractPctPair(lines[i+1]):null);
-      if(pct){
-        const d=/^1/.test(line)?1:/^2/.test(line)?2:/^3/.test(line)?3:4;
-        const lbl=`${d}${d===1?'st':d===2?'nd':d===3?'rd':'th'} Down`;
-        if(!dCur.situations.find(s=>s.distLabel===lbl))
-          dCur.situations.push({down:d,distLabel:lbl,runPct:pct.run,passPct:pct.pass,notes:'Extracted from Hudl.',dc:{}});
-      }
-    }
+    if(!pct) continue;
+    const f=_findForm(i);
+    if(!f) continue;
+    const d=/^1/.test(line)?1:/^2/.test(line)?2:/^3/.test(line)?3:4;
+    const lbl=`${d}${d===1?'st':d===2?'nd':d===3?'rd':'th'} Down`;
+    if(!f.situations.find(s=>s.distLabel===lbl))
+      f.situations.push({down:d,distLabel:lbl,runPct:pct.run,passPct:pct.pass,
+        notes:'Extracted from Hudl.',dc:{}});
   }
 
-  // ── Fallback: derive tendency from D&D average ───────────────────────────
+  // ── Fallback: derive tendency from D&D average if still 50/50 ────────────
   formations.forEach(f=>{
     if(f.runPct===50&&f.passPct===50&&f.situations.length>0){
       const avg=Math.round(f.situations.reduce((s,x)=>s+x.runPct,0)/f.situations.length);
       f.runPct=avg; f.passPct=100-avg;
     }
+    // Fallback: use first run/pass plays as favoriteRunPlay/favoritePassPlay
+    if(!f.favoriteRunPlay&&f.runPlays?.length) f.favoriteRunPlay=f.runPlays[0];
+    if(!f.favoritePassPlay&&f.passPlays?.length) f.favoritePassPlay=f.passPlays[0];
   });
 }
 
@@ -2426,9 +2410,17 @@ function openPreview(data,results){
                 <div class="pfc-spin"><button class="pfc-btn" onclick="adjFPct(${i},'pf_pass_${i}','pf_run_${i}',-5)">&#8722;</button><input class="pfc-num" id="pf_pass_${i}" type="number" value="${f.passPct}" min="0" max="100" oninput="syncFPct('pf_pass_${i}','pf_run_${i}')"><button class="pfc-btn" onclick="adjFPct(${i},'pf_pass_${i}','pf_run_${i}',5)">+</button></div>
               </div>
             </div>
-            <div class="pfc-plays">
-              <input class="pfc-play-in" id="pf_frun_${i}" placeholder="&#127939; Top Run Play" value="${esc(f.favoriteRunPlay)}">
-              <input class="pfc-play-in" id="pf_fpass_${i}" placeholder="&#9992; Top Pass Play" value="${esc(f.favoritePassPlay)}">
+            <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:6px">
+              <div>
+                <div style="font-size:9px;letter-spacing:1px;text-transform:uppercase;color:var(--green);font-weight:700;margin-bottom:4px">Run Plays</div>
+                ${(f.runPlays&&f.runPlays.length?f.runPlays:[f.favoriteRunPlay].filter(Boolean)).map(p=>`<div style="font-size:10px;color:var(--grayl);padding:1px 0">&#127939; ${esc(p)}</div>`).join('')||'<div style="font-size:10px;color:var(--gray);font-style:italic">—</div>'}
+                <input class="pfc-play-in" id="pf_frun_${i}" placeholder="&#127939; Top Run Play" value="${esc(f.favoriteRunPlay)}" style="margin-top:4px">
+              </div>
+              <div>
+                <div style="font-size:9px;letter-spacing:1px;text-transform:uppercase;color:var(--blue);font-weight:700;margin-bottom:4px">Pass Plays</div>
+                ${(f.passPlays&&f.passPlays.length?f.passPlays:[f.favoritePassPlay].filter(Boolean)).map(p=>`<div style="font-size:10px;color:var(--grayl);padding:1px 0">&#9992; ${esc(p)}</div>`).join('')||'<div style="font-size:10px;color:var(--gray);font-style:italic">—</div>'}
+                <input class="pfc-play-in" id="pf_fpass_${i}" placeholder="&#9992; Top Pass Play" value="${esc(f.favoritePassPlay)}" style="margin-top:4px">
+              </div>
             </div>
           </div>`).join('')}
     </div>
@@ -2485,7 +2477,10 @@ function importPreview(){
     const ffpass=(document.getElementById('pf_fpass_'+i)?.value||f.favoritePassPlay).trim();
     formations.push({id:uid(),name:fname||'Unnamed Formation',runPct:frun,passPct:100-frun,
       favoriteRunPlay:ffrun||'Not specified',favoritePassPlay:ffpass||'Not specified',
-      downTendency:'Imported from Hudl. Add tendency notes in app.',
+      runPlays:f.runPlays||[],    // preserve full run play array
+      passPlays:f.passPlays||[], // preserve full pass play array
+      playCount:f.playCount||null, totalPlays:f.totalPlays||null,
+      downTendency:'Imported from Hudl.',
       situations:f.situations.map(s=>({...s,id:uid(),dc:{coverage:'',blitz:'',reason:'',alert:''}}))});
   });
   const newOpp={id:uid(),name,season:season||String(new Date().getFullYear()),
