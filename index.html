@@ -3140,21 +3140,16 @@ function adjustDefenseToStrength(strength, cw){
   const fs=def.find(p=>p.type==='FS');
   const lbs=def.filter(p=>['LB','MLB','OLB'].includes(p.type)).sort((a,b)=>a.x-b.x);
 
-  // The default 4-3/3-4 presets place SS at xf≈0.38 (left of center)
-  // which represents STRONG-LEFT alignment.
-  // For STRONG RIGHT: mirror SS to the right side and keep FS in the middle.
+  // SS always aligns to formation strength — 2 yards inside #2 receiver
+  // Presets default to strong-right (SS at xf≈0.70); flip here for strong-left.
   if(strength==='right'){
-    if(ss&&ss.x<cw*0.5){
-      ss.x=Math.round(cw-ss.x); // mirror to right
-    }
+    if(ss) ss.x=Math.round(cw*0.70);
     if(fs) fs.x=Math.round(cw*0.50);
-    // SAM (rightmost LB) stays right — already correct
-    // WILL (leftmost LB) stays left — already correct
   } else {
-    // STRONG LEFT: SS already on left — but ensure FS is slightly right of center
-    if(ss&&ss.x>cw*0.5) ss.x=Math.round(cw*0.28);
-    if(fs) fs.x=Math.round(cw*0.52);
-    // For strong left, swap WILL/SAM x positions so SAM is on the left (strong side)
+    // STRONG LEFT: move SS to left side
+    if(ss) ss.x=Math.round(cw*0.30);
+    if(fs) fs.x=Math.round(cw*0.50);
+    // Swap outermost LBs so Sam (strong LB) ends up on the left (strong) side
     if(lbs.length>=2){
       const will=lbs[0], sam=lbs[lbs.length-1];
       if(will!==sam){ const tx=will.x; will.x=sam.x; sam.x=tx; }
@@ -3903,45 +3898,61 @@ function selectSymbol(type,team,btn){
 // xf = fraction of canvas width (0=left, 1=right, 0.5=center)
 // yd = pixels from line of scrimmage (negative = defensive side, positive = offensive side)
 const CV_PRESETS = {
-  // ── DEFENSIVE — spread full field width ───────────────────────────────────────
+  // ── DEFENSIVE — precise coaching alignments (1 yd = 14px vert, 0.019xf horiz) ─
+  // Depths: LOS=yd-38, 2yds=-66, 3yds=-80, 5yds=-108, 8yds=-150, 10yds=-178
+  // Strong side = RIGHT by default; adjustDefenseToStrength() flips for left
   '4-3':[
-    {type:'DE',  team:'def', xf:0.22, yd:-38},  // wide 5-tech
-    {type:'DT',  team:'def', xf:0.39, yd:-38},  // 3-tech strong
-    {type:'DT',  team:'def', xf:0.61, yd:-38},  // 1-tech weak
-    {type:'DE',  team:'def', xf:0.78, yd:-38},  // wide 5-tech
-    {type:'LB',  team:'def', xf:0.20, yd:-95},  // Will — outside
-    {type:'MLB', team:'def', xf:0.50, yd:-95},  // Mike — middle
-    {type:'LB',  team:'def', xf:0.80, yd:-95},  // Sam — outside
-    {type:'CB',  team:'def', xf:0.04, yd:-62},  // weak CB near sideline
-    {type:'SS',  team:'def', xf:0.35, yd:-165}, // strong safety
-    {type:'FS',  team:'def', xf:0.65, yd:-165}, // free safety
-    {type:'CB',  team:'def', xf:0.96, yd:-62},  // strong CB near sideline
+    // DL on LOS — 5-tech outside shade of OT; 3-tech outside shade of sG; 1-tech inside shade of wG
+    {type:'DE',  team:'def', xf:0.33, yd:-38},  // wDE — 5-tech outside shade wOT
+    {type:'DT',  team:'def', xf:0.45, yd:-38},  // wDT — 1-tech inside shade wG
+    {type:'DT',  team:'def', xf:0.59, yd:-38},  // sDT — 3-tech outside shade sG
+    {type:'DE',  team:'def', xf:0.67, yd:-38},  // sDE — 5-tech outside shade sOT
+    // LBs 5 yards off LOS — Will behind wDT, Mike behind C, Sam behind sDT
+    {type:'LB',  team:'def', xf:0.45, yd:-108}, // Will — 5 yds behind wDT
+    {type:'MLB', team:'def', xf:0.50, yd:-108}, // Mike — 5 yds behind center
+    {type:'LB',  team:'def', xf:0.59, yd:-108}, // Sam — 5 yds behind sDT
+    // CBs 5 yards off LOS, 1 yard inside #1 receiver
+    {type:'CB',  team:'def', xf:0.06, yd:-108}, // wCB — 5 yds, 1 yd inside wWR
+    // Safeties — SS 8 yds 2 yds inside #2 receiver strong; FS 10 yds center field
+    {type:'SS',  team:'def', xf:0.70, yd:-150}, // SS — 8 yds, strong side
+    {type:'FS',  team:'def', xf:0.50, yd:-178}, // FS — 10 yds, center field
+    {type:'CB',  team:'def', xf:0.94, yd:-108}, // sCB — 5 yds, 1 yd inside sWR
   ],
   '3-4':[
-    {type:'DE',  team:'def', xf:0.32, yd:-38},
-    {type:'NT',  team:'def', xf:0.50, yd:-38},
-    {type:'DE',  team:'def', xf:0.68, yd:-38},
-    {type:'LB',  team:'def', xf:0.10, yd:-95},  // weak OLB — wide
-    {type:'LB',  team:'def', xf:0.37, yd:-95},  // weak ILB
-    {type:'LB',  team:'def', xf:0.63, yd:-95},  // strong ILB
-    {type:'LB',  team:'def', xf:0.90, yd:-95},  // strong OLB — wide
-    {type:'CB',  team:'def', xf:0.04, yd:-62},
-    {type:'SS',  team:'def', xf:0.35, yd:-170},
-    {type:'FS',  team:'def', xf:0.65, yd:-170},
-    {type:'CB',  team:'def', xf:0.96, yd:-62},
+    // DL on LOS — DE head up OT; NT head up C
+    {type:'DE',  team:'def', xf:0.36, yd:-38},  // wDE — head up wOT
+    {type:'NT',  team:'def', xf:0.50, yd:-38},  // NT — head up center
+    {type:'DE',  team:'def', xf:0.64, yd:-38},  // sDE — head up sOT
+    // OLBs 2 yards off LOS, 2 yards outside OT — NOT on WR
+    {type:'LB',  team:'def', xf:0.32, yd:-66},  // wOLB — 2 yds outside wOT, 2 yds off LOS
+    // ILBs 5 yards off LOS directly behind DE
+    {type:'LB',  team:'def', xf:0.38, yd:-108}, // wILB — 5 yds, behind wDE
+    {type:'LB',  team:'def', xf:0.62, yd:-108}, // sILB — 5 yds, behind sDE
+    {type:'LB',  team:'def', xf:0.68, yd:-66},  // sOLB — 2 yds outside sOT, 2 yds off LOS
+    // CBs 5 yards off LOS, 1 yard inside #1 receiver
+    {type:'CB',  team:'def', xf:0.06, yd:-108}, // wCB — 5 yds, 1 yd inside wWR
+    // Safeties
+    {type:'SS',  team:'def', xf:0.70, yd:-150}, // SS — 8 yds, strong side
+    {type:'FS',  team:'def', xf:0.50, yd:-178}, // FS — 10 yds, center field
+    {type:'CB',  team:'def', xf:0.94, yd:-108}, // sCB — 5 yds, 1 yd inside sWR
   ],
   '3-3-5':[
-    {type:'DE',  team:'def', xf:0.32, yd:-38},
-    {type:'NT',  team:'def', xf:0.50, yd:-38},
-    {type:'DE',  team:'def', xf:0.68, yd:-38},
-    {type:'LB',  team:'def', xf:0.25, yd:-95},
-    {type:'MLB', team:'def', xf:0.50, yd:-95},
-    {type:'LB',  team:'def', xf:0.75, yd:-95},
-    {type:'CB',  team:'def', xf:0.04, yd:-58},  // near sideline
-    {type:'NB',  team:'def', xf:0.28, yd:-148},
-    {type:'FS',  team:'def', xf:0.50, yd:-180},
-    {type:'SS',  team:'def', xf:0.72, yd:-148},
-    {type:'CB',  team:'def', xf:0.96, yd:-58},  // near sideline
+    // DL on LOS — DE 4i inside shade of OT; NT 0-tech head up C
+    {type:'DE',  team:'def', xf:0.38, yd:-38},  // wDE — 4i inside shade wOT
+    {type:'NT',  team:'def', xf:0.50, yd:-38},  // NT — 0-tech head up center
+    {type:'DE',  team:'def', xf:0.62, yd:-38},  // sDE — 4i inside shade sOT
+    // OLBs 3 yards off LOS, 2 yards outside OT
+    {type:'LB',  team:'def', xf:0.32, yd:-80},  // wOLB — 3 yds off LOS, 2 yds outside wOT
+    // MLB 5 yards behind center
+    {type:'MLB', team:'def', xf:0.50, yd:-108}, // MLB — 5 yds, behind center
+    {type:'LB',  team:'def', xf:0.68, yd:-80},  // sOLB — 3 yds off LOS, 2 yds outside sOT
+    // CBs 5 yards off LOS, 1 yard inside #1 receiver; Nickel on strong-side slot
+    {type:'CB',  team:'def', xf:0.06, yd:-108}, // wCB — 5 yds, 1 yd inside wWR
+    {type:'NB',  team:'def', xf:0.75, yd:-108}, // Nickel — 5 yds, strong-side slot
+    // Safeties — FS directly over center; SS 8 yds strong side
+    {type:'SS',  team:'def', xf:0.70, yd:-150}, // SS — 8 yds, strong side
+    {type:'FS',  team:'def', xf:0.50, yd:-178}, // FS — 10 yds, directly over center
+    {type:'CB',  team:'def', xf:0.94, yd:-108}, // sCB — 5 yds, 1 yd inside sWR
   ],
   // ── OFFENSIVE — WRs at sidelines, OL tighter (18px gap / 46px c-to-c) ──────────
   // OL at center±0.072 increments (46px on 640px canvas)
@@ -4993,7 +5004,8 @@ function showBlitzLib(){
         <div style="font-size:9px;letter-spacing:1.5px;text-transform:uppercase;color:var(--red);font-weight:700;margin-bottom:2px">&#9888; Alert</div>
         <div style="font-size:11px;color:var(--grayl)">${esc(b.alert)}</div>
       </div>
-      <div style="font-size:10px;color:var(--gray)">Counters: ${b.counters.map(c=>`<span style="background:rgba(240,165,0,.1);border:1px solid rgba(240,165,0,.2);border-radius:4px;padding:1px 6px;margin-right:4px;color:var(--gold)">${esc(c)}</span>`).join('')}</div>
+      <div style="font-size:10px;color:var(--gray);margin-bottom:10px">Counters: ${b.counters.map(c=>`<span style="background:rgba(240,165,0,.1);border:1px solid rgba(240,165,0,.2);border-radius:4px;padding:1px 6px;margin-right:4px;color:var(--gold)">${esc(c)}</span>`).join('')}</div>
+      <button onclick="loadBlitzBase('${b.def}')" style="width:100%;padding:9px 0;background:var(--gold);color:var(--navy);border:none;border-radius:8px;font-size:13px;font-weight:900;cursor:pointer;letter-spacing:.3px">&#9654; Load ${esc(b.def)} Base to Canvas</button>
     </div>`;
   }).join('');
   document.getElementById('blitzLibBody').innerHTML=cards;
@@ -5004,6 +5016,16 @@ function showBlitzLib(){
 function closeBlitzLib(){
   document.getElementById('blitzLibOv').classList.remove('open');
   document.body.style.overflow='';
+}
+
+function loadBlitzBase(defPreset){
+  closeBlitzLib();
+  const ov=document.getElementById('canvasOv');
+  if(!ov.classList.contains('open')){
+    openCanvas(()=>{ placePreset(defPreset); });
+  } else {
+    placePreset(defPreset);
+  }
 }
 
 // ── PRINT ─────────────────────────────────────────────────────────────────────
