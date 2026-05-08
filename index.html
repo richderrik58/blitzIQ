@@ -1534,6 +1534,17 @@ function combineResults(results){
   formations.sort((a,b)=>(b.playCount||0)-(a.playCount||0));
   if(formations.length>9) formations.splice(9);
 
+  // Derive overall tendency from formation-weighted average if not found in any PDF
+  // (Formation Breakdown PDFs don't include an overall run/pass line)
+  if(!ovFound){
+    const totalPlays=formations.reduce((s,f)=>s+(f.playCount||0),0);
+    if(totalPlays>0){
+      const wr=formations.reduce((s,f)=>s+(f.runPct||50)*(f.playCount||0),0);
+      runPct=Math.round(wr/totalPlays); passPct=100-runPct;
+      log.push(`✓ Overall tendency derived from formations: Run ${runPct}% / Pass ${passPct}%`);
+    }
+  }
+
   const combined={
     teamName,season,runPct,passPct,
     notes:`Imported from ${results.length} Hudl PDF${results.length>1?'s':''}.`,
@@ -2091,6 +2102,7 @@ function updateFormationsFromDetails(lines,formations,data){
     const hdr=lines[i].trim();
     if(!/^FAV(?:ORITE)?\s*RUNS?\b/i.test(hdr)) continue;
     const f=_findForm(i);
+    data.extractionLog.push(`  FAV@${i}: "${hdr.slice(0,35)}" → ${f?f.name:'NULL'}`);
     if(!f||!f.runPlays) continue;
     const isMerged=/FAV\s*PASS/i.test(hdr); // true when FAV PASSES is on the same header line
     for(let k=i+1;k<Math.min(i+50,lines.length);k++){
