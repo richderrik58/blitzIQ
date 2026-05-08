@@ -1819,15 +1819,17 @@ function extractFormations(lines,data,tp){
                 runPct:pct.run,passPct:pct.pass});
             done=true; break;
           }
-          // ALL CAPS line with no digits → name continuation ("R ACE UC" after "1  TREY")
-          if(isAllCaps(sub)&&!/\d/.test(sub)&&sub.length>=2){ nameExt+=' '+sub; continue; }
+          // Section boundary check comes FIRST to prevent headers being added to nameExt
+          if(/^(RUN|PASS|DOWN|BACKFIELD|MOTION|FAV|STRENGTH|BOUNDARY)\b/i.test(sub)) break;
+          // Name continuation: single-char R/L direction letter OR full ALL CAPS line
+          // No digit restriction — "R 3 ON THE BALL STRONG" is a valid continuation
+          // Stats lines (lowercase) are already rejected by isAllCaps
+          if(/^[RL]$/.test(sub)||(isAllCaps(sub)&&sub.length>=2)){ nameExt+=' '+sub; continue; }
           // Standalone integer → candidate playCount ("19" in the B2 split)
           if(/^\d{1,3}$/.test(sub)){ if(candidatePC===null) candidatePC=parseInt(sub); continue; }
           // "N  N stats..." → first N is playCount embedded in a stats line ("3  3 Tot Yds ...")
           const leadM=sub.match(/^(\d{1,3})\s+\d/);
           if(leadM&&candidatePC===null){ candidatePC=parseInt(leadM[1]); continue; }
-          // Clear section boundary → stop
-          if(/^(RUN|PASS|DOWN|BACKFIELD|MOTION|FAV|STRENGTH|BOUNDARY)\b/i.test(sub)) break;
         }
         if(!done){
           const fn=(rname+(nameExt?' '+nameExt.trim():'')).trim();
