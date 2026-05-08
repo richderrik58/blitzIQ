@@ -1539,7 +1539,7 @@ function combineResults(results){
   if(!ovFound){
     const totalPlays=formations.reduce((s,f)=>s+(f.playCount||0),0);
     if(totalPlays>0){
-      const wr=formations.reduce((s,f)=>s+(f.runPct||50)*(f.playCount||0),0);
+      const wr=formations.reduce((s,f)=>s+(f.runPct??50)*(f.playCount||0),0);
       runPct=Math.round(wr/totalPlays); passPct=100-runPct;
       log.push(`✓ Overall tendency derived from formations: Run ${runPct}% / Pass ${passPct}%`);
     }
