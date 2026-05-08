@@ -424,6 +424,7 @@
     <button class="act-sec" onclick="printGamePlan()">&#128438; Print Plan</button>
     <button class="act-sec" onclick="shareGamePlan()">&#11014; Email Plan</button>
     <button class="act-sec" onclick="copyGamePlan()">&#128203; Copy Text</button>
+    <button class="act-sec" style="grid-column:1/-1;font-size:14px" onclick="showPracticeScript()">&#127944; Practice Script Generator</button>
   </div>
   <p class="sec-lbl">Offensive Formations</p>
   <div id="formList"></div>
@@ -480,6 +481,23 @@
     </div>
   </div>
   <div class="prev-body" id="gpBody"></div>
+</div>
+
+<!-- PRACTICE SCRIPT OVERLAY -->
+<div class="prev-ov" id="scriptOv">
+  <div class="prev-hdr">
+    <div class="prev-hdr-l">
+      <div class="prev-title" id="scriptTitle">Practice Script</div>
+      <div class="prev-file" id="scriptSub">Defensive Calls + Scout Team</div>
+    </div>
+    <div style="display:flex;gap:6px;flex-shrink:0;flex-wrap:wrap">
+      <button class="cbtn-save" onclick="printPracticeScript()" style="font-size:11px;display:flex;align-items:center;gap:4px">&#128438; Print</button>
+      <button class="cbtn-save" onclick="sharePracticeScript()" style="font-size:11px;background:rgba(240,165,0,.18);border:1.5px solid rgba(240,165,0,.5);color:var(--gold);display:flex;align-items:center;gap:4px">&#11014; Email</button>
+      <button class="cbtn-save" onclick="copyPracticeScript()" style="font-size:11px;background:rgba(255,255,255,.07);border:1px solid rgba(255,255,255,.2);color:var(--grayl)">&#128203; Copy</button>
+      <button class="cbtn-close" onclick="closePracticeScript()">&#10005;</button>
+    </div>
+  </div>
+  <div class="prev-body" id="scriptBody"></div>
 </div>
 
 <!-- PLAY CANVAS OVERLAY -->
@@ -4073,6 +4091,368 @@ function cvEnd(e){ cvDrawing=false; cvDragging=null; }
   c.addEventListener('touchmove',  e=>cvMove(e.touches[0]?{...e,clientX:e.touches[0].clientX,clientY:e.touches[0].clientY,preventDefault:()=>e.preventDefault()}:e),{passive:false});
   c.addEventListener('touchend',   cvEnd);
 })();
+
+// ── PRACTICE SCRIPT GENERATOR ────────────────────────────────────────────────
+const _HASHES=['Left','Right','Middle','Field','Boundary'];
+const _RUN_PLAYS=['Inside Zone','Outside Zone','Power O','Counter GT','Toss Sweep','QB Keeper','Off Tackle','Iso'];
+const _PASS_PLAYS=['4 Verticals','Curl-Flat','Mesh','Smash','Stick','Slant-Cross','Post Corner','Four Curls','Sail','Snag'];
+
+function _pickPlay(f, isRun, idx){
+  if(isRun){
+    if(f.favoriteRunPlay&&f.favoriteRunPlay!=='Not specified') return f.favoriteRunPlay;
+    return _RUN_PLAYS[idx%_RUN_PLAYS.length];
+  }
+  if(f.favoritePassPlay&&f.favoritePassPlay!=='Not specified') return f.favoritePassPlay;
+  return _PASS_PLAYS[idx%_PASS_PLAYS.length];
+}
+
+function _scoutNote(play, isRun){
+  const p=play.toUpperCase();
+  if(isRun){
+    if(/ZONE/.test(p))      return 'OL zone combo — reach block playside, backside cut';
+    if(/POWER|COUNTER/.test(p)) return 'Guard pull — kick-out edge, FB/TE lead through hole';
+    if(/SWEEP|TOSS/.test(p))return 'WR crack block — bounce outside, FB leads';
+    if(/KEEPER|QB/.test(p)) return 'OL influence inside — QB keeps outside alley';
+    if(/ISO/.test(p))       return 'FB lead through A/B gap — run downhill hard';
+    return 'Drive block frontside — RB reads tackle to frontside LB';
+  }
+  if(/SCREEN/.test(p))  return 'OL release after count — RB sets up rush then slips flat';
+  if(/VERT|GO|FOUR.V/.test(p)) return 'WRs push vertical stems — QB looks downfield first';
+  if(/CURL|HOOK/.test(p))  return 'WR 14-yd curl — QB manipulate safety with eyes, check curl';
+  if(/MESH|CROSS/.test(p)) return 'Inside crossers mesh at 5 yds — RB flat opposite side';
+  if(/SLANT/.test(p))      return 'WR sharp inside break — release fast off LOS';
+  if(/SMASH|CORNER/.test(p)) return 'Hitch underneath, corner route over — CB must choose';
+  if(/STICK|SNAG/.test(p)) return 'WR 5-yd stop route — RB swing same side';
+  if(/SAIL/.test(p))       return 'Seam/go combo — FS has to respect deep first';
+  return 'Run routes at full speed — QB check down if primary is covered';
+}
+
+function _buildPlayLines(o){
+  const rows=[]; let n=1;
+  o.formations.forEach(f=>{
+    const baseRec=f.recommendation||generateRecommendation(f);
+    const sits=(f.situations&&f.situations.length)?f.situations
+      :[{distLabel:'1st & 10',runPct:f.runPct,passPct:f.passPct,down:1,dist:10,dc:{}}];
+    sits.forEach(s=>{
+      const dc=s.dc&&(s.dc.coverage||s.dc.blitz)?s.dc
+        :generateSituationDC(f,s,baseRec);
+      // Primary tendency play
+      const isRun=s.runPct>=50;
+      rows.push({n:n++,form:f.name,play:_pickPlay(f,isRun,n),sit:s.distLabel,
+        hash:_HASHES[n%5],cov:dc.coverage||baseRec.coverage,blitz:dc.blitz||baseRec.blitz,
+        note:_scoutNote(_pickPlay(f,isRun,n),isRun)});
+      // Counter tendency play (shows scout team the other option)
+      rows.push({n:n++,form:f.name,play:_pickPlay(f,!isRun,n),sit:s.distLabel,
+        hash:_HASHES[n%5],cov:dc.coverage||baseRec.coverage,blitz:dc.blitz||baseRec.blitz,
+        note:_scoutNote(_pickPlay(f,!isRun,n),!isRun)});
+    });
+  });
+  return rows;
+}
+
+function _buildAdjustments(o){
+  const a=[]; const forms=o.formations||[];
+  const nm=f=>f.name.toUpperCase();
+  if(forms.some(f=>/TRIPS|TREY/.test(nm(f))))
+    a.push({trigger:'Motion to Trips or Trey',call:'Rotate to Cover 3 Bracket',detail:'Flat defender carries #3, two CBs own deep thirds — don\'t give up the seam'});
+  if(forms.some(f=>/EMPTY/.test(nm(f))))
+    a.push({trigger:'Empty backfield detected',call:'Cover 0 Max Pressure — 6 rushers',detail:'Every CB locked man, no safety help — must get home inside 2.5 seconds'});
+  if(forms.some(f=>/\bTE\b|\bWING\b|\bKING\b|\bPRO\b|\bI.?FORM\b|\bTIGHT/.test(nm(f))))
+    a.push({trigger:'TE on field (3-4 base)',call:'Bump Strong DE B→C gap, OLB C→D gap',detail:'TE accounts for C gap — Strong OLB owns the D gap edge, check STRONG direction'});
+  const heavyRun=forms.filter(f=>f.runPct>=75);
+  if(heavyRun.length)
+    a.push({trigger:`Heavy run (${heavyRun.map(f=>f.name).join(', ')})`,call:'Cover 1 — Stack 8 in box',detail:'FS single high, CB locked man outside, LBs fill gaps — outnumber OL at POA'});
+  const heavyPass=forms.filter(f=>f.passPct>=75);
+  if(heavyPass.length)
+    a.push({trigger:`Pass heavy (${heavyPass.map(f=>f.name).join(', ')})`,call:'Cover 4 Quarters — carry all verticals',detail:'CBs and safeties each own a deep quarter, LBs carry curl-flat — no soft coverage'});
+  a.push({trigger:'Any pre-snap motion',call:'Declare "MOTION MOTION" — rotate direction',detail:'Coverage rotates to follow the strength — call coverage adjustment before snap'});
+  return a.slice(0,5);
+}
+
+function _buildScoutInstructions(o){
+  return (o.formations||[]).map(f=>{
+    const run=f.favoriteRunPlay&&f.favoriteRunPlay!=='Not specified'?f.favoriteRunPlay:'Inside Zone';
+    const pass=f.favoritePassPlay&&f.favoritePassPlay!=='Not specified'?f.favoritePassPlay:'4 Verticals';
+    const runNote=_scoutNote(run,true);
+    const passNote=_scoutNote(pass,false);
+    return {name:f.name,runPct:f.runPct,passPct:f.passPct,run,pass,runNote,passNote};
+  });
+}
+
+function buildPracticeScriptHTML(o){
+  applyRecommendations(o);
+  const callRows=o.formations.map(f=>{
+    const rec=f.recommendation||generateRecommendation(f);
+    const preset=getDefPreset(f);
+    const lean=f.passPct>=60
+      ?`<span style="color:var(--blue);font-weight:700">${f.passPct}% PASS</span>`
+      :`<span style="color:var(--green);font-weight:700">${f.runPct}% RUN</span>`;
+    return `<tr style="border-bottom:1px solid rgba(255,255,255,.05)">
+      <td style="padding:6px 10px 6px 0;font-weight:800;font-size:12px">${esc(f.name)}</td>
+      <td style="padding:6px 10px 6px 0;font-size:11px">${lean}</td>
+      <td style="padding:6px 10px 6px 0;font-size:11px;color:var(--gold);font-weight:700">${esc(rec.coverage)}</td>
+      <td style="padding:6px 0;font-size:11px;color:var(--grayl)">${esc(rec.blitz)}</td>
+      <td style="padding:6px 0;font-size:10px;color:var(--gray)">${esc(preset.toUpperCase())}</td>
+    </tr>`;
+  }).join('');
+
+  const adj=_buildAdjustments(o);
+  const adjRows=adj.map((a,i)=>`
+    <div style="background:var(--navy2);border:1px solid rgba(255,255,255,.07);border-radius:10px;padding:12px 14px;margin-bottom:8px">
+      <div style="display:flex;gap:10px;align-items:flex-start">
+        <div style="background:var(--gold);color:var(--navy);font-size:11px;font-weight:900;width:22px;height:22px;border-radius:50%;display:flex;align-items:center;justify-content:center;flex-shrink:0">${i+1}</div>
+        <div>
+          <div style="font-size:11px;color:var(--gray);margin-bottom:2px">When: <strong style="color:var(--white)">${esc(a.trigger)}</strong></div>
+          <div style="font-size:12px;font-weight:800;color:var(--gold);margin-bottom:3px">→ ${esc(a.call)}</div>
+          <div style="font-size:10px;color:var(--grayl)">${esc(a.detail)}</div>
+        </div>
+      </div>
+    </div>`).join('');
+
+  const plays=_buildPlayLines(o);
+  const playRows=plays.map(p=>`
+    <tr style="border-bottom:1px solid rgba(255,255,255,.04)">
+      <td style="padding:5px 8px 5px 0;color:var(--gold);font-weight:900;font-size:13px;min-width:28px">${p.n}</td>
+      <td style="padding:5px 8px 5px 0;font-weight:700;font-size:11px;white-space:nowrap">${esc(p.form)}</td>
+      <td style="padding:5px 8px 5px 0;font-size:11px">${esc(p.play)}</td>
+      <td style="padding:5px 8px 5px 0;font-size:11px;white-space:nowrap;color:var(--grayl)">${esc(p.sit)}</td>
+      <td style="padding:5px 8px 5px 0;font-size:11px;color:var(--gray)">${esc(p.hash)}</td>
+      <td style="padding:5px 8px 5px 0;font-size:11px;color:var(--gold);font-weight:700;white-space:nowrap">${esc(p.cov)}</td>
+      <td style="padding:5px 8px 5px 0;font-size:11px;white-space:nowrap">${esc(p.blitz)}</td>
+      <td style="padding:5px 0;font-size:10px;color:var(--gray);font-style:italic">${esc(p.note)}</td>
+    </tr>`).join('');
+
+  const scout=_buildScoutInstructions(o);
+  const scoutRows=scout.map(s=>`
+    <div style="background:var(--navy2);border:1px solid rgba(255,255,255,.07);border-radius:10px;padding:12px 14px;margin-bottom:8px">
+      <div style="font-size:13px;font-weight:800;color:var(--gold);margin-bottom:8px">${esc(s.name)}</div>
+      <div style="margin-bottom:5px">
+        <span style="color:var(--green);font-size:10px;font-weight:800;letter-spacing:.5px;text-transform:uppercase">RUN ${s.runPct}% · ${esc(s.run)}</span>
+        <div style="font-size:11px;color:var(--grayl);margin-top:2px;line-height:1.5">${esc(s.runNote)}</div>
+      </div>
+      <div>
+        <span style="color:var(--blue);font-size:10px;font-weight:800;letter-spacing:.5px;text-transform:uppercase">PASS ${s.passPct}% · ${esc(s.pass)}</span>
+        <div style="font-size:11px;color:var(--grayl);margin-top:2px;line-height:1.5">${esc(s.passNote)}</div>
+      </div>
+    </div>`).join('');
+
+  const thStyle='font-size:9px;letter-spacing:1.5px;text-transform:uppercase;color:var(--gray);font-weight:800;padding:0 8px 8px 0;text-align:left;white-space:nowrap';
+
+  return `
+    <div style="margin-bottom:22px">
+      <div style="font-size:10px;letter-spacing:2px;text-transform:uppercase;color:var(--gold);font-weight:800;margin-bottom:10px">&#128197; Defensive Call Sheet Summary</div>
+      <div style="background:var(--navy2);border:1px solid rgba(255,255,255,.07);border-radius:12px;overflow:hidden">
+        <div style="overflow-x:auto;-webkit-overflow-scrolling:touch">
+          <table style="border-collapse:collapse;width:100%;min-width:500px">
+            <thead><tr style="border-bottom:2px solid rgba(255,255,255,.08)">
+              <th style="${thStyle}">Formation</th>
+              <th style="${thStyle}">Tendency</th>
+              <th style="${thStyle}">Base Coverage</th>
+              <th style="${thStyle}">Blitz Package</th>
+              <th style="${thStyle}">Defense</th>
+            </tr></thead>
+            <tbody>${callRows}</tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+
+    <div style="margin-bottom:22px">
+      <div style="font-size:10px;letter-spacing:2px;text-transform:uppercase;color:var(--gold);font-weight:800;margin-bottom:10px">&#9889; Key Adjustments</div>
+      ${adjRows}
+    </div>
+
+    <div style="margin-bottom:22px">
+      <div style="font-size:10px;letter-spacing:2px;text-transform:uppercase;color:var(--gold);font-weight:800;margin-bottom:10px">&#127944; Practice Script — ${plays.length} Plays</div>
+      <div style="background:var(--navy2);border:1px solid rgba(255,255,255,.07);border-radius:12px;overflow:hidden">
+        <div style="overflow-x:auto;-webkit-overflow-scrolling:touch">
+          <table style="border-collapse:collapse;width:100%;min-width:700px">
+            <thead><tr style="border-bottom:2px solid rgba(255,255,255,.08)">
+              <th style="${thStyle}">#</th>
+              <th style="${thStyle}">Formation</th>
+              <th style="${thStyle}">Play</th>
+              <th style="${thStyle}">Situation</th>
+              <th style="${thStyle}">Hash</th>
+              <th style="${thStyle}">Coverage</th>
+              <th style="${thStyle}">Blitz</th>
+              <th style="${thStyle}">Scout Notes</th>
+            </tr></thead>
+            <tbody>${playRows}</tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+
+    <div>
+      <div style="font-size:10px;letter-spacing:2px;text-transform:uppercase;color:var(--gold);font-weight:800;margin-bottom:10px">&#128102; Scout Team Instructions</div>
+      ${scoutRows}
+    </div>`;
+}
+
+function _buildPracticeScriptText(o){
+  applyRecommendations(o);
+  const lines=[
+    `BLITZIQ PRACTICE SCRIPT — ${o.name} ${o.season}`,
+    `${'═'.repeat(60)}`,``,
+    `DEFENSIVE CALL SHEET SUMMARY`,
+    `${'─'.repeat(60)}`,
+  ];
+  o.formations.forEach(f=>{
+    const rec=f.recommendation||generateRecommendation(f);
+    lines.push(`${f.name.padEnd(22)} ${(f.runPct+'% RUN / '+f.passPct+'% PASS').padEnd(18)} ${rec.coverage.padEnd(22)} ${rec.blitz}`);
+  });
+  lines.push(``,`KEY ADJUSTMENTS`,`${'─'.repeat(60)}`);
+  _buildAdjustments(o).forEach((a,i)=>{
+    lines.push(`${i+1}. When ${a.trigger}`);
+    lines.push(`   → ${a.call}`);
+    lines.push(`   ${a.detail}`);
+    lines.push(``);
+  });
+  lines.push(`PRACTICE SCRIPT`,`${'─'.repeat(60)}`);
+  lines.push(`# | Formation | Play | Situation | Hash | Coverage | Blitz | Scout Notes`);
+  _buildPlayLines(o).forEach(p=>{
+    lines.push(`${String(p.n).padEnd(3)}| ${p.form.padEnd(18)}| ${p.play.padEnd(18)}| ${p.sit.padEnd(10)}| ${p.hash.padEnd(8)}| ${p.cov.padEnd(22)}| ${p.blitz.padEnd(20)}| ${p.note}`);
+  });
+  lines.push(``,`SCOUT TEAM INSTRUCTIONS`,`${'─'.repeat(60)}`);
+  _buildScoutInstructions(o).forEach(s=>{
+    lines.push(`${s.name}`);
+    lines.push(`  RUN ${s.runPct}% — ${s.run}: ${s.runNote}`);
+    lines.push(`  PASS ${s.passPct}% — ${s.pass}: ${s.passNote}`);
+    lines.push(``);
+  });
+  lines.push(`— Generated by BlitzIQ · richderrik58.github.io/blitzIQ`);
+  return lines.join('\n');
+}
+
+function showPracticeScript(){
+  if(!st.opp) return;
+  const o=st.opp;
+  document.getElementById('scriptTitle').textContent=`${o.name} ${o.season} — Practice Script`;
+  document.getElementById('scriptSub').textContent=`${o.formations.length} formation${o.formations.length!==1?'s':''} · Call Sheet + Adjustments + Scout Team`;
+  document.getElementById('scriptBody').innerHTML=buildPracticeScriptHTML(o);
+  document.getElementById('scriptOv').classList.add('open');
+  document.body.style.overflow='hidden';
+}
+
+function closePracticeScript(){
+  document.getElementById('scriptOv').classList.remove('open');
+  document.body.style.overflow='';
+}
+
+function printPracticeScript(){
+  if(!st.opp) return;
+  applyRecommendations(st.opp);
+  const o=st.opp;
+  const adj=_buildAdjustments(o);
+  const plays=_buildPlayLines(o);
+  const scout=_buildScoutInstructions(o);
+
+  const callSection=o.formations.map(f=>{
+    const rec=f.recommendation||generateRecommendation(f);
+    const lean=f.passPct>=60?`${f.passPct}% PASS`:`${f.runPct}% RUN`;
+    const leanC=f.passPct>=60?'#1d4ed8':'#15803d';
+    return `<tr><td>${esc(f.name)}</td><td style="color:${leanC};font-weight:700">${lean}</td>
+      <td style="font-weight:800;color:#92400e">${esc(rec.coverage)}</td>
+      <td style="font-weight:700">${esc(rec.blitz)}</td></tr>`;
+  }).join('');
+
+  const adjSection=adj.map((a,i)=>`
+    <div style="margin-bottom:8px;padding:7px 10px;border:1px solid #e5e7eb;border-radius:5px">
+      <div style="font-size:8pt;font-weight:700;color:#6b7280">When: ${esc(a.trigger)}</div>
+      <div style="font-size:10pt;font-weight:800;color:#92400e">→ ${esc(a.call)}</div>
+      <div style="font-size:8pt;color:#374151">${esc(a.detail)}</div>
+    </div>`).join('');
+
+  const scriptRows=plays.map(p=>`<tr>
+    <td style="font-weight:800;color:#92400e">${p.n}</td>
+    <td style="font-weight:700">${esc(p.form)}</td>
+    <td>${esc(p.play)}</td>
+    <td>${esc(p.sit)}</td>
+    <td>${esc(p.hash)}</td>
+    <td style="font-weight:800;color:#92400e">${esc(p.cov)}</td>
+    <td style="font-weight:700">${esc(p.blitz)}</td>
+    <td style="color:#6b7280;font-style:italic">${esc(p.note)}</td>
+  </tr>`).join('');
+
+  const scoutSection=scout.map(s=>`
+    <div style="margin-bottom:8px;break-inside:avoid">
+      <div style="font-size:10pt;font-weight:800;color:#92400e;margin-bottom:3px">${esc(s.name)}</div>
+      <div style="font-size:8pt;margin-bottom:2px"><strong style="color:#15803d">RUN ${s.runPct}% · ${esc(s.run)}:</strong> ${esc(s.runNote)}</div>
+      <div style="font-size:8pt"><strong style="color:#1d4ed8">PASS ${s.passPct}% · ${esc(s.pass)}:</strong> ${esc(s.passNote)}</div>
+    </div>`).join('');
+
+  const thS='font-size:7pt;letter-spacing:1px;text-transform:uppercase;color:#6b7280;font-weight:700;padding:3px 6px 3px 0;text-align:left';
+  const tdS='font-size:8pt;padding:3px 6px 3px 0;vertical-align:top';
+
+  const html=`<!DOCTYPE html><html><head><meta charset="UTF-8">
+<title>BlitzIQ Practice Script — ${esc(o.name)} ${esc(o.season)}</title>
+<style>
+  @page{margin:.4in;size:portrait}
+  *{margin:0;padding:0;box-sizing:border-box}
+  body{font-family:Arial,Helvetica,sans-serif;font-size:9pt;color:#111}
+  h1{font-size:18pt;font-weight:900;letter-spacing:2px}
+  .sub{font-size:8.5pt;color:#6b7280;margin-bottom:10px;padding-bottom:8px;border-bottom:2.5px solid #111}
+  .sec{font-size:7pt;letter-spacing:2px;text-transform:uppercase;font-weight:800;color:#92400e;margin:12px 0 6px;border-left:3px solid #92400e;padding-left:7px}
+  table{width:100%;border-collapse:collapse;margin-bottom:10px}
+  th{${thS}}
+  td{${tdS};border-bottom:1px solid #f3f4f6}
+  .script-tbl th,.script-tbl td{font-size:7.5pt;padding:2px 5px 2px 0}
+  .footer{margin-top:14px;font-size:6.5pt;color:#9ca3af;text-align:center;border-top:1px solid #e5e7eb;padding-top:6px}
+</style></head><body>
+<h1>BLITZ<span style="color:#666">IQ</span> — Practice Script</h1>
+<div class="sub">${esc(o.name)} &nbsp;·&nbsp; ${esc(o.season)} &nbsp;·&nbsp; ${plays.length} plays &nbsp;·&nbsp; ${o.formations.length} formations</div>
+
+<div class="sec">Defensive Call Sheet Summary</div>
+<table><thead><tr>
+  <th>Formation</th><th>Tendency</th><th>Base Coverage</th><th>Blitz Package</th>
+</tr></thead><tbody>${callSection}</tbody></table>
+
+<div class="sec">Key Adjustments</div>
+${adjSection}
+
+<div class="sec">Practice Script — ${plays.length} Plays</div>
+<table class="script-tbl"><thead><tr>
+  <th>#</th><th>Formation</th><th>Play</th><th>Situation</th><th>Hash</th><th>Coverage</th><th>Blitz</th><th>Scout Notes</th>
+</tr></thead><tbody>${scriptRows}</tbody></table>
+
+<div class="sec">Scout Team Instructions</div>
+${scoutSection}
+
+<div style="margin-top:12px;border:1px solid #e5e7eb;border-radius:4px;padding:6px 10px">
+  <div style="font-size:7pt;font-weight:700;text-transform:uppercase;letter-spacing:1px;color:#6b7280;margin-bottom:4px">Coach Notes</div>
+  <div style="height:50px"></div>
+</div>
+
+<div class="footer">BlitzIQ &nbsp;·&nbsp; Defensive Scouting &nbsp;·&nbsp; richderrik58.github.io/blitzIQ</div>
+</body></html>`;
+
+  const w=window.open('','_blank','width=820,height=1100');
+  if(!w){alert('Allow pop-ups to print.');return;}
+  w.document.write(html); w.document.close(); w.focus();
+  setTimeout(()=>w.print(),350);
+}
+
+function sharePracticeScript(){
+  if(!st.opp) return;
+  const subject=`BlitzIQ Practice Script — ${st.opp.name} — ${st.opp.season}`;
+  const text=_buildPracticeScriptText(st.opp);
+  if(navigator.share){ navigator.share({title:subject,text}).catch(()=>{}); return; }
+  window.open(`mailto:?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(text)}`,'_blank');
+}
+
+function copyPracticeScript(){
+  if(!st.opp) return;
+  const text=_buildPracticeScriptText(st.opp);
+  if(navigator.clipboard){
+    navigator.clipboard.writeText(text).then(()=>showToast('✓ Practice script copied'));
+  } else {
+    const ta=document.createElement('textarea');
+    ta.value=text; ta.style.cssText='position:fixed;opacity:0';
+    document.body.appendChild(ta); ta.select();
+    document.execCommand('copy'); document.body.removeChild(ta);
+    showToast('✓ Practice script copied');
+  }
+}
 
 // ── PRINT ─────────────────────────────────────────────────────────────────────
 function _ppGapRows(preset, teAdj){
