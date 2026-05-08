@@ -1861,19 +1861,25 @@ function extractFormations(lines,data,tp){
         inFavRun=false; inFavPass=false;
       }
 
-      // Play name in FAV section (ALL CAPS, no digits — play name only)
-      if((inFavRun||inFavPass)&&isAllCaps(sub)&&!isSkipWord(sub)&&sub.length>=3&&!/\d/.test(sub)){
-        if(inFavRun&&!favRun){ favRun=sub; data.extractionLog.push(`  ↳ Run play "${a.name}": "${sub}"`); }
-        else if(inFavPass&&!favPass){ favPass=sub; data.extractionLog.push(`  ↳ Pass play "${a.name}": "${sub}"`); }
-        continue;
-      }
-
-      // Play line with stats (e.g. "INSIDE ZONE  3/8  100%  0%")
+      // Play extraction in FAV RUNS/PASSES section.
+      // IMPORTANT: do NOT use isSkipWord here — play names like "JET SWEEP L" are
+      // correctly flagged as plays by isPlayName, but in the FAV context we want them.
       if(inFavRun||inFavPass){
-        const sp=parseSubPlayLine(sub,a.playCount);
-        if(sp){
-          if(inFavRun&&!favRun&&sp.runPct>=55){ favRun=sp.name; data.extractionLog.push(`  ↳ Run play "${a.name}": "${sp.name}"`); }
-          else if(inFavPass&&!favPass&&sp.passPct>=55){ favPass=sp.name; data.extractionLog.push(`  ↳ Pass play "${a.name}": "${sp.name}"`); }
+        const w0=sub.split(/\s+/)[0];
+        if(isAllCaps(sub)&&!_HEADER_RE.test(sub.toUpperCase())&&w0.length>=2){
+          let playName=null;
+          if(!/\d/.test(sub)){
+            // Clean name-only line: "JET SWEEP L"
+            playName=sub;
+          } else {
+            // Combined name+stats line: "JET SWEEP L  2/13  15%  11  5.5  -"
+            const m=sub.match(/^([A-Z][A-Z\s\-'\(\)#]{2,45}?)(?:\s{2,}|\s+\d)/);
+            if(m) playName=m[1].trim();
+          }
+          if(playName&&playName.length>=3){
+            if(inFavRun&&!favRun){ favRun=playName; data.extractionLog.push(`  ↳ Run play "${a.name}": "${playName}"`); }
+            else if(inFavPass&&!favPass){ favPass=playName; data.extractionLog.push(`  ↳ Pass play "${a.name}": "${playName}"`); }
+          }
         }
       }
 
@@ -1970,15 +1976,29 @@ function updateFormationsFromDetails(lines, formations, data){
     if(line==='RUN'){ waitRun=true; waitPass=false; continue; }
     if(line==='PASS'){ waitPass=true; waitRun=false; continue; }
 
-    // Extract plays from FAV sections
-    if((inFavRun||inFavPass)&&isAllCaps(line)&&!isSkipWord(line)
-       &&!/\d/.test(line)&&line.split(/\s+/)[0].length>=2&&line.length>=4){
-      if(inFavRun&&!cur.favoriteRunPlay){
-        cur.favoriteRunPlay=line;
-        data.extractionLog.push(`  ↳ Run play (detail) "${cur.name}": "${line}"`);
-      } else if(inFavPass&&!cur.favoritePassPlay){
-        cur.favoritePassPlay=line;
-        data.extractionLog.push(`  ↳ Pass play (detail) "${cur.name}": "${line}"`);
+    // Extract plays from FAV sections — don't use isSkipWord; play names like
+    // "JET SWEEP L" are intentionally flagged by isPlayName but we want them here.
+    if(inFavRun||inFavPass){
+      const w0=line.split(/\s+/)[0];
+      if(isAllCaps(line)&&!_HEADER_RE.test(line.toUpperCase())&&w0.length>=2&&line.length>=4){
+        let playName=null;
+        if(!/\d/.test(line)){
+          // Clean name-only line: "JET SWEEP L"
+          playName=line;
+        } else {
+          // Combined line: "JET SWEEP L  2/13  15%  11  5.5  -"
+          const m=line.match(/^([A-Z][A-Z\s\-'\(\)#]{2,45}?)(?:\s{2,}|\s+\d)/);
+          if(m) playName=m[1].trim();
+        }
+        if(playName&&playName.length>=3){
+          if(inFavRun&&!cur.favoriteRunPlay){
+            cur.favoriteRunPlay=playName;
+            data.extractionLog.push(`  ↳ Run play (detail) "${cur.name}": "${playName}"`);
+          } else if(inFavPass&&!cur.favoritePassPlay){
+            cur.favoritePassPlay=playName;
+            data.extractionLog.push(`  ↳ Pass play (detail) "${cur.name}": "${playName}"`);
+          }
+        }
       }
     }
 
