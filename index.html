@@ -1514,6 +1514,10 @@ function combineResults(results){
     }
   }
 
+  // Keep top 9 formations by play count (same limit as per-file extraction)
+  formations.sort((a,b)=>(b.playCount||0)-(a.playCount||0));
+  if(formations.length>9) formations.splice(9);
+
   const combined={
     teamName,season,runPct,passPct,
     notes:`Imported from ${results.length} Hudl PDF${results.length>1?'s':''}.`,
@@ -1634,7 +1638,9 @@ function isSkipWord(s) {
 }
 
 function parseHudl(text,filename) {
-  const lines=text.split('\n').map(l=>l.replace(/\s+/g,' ').trim()).filter(l=>l.length>0);
+  // Preserve multi-space column gaps from pdfjs (> 20pt gap → double space).
+  // _pnMerged and parseFormLine rely on \s{2,} to detect column boundaries.
+  const lines=text.split('\n').map(l=>l.trim()).filter(l=>l.length>0);
   const data={
     teamName:'',season:String(new Date().getFullYear()),runPct:50,passPct:50,
     notes:'',formations:[],situations:[],rawLines:lines,
