@@ -2059,15 +2059,18 @@ function updateFormationsFromDetails(lines,formations,data){
       const s=lines[k].trim(); if(!s) continue;
       if(/^(BACKFIELDS|MOTION|STRENGTH|BOUNDARY|CREATED)\b/i.test(s)) break;
       if(/^FAV(?:ORITE)?\s*(RUNS?|PASS)/i.test(s)) break;
-      if(isMerged){
-        // Merged column format — extract run from left column, pass from right column
+      // Use _pnMerged whenever the line has a fraction (N/N) — play rows always do.
+      // _pn fails on these lines because they contain "/" and "%" which fail isAllCaps.
+      // isMerged stays as the signal that pass plays are also in this section.
+      const hasFrac=/\b\d{1,3}\/\d{1,4}\b/.test(s);
+      if(hasFrac||isMerged){
         const {run,pass}=_pnMerged(s);
         if(run&&!f.runPlays.includes(run)){
           f.runPlays.push(run);
           if(!f.favoriteRunPlay) f.favoriteRunPlay=run;
           data.extractionLog.push(`  ↳ Run "${f.name}": "${run}"`);
         }
-        if(pass&&f.passPlays&&!f.passPlays.includes(pass)){
+        if(isMerged&&pass&&f.passPlays&&!f.passPlays.includes(pass)){
           f.passPlays.push(pass);
           if(!f.favoritePassPlay) f.favoritePassPlay=pass;
           data.extractionLog.push(`  ↳ Pass "${f.name}": "${pass}"`);
@@ -2085,6 +2088,8 @@ function updateFormationsFromDetails(lines,formations,data){
 
   // ── Extract plays from FAV PASSES sections ───────────────────────────────
   // STOP at MOTION/STRENGTH/BOUNDARY — marks end of pass plays.
+  // Note: merged format (FAV RUNS + FAV PASSES on one header) is already handled above.
+  // This loop catches PDFs where FAV PASSES is a separate section header.
   for(let i=0;i<lines.length;i++){
     if(!/^FAV(?:ORITE)?\s*PASS/i.test(lines[i].trim())) continue;
     const f=_findForm(i);
@@ -2093,7 +2098,9 @@ function updateFormationsFromDetails(lines,formations,data){
       const s=lines[k].trim(); if(!s) continue;
       if(/^(MOTION|STRENGTH|BOUNDARY|BACKFIELDS|CREATED)\b/i.test(s)) break;
       if(/^FAV(?:ORITE)?\s*(RUNS?|PASS)/i.test(s)) break;
-      const pn=_pn(s);
+      // Use _pnMerged for lines with fractions (play rows always have N/M stats)
+      const hasFrac=/\b\d{1,3}\/\d{1,4}\b/.test(s);
+      const pn=hasFrac?(_pnMerged(s).run||null):_pn(s);
       if(pn&&pn.length>=3&&!f.passPlays.includes(pn)){
         f.passPlays.push(pn);
         if(!f.favoritePassPlay) f.favoritePassPlay=pn;
@@ -2106,8 +2113,8 @@ function updateFormationsFromDetails(lines,formations,data){
   for(let i=0;i<lines.length;i++){
     const hdr=lines[i].trim();
     const isStandalone=(hdr==='RUN');
-    // Merged "RUN  PASS  DOWN..." header line (9/13-style wide layout)
-    const isMerged=(!isStandalone&&/^RUN\b.*\bPASS\b/i.test(hdr)&&hdr.length<80);
+    // Merged "RUN  PASS  DOWN..." header line — pdfjs collapses wide gaps to ~2 spaces
+    const isMerged=(!isStandalone&&/^RUN\b.*\bPASS\b/i.test(hdr));
     if(!isStandalone&&!isMerged) continue;
     const f=_findForm(i);
     if(!f||f.runPct!==50) continue;
