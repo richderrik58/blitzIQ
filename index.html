@@ -3766,7 +3766,13 @@ function placePreset(name){
     cvPlayers.push({id:++cvPid, type:pd.type, team:pd.team,
       x:Math.round(cw*pd.xf), y:Math.round(los+pd.yd)});
   });
-  if(team==='def') window._cvPresetType=name;
+  if(team==='def'){
+    window._cvPresetType=name;
+    // Auto-align SS and LBs to formation strength when a DEF preset is placed.
+    // Must happen after players are pushed so adjustDefenseToStrength can read them.
+    const strength=getFormationStrength(cw);
+    if(strength) adjustDefenseToStrength(strength, cw);
+  }
   redrawAll();
 }
 
