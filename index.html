@@ -2018,9 +2018,10 @@ function updateFormationsFromDetails(lines,formations,data){
     let pass=null;
     if(fracs.length>=2){
       // Pass play: last name-like segment between the two fractions
-      // Allow names starting with digit (e.g. "32 RPO BUBBLE", "22 DIVE")
+      // Optional leading 1-2 digit play number (e.g. "32 RPO BUBBLE") then required [A-Z] start.
+      // This prevents stats garbage like "0  -  -  23 RPO SPOT" from matching at the "0".
       const between=s.slice(fracs[0].index,fracs[1].index);
-      const pm=between.match(/\s{2,}([A-Z0-9][A-Z0-9\s\-'\(\)#]{2,50}?)\s*$/);
+      const pm=between.match(/\s{2,}((?:\d{1,2}\s+)?[A-Z][A-Z0-9\s\-'\(\)#]{2,50}?)\s*$/);
       if(pm){ const pp=pm[1].trim(); if(pp.length>=3&&/[A-Z]{2}/.test(pp)&&!/[%]/.test(pp)) pass=pp; }
     }
     // If left column was stats-only (run=null), text before fraction may be the pass play
