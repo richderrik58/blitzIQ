@@ -1698,127 +1698,176 @@ function extractOverall(text,lines){
   return{run:50,pass:50,found:false};
 }
 
+// Formation keywords — a standalone ALL CAPS line containing one of these is
+// almost certainly a formation name, even without a fraction on the same line
+const FORM_KEYWORDS = /\b(GUN|PISTOL|SHOTGUN|TREY|TRIPS|SPREAD|WING|WILDCAT|SINGLEBACK|PRO|ACE|BUNCH|OFFSET|DIAMOND|HEAVY|JUMBO|TWINS|KING|DEUCE|STACK|FLEXBONE|WISHBONE|SLOT|EMPTY|DOUBLE)\b/;
+
 function extractFormations(lines,data,tp){
   const formations=[];
-  let inSec=false, foundHeader=false;
+  const seenNames=new Set();
+
+  // ── Phase 1: global anchor scan ───────────────────────────────────────────
+  // Find every formation entry in the document regardless of section boundaries.
+  // Root cause of old bug: section-gated parsing stopped at the first D&D table
+  // hit inside a formation's detail block, skipping all remaining formations.
+  // Fix: scan ALL lines; for each formation found, look ahead for its detail data.
+
+  const anchors=[]; // {lineIdx, name, playCount, totalPlays, runPct, passPct}
 
   for(let i=0;i<lines.length;i++){
     const line=lines[i];
 
-    // Detect formation section header
-    if(!inSec&&/FORMATION/i.test(line)&&/(TENDENC|REPORT|ANALYS|USAGE|BREAKDOWN|CHART)/i.test(line)){
-      inSec=true; foundHeader=true;
-      data.extractionLog.push(`✓ Formation section found at line ${i}: "${line}"`);
-      continue;
-    }
-    // Detect end of formation section
-    if(inSec&&/^(DOWN\s*(AND|&)\s*DISTANCE|PLAY\s+TYPE|PERSONNEL|PACKAGE|TOP\s+(RUN|PASS)|SITUATION)/i.test(line)){
-      inSec=false; continue;
-    }
-    if(!inSec&&foundHeader) continue;
-
+    // Single-line format: "TREY R WEAK  8/125  38%  62%"
     const parsed=parseFormLine(line);
-    if(parsed&&(inSec||!foundHeader)){
-      if(!formations.find(f=>f.name===parsed.name)){
-        parsed.favoriteRunPlay=tp.run||''; parsed.favoritePassPlay=tp.pass||'';
-        parsed.downTendency='Imported from Hudl. Add tendency notes.';
-        parsed.situations=[];
-        formations.push(parsed);
-        const badge=parsed.playCount?` (${parsed.playCount}/${parsed.totalPlays} plays)`:'';
-        data.extractionLog.push(`✓ Formation: "${parsed.name}"${badge} — Run ${parsed.runPct}% / Pass ${parsed.passPct}%`);
+    if(parsed&&!anchors.find(a=>a.name===parsed.name)){
+      anchors.push({lineIdx:i,...parsed}); continue;
+    }
 
-        // Look ahead for sub-plays immediately below this formation entry
-        // Hudl format: plays listed on next lines with fraction denominator = formation's play count
-        if(parsed.playCount){
-          for(let j=i+1;j<Math.min(i+10,lines.length);j++){
-            const sub=lines[j];
-            if(!sub||!sub.trim()) break;
-            if(parseFormLine(sub)) break; // new formation starts
-            const sp=parseSubPlayLine(sub,parsed.playCount);
-            if(sp){
-              if(sp.runPct>=60&&!parsed.favoriteRunPlay){
-                parsed.favoriteRunPlay=sp.name;
-                data.extractionLog.push(`  ↳ Run play: "${sp.name}" (${sp.runPct}% run)`);
-              } else if(sp.passPct>=60&&!parsed.favoritePassPlay){
-                parsed.favoritePassPlay=sp.name;
-                data.extractionLog.push(`  ↳ Pass play: "${sp.name}" (${sp.passPct}% pass)`);
-              }
-            }
-          }
-        }
+    // Multi-line format: standalone ALL CAPS name, fraction on a nearby line
+    // e.g.  line i:   "TREY R WEAK"
+    //        line i+1: "8/125"
+    //        line i+2: "Run 38%  Pass 62%"  (optional)
+    const name=line.trim();
+    if(!isAllCaps(name)||isSkipWord(name)||name.length<3||name.length>55) continue;
+    if(/\d/.test(name)) continue; // formation-name lines have no digits
+    if(anchors.find(a=>a.name===name)) continue; // already found
+
+    // Look ahead up to 5 lines for a fraction (required) or pct (fallback)
+    let added=false;
+    for(let j=i+1;j<Math.min(i+6,lines.length);j++){
+      const sub=lines[j].trim();
+      if(!sub) continue;
+      // Stop if the next line is another ALL CAPS candidate
+      if(isAllCaps(sub)&&!isSkipWord(sub)&&!/\d/.test(sub)&&sub.length>=3) break;
+
+      // Fraction line: "8/125" or "8/125  38%  62%"
+      const fracM=sub.match(/^(\d{1,3})\/(\d{1,4})/);
+      if(fracM){
+        const pc=parseInt(fracM[1]), tot=parseInt(fracM[2]);
+        let pct=extractPctPair(sub);
+        if(!pct&&j+1<lines.length) pct=extractPctPair(lines[j+1]);
+        const runPct=pct?pct.run:50, passPct=pct?pct.pass:50;
+        anchors.push({lineIdx:i,name,playCount:pc,totalPlays:tot,runPct,passPct});
+        added=true; break;
       }
+
+      // Pct pair without fraction (less reliable but catches some formats)
+      const pct=extractPctPair(sub);
+      if(pct){
+        anchors.push({lineIdx:i,name,playCount:null,totalPlays:null,runPct:pct.run,passPct:pct.pass});
+        added=true; break;
+      }
+    }
+
+    // Last resort: formation keyword present and nothing else found — add with 50/50
+    // This ensures we capture the name even if pct data is buried elsewhere
+    if(!added && FORM_KEYWORDS.test(name)){
+      anchors.push({lineIdx:i,name,playCount:null,totalPlays:null,runPct:50,passPct:50});
     }
   }
 
-  // Second pass: look for standalone formation headers followed by play lists
-  // (Hudl sometimes exports a separate "formation detail" section)
-  scanFormationPlayHeaders(lines,formations,data);
+  data.extractionLog.push(`→ Phase 1: ${anchors.length} formation anchor(s) identified across all pages`);
 
-  // Phase C: global fallback — runs when no header found OR header found but nothing parsed
+  // ── Phase 2: detail scan ──────────────────────────────────────────────────
+  // For each anchor, scan from its line to the next anchor's line to extract
+  // FAV RUNS, FAV PASSES section plays, and per-formation D&D situations.
+
+  for(let ai=0;ai<anchors.length;ai++){
+    const a=anchors[ai];
+    if(seenNames.has(a.name)) continue;
+    seenNames.add(a.name);
+
+    const detailStart=a.lineIdx+1;
+    const detailEnd=ai+1<anchors.length?anchors[ai+1].lineIdx:lines.length;
+
+    let favRun=tp.run||'', favPass=tp.pass||'';
+    const sitList=[], sitSeen=new Set();
+    let inFavRun=false, inFavPass=false;
+    let runTotal=0, passTotal=0, sitCount=0;
+
+    for(let i=detailStart;i<detailEnd&&i<lines.length;i++){
+      const sub=lines[i].trim();
+      if(!sub){ inFavRun=false; inFavPass=false; continue; }
+
+      // FAV RUNS / FAV PASSES section headers
+      if(/FAV(?:ORITE)?\s*RUNS?/i.test(sub)){ inFavRun=true; inFavPass=false; continue; }
+      if(/FAV(?:ORITE)?\s*PASS/i.test(sub)){ inFavPass=true; inFavRun=false; continue; }
+      // Reset on new major section header
+      if(/^(DOWN\s*(AND|&)\s*DISTANCE|PLAY\s+TYPE|PERSONNEL|OVERVIEW|TENDENCY)/i.test(sub)){
+        inFavRun=false; inFavPass=false;
+      }
+
+      // Play name in FAV section (ALL CAPS, no digits — play name only)
+      if((inFavRun||inFavPass)&&isAllCaps(sub)&&!isSkipWord(sub)&&sub.length>=3&&!/\d/.test(sub)){
+        if(inFavRun&&!favRun){ favRun=sub; data.extractionLog.push(`  ↳ Run play "${a.name}": "${sub}"`); }
+        else if(inFavPass&&!favPass){ favPass=sub; data.extractionLog.push(`  ↳ Pass play "${a.name}": "${sub}"`); }
+        continue;
+      }
+
+      // Play line with stats (e.g. "INSIDE ZONE  3/8  100%  0%")
+      if(inFavRun||inFavPass){
+        const sp=parseSubPlayLine(sub,a.playCount);
+        if(sp){
+          if(inFavRun&&!favRun&&sp.runPct>=55){ favRun=sp.name; data.extractionLog.push(`  ↳ Run play "${a.name}": "${sp.name}"`); }
+          else if(inFavPass&&!favPass&&sp.passPct>=55){ favPass=sp.name; data.extractionLog.push(`  ↳ Pass play "${a.name}": "${sp.name}"`); }
+        }
+      }
+
+      // Down/distance situations
+      for(const pat of SIT_PATS){
+        if(!pat.re.test(sub)||sitSeen.has(pat.label)) continue;
+        let pct=extractPctPair(sub);
+        if(!pct&&i+1<detailEnd) pct=extractPctPair(lines[i+1]);
+        if(pct){
+          sitSeen.add(pat.label);
+          sitList.push({down:pat.down,distLabel:pat.label,runPct:pct.run,passPct:pct.pass,
+            notes:'Extracted from Hudl.',dc:{}});
+          runTotal+=pct.run; passTotal+=pct.pass; sitCount++;
+        }
+        break;
+      }
+    }
+
+    // If runPct/passPct were 50/50 (placeholder), derive from D&D average
+    let runPct=a.runPct, passPct=a.passPct;
+    if(runPct===50&&passPct===50&&sitCount>0){
+      runPct=Math.round(runTotal/sitCount);
+      passPct=100-runPct;
+    }
+
+    formations.push({
+      name:a.name, runPct, passPct,
+      playCount:a.playCount, totalPlays:a.totalPlays,
+      favoriteRunPlay:favRun, favoritePassPlay:favPass,
+      downTendency:'Imported from Hudl.', situations:sitList
+    });
+
+    const badge=a.playCount?` (${a.playCount}/${a.totalPlays} plays)`:'';
+    data.extractionLog.push(`✓ ${a.name}${badge} — Run ${runPct}% / Pass ${passPct}%${sitList.length?` · ${sitList.length} D&D rows`:''}`);
+  }
+
+  // ── Fallback: header-table scan if Phase 1 found nothing ─────────────────
   if(formations.length===0){
-    data.extractionLog.push(foundHeader
-      ? '✗ Formation section found but no rows parsed — trying global scan'
-      : '✗ No formation section header — trying global scan');
+    data.extractionLog.push('✗ Phase 1 found 0 anchors — running table-only scan');
     for(const line of lines){
       const parsed=parseFormLine(line);
-      if(parsed&&!formations.find(f=>f.name===parsed.name)){
+      if(parsed&&!seenNames.has(parsed.name)){
+        seenNames.add(parsed.name);
         parsed.favoriteRunPlay=tp.run||''; parsed.favoritePassPlay=tp.pass||'';
-        parsed.downTendency='Imported from Hudl. Add tendency notes.';
-        parsed.situations=[];
+        parsed.downTendency='Imported from Hudl.'; parsed.situations=[];
         formations.push(parsed);
-        data.extractionLog.push(`✓ Formation (global): "${parsed.name}" — Run ${parsed.runPct}% / Pass ${parsed.passPct}%`);
+        data.extractionLog.push(`✓ Formation (table): "${parsed.name}" — Run ${parsed.runPct}% / Pass ${parsed.passPct}%`);
       }
     }
   }
 
-  // Phase D: multi-line formation detection
-  // Handles "FORMATION NAME\n45 plays | 22% Run | 78% Pass" (Hudl breakdown format)
-  // Only runs if we still haven't found any formations
-  if(formations.length===0){
-    data.extractionLog.push('↳ Trying multi-line formation scan (name on one line, stats on next)');
-    for(let i=0;i<lines.length-1;i++){
-      const name=lines[i].trim();
-      if(!isAllCaps(name)||isSkipWord(name)||name.length<3||name.length>45) continue;
-      if(/\d/.test(name)) continue; // standalone name has no numbers
+  scanFormationPlayHeaders(lines,formations,data);
 
-      // Scan the next 4 lines for run+pass data
-      for(let j=i+1;j<Math.min(i+5,lines.length);j++){
-        const sub=lines[j];
-        if(!sub.trim()) break;
-        // Stop if we hit another candidate formation name
-        if(isAllCaps(sub.trim())&&!isSkipWord(sub.trim())&&!/\d/.test(sub.trim())) break;
+  const total=formations.length;
+  data.extractionLog.push(total===0
+    ?'✗ No formations detected — check PDF type (needs Formation Tendencies export, not Run/Pass Breakdown)'
+    :`✓ TOTAL: ${total} formation${total!==1?'s':''} extracted`);
 
-        // Try "Run X% ... Pass X%" labeled format on the sub-line
-        const rM=sub.match(/\brun[:\s]+(\d{1,3})%/i);
-        const pM=sub.match(/\bpass[:\s]+(\d{1,3})%/i);
-        if(rM&&pM){
-          const r=parseInt(rM[1]), p=parseInt(pM[1]);
-          if(Math.abs(r+p-100)<=6&&!formations.find(f=>f.name===name)){
-            const pc=sub.match(/(\d+)\s*(?:plays?|\/)/i);
-            formations.push({name,runPct:r,passPct:p,
-              playCount:pc?parseInt(pc[1]):null,totalPlays:null,
-              favoriteRunPlay:tp.run||'',favoritePassPlay:tp.pass||'',
-              downTendency:'Imported from Hudl. Add tendency notes.',situations:[]});
-            data.extractionLog.push(`✓ Formation (multi-line): "${name}" — Run ${r}% / Pass ${p}%`);
-            break;
-          }
-        }
-
-        // Also try bare pct pair (e.g., "22%  78%") on the sub-line
-        const pct=extractPctPair(sub);
-        if(pct&&!formations.find(f=>f.name===name)){
-          formations.push({name,runPct:pct.run,passPct:pct.pass,
-            playCount:null,totalPlays:null,
-            favoriteRunPlay:tp.run||'',favoritePassPlay:tp.pass||'',
-            downTendency:'Imported from Hudl. Add tendency notes.',situations:[]});
-          data.extractionLog.push(`✓ Formation (multi-line pct): "${name}" — Run ${pct.run}% / Pass ${pct.pass}%`);
-          break;
-        }
-      }
-    }
-  }
-
-  if(formations.length===0) data.extractionLog.push('✗ No formations detected');
   return formations;
 }
 
@@ -2081,12 +2130,13 @@ function extractTopPlays(text,lines,data){
 
 function calcConf(data){
   let s=0;
-  if(data.teamName&&!['Imported Team'].includes(data.teamName))s+=20;
-  if(data.formations.length>0) s+=35;
-  if(data.formations.length>2) s+=10;
+  if(data.teamName&&!['Imported Team'].includes(data.teamName)) s+=20;
+  if(data.formations.length>=1)  s+=20;
+  if(data.formations.length>=5)  s+=10;
+  if(data.formations.length>=10) s+=10;
   const hasSits=data.situations.length>0||data.formations.some(f=>f.situations&&f.situations.length>0);
   if(hasSits) s+=25;
-  if(data.formations.some(f=>f.favoriteRunPlay||f.favoritePassPlay)) s+=10;
+  if(data.formations.some(f=>f.favoriteRunPlay||f.favoritePassPlay)) s+=15;
   return Math.min(100,s);
 }
 
@@ -2144,7 +2194,12 @@ function openPreview(data,results){
     </div>`:''}
 
     <div class="prev-sec">
-      <div class="prev-sec-lbl">Formations Detected (${data.formations.length})</div>
+      <div class="prev-sec-lbl" style="display:flex;align-items:center;gap:10px">
+        Formations Detected
+        <span style="background:${data.formations.length>=10?'rgba(34,197,94,.18)':data.formations.length>0?'rgba(245,158,11,.18)':'rgba(239,68,68,.18)'};color:${data.formations.length>=10?'var(--green)':data.formations.length>0?'var(--amber)':'var(--red)'};border:1px solid ${data.formations.length>=10?'rgba(34,197,94,.4)':data.formations.length>0?'rgba(245,158,11,.4)':'rgba(239,68,68,.4)'};border-radius:12px;padding:2px 10px;font-size:12px;font-weight:900">
+          ${data.formations.length} formation${data.formations.length!==1?'s':''}
+        </span>
+      </div>
       ${data.formations.length===0
         ?`<div class="conf-msg lo">
             <strong>No formations detected in this PDF.</strong><br>
