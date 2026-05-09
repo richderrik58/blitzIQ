@@ -1862,25 +1862,20 @@ function parseHudlByPage(pages, filename, fullText) {
     const lines = pg.lines;
     const isMergedFav = lines.some(l => isRunHdr(l) && /FAV\s*PASS/i.test(l));
 
-    // Console diagnostics
+    // Diagnostics — X positions shown in "Show Extraction Details" in the preview
     const lineXs0 = pg.lineXs || [];
-    console.group(`  Page ${pg.pageNum}: "${f.name}" pc=${f.playCount} tot=${f.totalPlays} merged=${isMergedFav}`);
-    let lm = null; const dbgR = [], dbgP = [];
-    for (const l of lines) {
-      if (isRunHdr(l)) { lm = 'r'; continue; } if (isPassHdr(l)) { lm = 'p'; continue; }
-      if (isSectionEnd(l)) { lm = null; continue; }
-      if (lm === 'r') dbgR.push(l); if (lm === 'p') dbgP.push(l);
+    if (formations.length === 0) {
+      // Only emit X-position data for the first formation to keep log readable
+      let inFavDbg = false;
+      for (let i = 0; i < lines.length; i++) {
+        const l = lines[i];
+        if (isRunHdr(l)) { inFavDbg = true; continue; }
+        if (isSectionEnd(l)) { inFavDbg = false; break; }
+        if (inFavDbg && isLikelyPlay(l)) {
+          log.push(`  X=${Math.round(lineXs0[i]||0)} | ${l.slice(0,55)}`);
+        }
+      }
     }
-    console.log('FAV RUNS:', dbgR); console.log('FAV PASS:', dbgP);
-    // Log X positions for all lines in FAV section so we can tune the threshold
-    let inFav = false;
-    for (let i = 0; i < lines.length; i++) {
-      const l = lines[i];
-      if (isRunHdr(l)) { inFav = true; continue; }
-      if (isSectionEnd(l)) { inFav = false; continue; }
-      if (inFav && isLikelyPlay(l)) console.log(`  X=${Math.round(lineXs0[i]||0).toString().padStart(4)} | ${l.slice(0,60)}`);
-    }
-    console.groupEnd();
 
     // ── Extract plays ─────────────────────────────────────────────────────────
     // When FAV RUNS and FAV PASSES share one header line (isMergedFav), single-fraction
