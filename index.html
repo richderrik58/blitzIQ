@@ -1696,8 +1696,10 @@ async function extractPDFText(file) {
     clusters.sort((a, b) => b.y - a.y);
 
     let pageText = '';
+    const lineXs = []; // firstX (PDF points) for each non-empty line, parallel to lines[]
     for (const cl of clusters) {
       cl.items.sort((a, b) => a.x - b.x);
+      const firstX = cl.items[0].x;
       let line = '';
       for (let i = 0; i < cl.items.length; i++) {
         const item = cl.items[i];
@@ -1708,14 +1710,14 @@ async function extractPDFText(file) {
         line += item.str;
       }
       const trimmed = line.trim();
-      if (trimmed) pageText += trimmed + '\n';
+      if (trimmed) { pageText += trimmed + '\n'; lineXs.push(firstX); }
     }
 
     pdfPages.push({
       pageNum: p,
       text: pageText,
       lines: pageText.split('\n').map(l => l.trim()).filter(l => l.length > 0),
-      rawLines: pageText.split('\n').filter(l => l.trim().length > 0),
+      lineXs,
       charCount: pageText.trim().length
     });
 
@@ -1873,9 +1875,10 @@ function parseHudlByPage(pages, filename, fullText) {
 
     // ── Extract plays ─────────────────────────────────────────────────────────
     // When FAV RUNS and FAV PASSES share one header line (isMergedFav), single-fraction
-    // rows have no explicit column label. Detect column by leading whitespace in the
-    // raw (untrimmed) line: >15 leading spaces means the play is in the right (pass) column.
-    const rawLines = pg.rawLines || lines;
+    // rows have no explicit column label. Detect column by the first text item's X
+    // position: pass-only plays start at X>200pt (right column) while run plays and
+    // merged rows both start at X<200pt (left column).
+    const lineXs = pg.lineXs || [];
     let inRuns = false, inPasses = false;
     for (let i = 0; i < lines.length; i++) {
       const s = lines[i];
@@ -1884,9 +1887,8 @@ function parseHudlByPage(pages, filename, fullText) {
       if (isSectionEnd(s)) { inRuns = false; inPasses = false; continue; }
       if (!inRuns && !inPasses) continue;
       if (!isLikelyPlay(s)) continue;
-      const raw = rawLines[i] || s;
-      const leadSpaces = (raw.match(/^(\s+)/) || ['',''])[1].length;
-      const isRightCol = isMergedFav && leadSpaces > 15;
+      const firstX = lineXs[i] || 0;
+      const isRightCol = isMergedFav && firstX > 200;
       const hasFrac = /\b\d{1,3}\/\d{1,4}\b/.test(s);
       if (hasFrac) {
         const fracs2 = [...s.matchAll(/\b\d{1,3}\/\d{1,4}\b/g)];
