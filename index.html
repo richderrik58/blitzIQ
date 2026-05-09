@@ -1562,11 +1562,11 @@ function combineResults(results){
   const log=[`Combining data from ${results.length} PDF${results.length>1?'s':''}`];
 
   // Include per-PDF parser logs (contains X= diagnostic lines)
+  log.push(`[v6] results: ${results.length}, logs: ${results.map(r=>(r.extractionLog||[]).length).join('/')}`);
   for(const r of results){
-    if(r.extractionLog&&r.extractionLog.length){
-      log.push(`--- ${r.filename} ---`);
-      r.extractionLog.forEach(e=>log.push(e));
-    }
+    const el = r.extractionLog||[];
+    log.push(`--- ${r.filename||'?'} (${el.length} entries) ---`);
+    el.slice(0,20).forEach(e=>log.push('  '+e));
   }
 
   // Team name: first non-generic
