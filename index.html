@@ -1735,16 +1735,18 @@ function parseHudlByPage(pages, filename, fullText) {
   const content = pages.filter(p => p.charCount >= 50);
   log.push(`→ PDF structure: ${pages.length} pages total, ${blank.length} blank (skipped), ${content.length} with content`);
 
-  // ── DIAGNOSTIC LOGGING ──────────────────────────────────────────────────────
+  // ── CONSOLE LOGGING: first 3 pages raw text ─────────────────────────────────
   console.group(`[BlitzIQ Parser] ${filename}`);
   console.log(`%c[1] PAGE COUNT`, 'font-weight:bold;color:#f0a500',
-    `${pages.length} total pages | ${blank.length} blank | ${content.length} with content`);
-  pages.forEach(pg => {
+    `${pages.length} total | ${blank.length} blank | ${content.length} with content`);
+  pages.slice(0, 3).forEach(pg => {
     const status = pg.charCount < 50 ? '⬜ BLANK' : '📄 CONTENT';
-    console.log(`  Page ${pg.pageNum}: ${status} (${pg.charCount} chars)`);
-    console.log(`  First 500 chars:`, pg.text.slice(0, 500).replace(/\n/g, '↵'));
+    console.group(`  Page ${pg.pageNum}: ${status} (${pg.charCount} chars)`);
+    console.log('RAW TEXT (first 500 chars):\n' + pg.text.slice(0, 500));
+    console.log('LINES:', pg.lines.slice(0, 20));
+    console.groupEnd();
   });
-  // ────────────────────────────────────────────────────────────────────────────
+  // ─────────────────────────────────────────────────────────────────────────────
 
   const data = {
     teamName: 'Imported Team',
@@ -1752,7 +1754,10 @@ function parseHudlByPage(pages, filename, fullText) {
     runPct: 50, passPct: 50,
     notes: '', formations: [], situations: [],
     rawLines: content[0]?.lines || [],
-    extractionLog: log
+    extractionLog: log,
+    // Store pages 1 and 3 raw text for the debug panel in the preview
+    debugPage1: pages[0]?.text || '',
+    debugPage3: pages[2]?.text || ''
   };
 
   if (!content.length) return data;
@@ -1822,19 +1827,53 @@ function parseHudlByPage(pages, filename, fullText) {
   console.log(`%c[2] DETAIL PAGE SCAN`, 'font-weight:bold;color:#f0a500',
     `${detailPages.length} content pages to check`);
 
+  // ── FAV section header patterns — flexible, accepts all known Hudl variations ──
+  // "FAV RUNS", "FAVORITE RUNS", "FAV RUN", "TOP RUN PLAYS", "RUN PLAYS"
+  const isRunHdr = s => /^(FAV(?:ORITE)?\s*RUNS?\b|TOP\s*RUN\s*PLAYS?\b|RUN\s*PLAYS?\b)/i.test(s)
+                     || (/^FAV(?:ORITE)?\s*RUNS?\b/i.test(s)); // also matches merged header with trailing content
+  // "FAV PASSES", "FAVORITE PASSES", "FAV PASS", "TOP PASS PLAYS", "PASS PLAYS"
+  const isPassHdr = s => /^(FAV(?:ORITE)?\s*PASS(?:ES?)?\b|TOP\s*PASS\s*PLAYS?\b|PASS\s*PLAYS?\b)/i.test(s);
+  // Section-end markers
+  const isSectionEnd = s => /^(BACKFIELDS|MOTION|STRENGTH|BOUNDARY|CREATED|DOWN\b)/i.test(s);
+
+  // ── Flexible play line check ─────────────────────────────────────────────────
+  // Accept any line between FAV RUNS/PASSES headers that looks like a play name:
+  // has ≥2 letters, is not pure stats/numbers, is not a header or label
+  function isLikelyPlay(s) {
+    if (!s || s.length < 2) return false;
+    if (/^[\d\s%.\/\-]+$/.test(s)) return false;               // pure numbers/stats
+    if (/^(Count|Percent|Tot\b|Avg\b|Eff\b|Run\b|Pass\b|Down\b|Strength|Motion|Backfield|Boundary|Created|Left\b|Right\b)/i.test(s)) return false;
+    if (/^[EDABCedabc]\s+[EDABCedabc]\s+/.test(s)) return false; // gap diagram "E D C B A"
+    if (/^[-\s\d]+$/.test(s)) return false;                    // dashes and numbers only
+    return /[A-Za-z]{2}/.test(s);                              // must have ≥2 consecutive letters
+  }
+
+  // ── Extract best play name from a line (with or without inline stats) ────────
+  function extractPlayName(s) {
+    // If line has a fraction, extract what's before it
+    const fracM = s.match(/^(.+?)\s{1,}\d{1,3}\/\d{1,4}/);
+    if (fracM) {
+      const candidate = fracM[1].replace(/\s+[-\d.]+\s*$/, '').trim();
+      if (candidate.length >= 2 && /[A-Za-z]{2}/.test(candidate)) return candidate;
+    }
+    // Otherwise return the whole line (trimmed of trailing stats)
+    return s.replace(/\s{2,}[\d.%]+.*$/, '').trim() || s.trim();
+  }
+
   for (const pg of detailPages) {
-    // STEP 4 — Already filtered: only content pages (≥50 chars) reach here
-    // Try to match this page to a formation from the master list
     let matched = null;
 
-    // Strategy A: first 10 lines contain an exact formation name
-    const headText = pg.lines.slice(0, 10).join('\n');
+    // ── Page matching: 4 strategies, most-specific first ─────────────────────
+    const headLines = pg.lines.slice(0, 15);
+    const headText = headLines.join('\n');
+
+    // Strategy A: exact formation name in first 15 lines
     for (const f of masterAnchors) {
       if (f.foundOnPage !== null) continue;
       if (headText.includes(f.name)) { matched = f; break; }
     }
 
-    // Strategy B: fuzzy — all words of the formation name appear in first 10 lines
+    // Strategy B: all words of formation name appear in first 15 lines (fuzzy)
     if (!matched) {
       for (const f of masterAnchors) {
         if (f.foundOnPage !== null) continue;
@@ -1842,72 +1881,91 @@ function parseHudlByPage(pages, filename, fullText) {
       }
     }
 
-    // Strategy C: rank+name line like "1  DOUBLES R" or "1  DOUBLES  15"
+    // Strategy C: rank-prefixed line "1  DOUBLES R" or "1  DOUBLES  15" variant
     if (!matched) {
-      for (const line of pg.lines.slice(0, 8)) {
-        const rm = line.match(/^\d{1,2}\s+([A-Z][A-Z0-9\s\-'\(\)#]+)/);
+      for (const line of headLines) {
+        const rm = line.match(/^\d{1,2}\s+([A-Z][A-Z0-9\s\-'\(\)#]{2,})/);
         if (rm) {
-          const cand = rm[1].trim().replace(/\s{2,}\d.*$/, '').trim();
-          const f = masterAnchors.find(x => !x.foundOnPage && (x.name === cand || x.name.split(/\s+/).every(w => cand.includes(w))));
+          const cand = rm[1].trim().replace(/\s{2,}\d+.*$/, '').trim();
+          const f = masterAnchors.find(x => !x.foundOnPage &&
+            (x.name === cand || x.name.split(/\s+/).every(w => cand.includes(w))));
           if (f) { matched = f; break; }
         }
-        if (matched) break;
+      }
+    }
+
+    // Strategy D: fuzzy — any 2+ word ALL CAPS football-looking line on the page
+    // maps to the next unmatched formation in order (formations appear sequentially in PDF)
+    if (!matched) {
+      const hasFormationLike = headLines.some(l => {
+        const t = l.trim();
+        return isAllCaps(t) && t.split(/\s+/).length >= 2 && FORM_KEYWORDS.test(t) && !isSkipWord(t);
+      });
+      if (hasFormationLike) {
+        matched = masterAnchors.find(f => f.foundOnPage === null) || null;
+        if (matched) log.push(`  Page ${pg.pageNum}: Strategy D (fuzzy football text) → "${matched.name}"`);
       }
     }
 
     if (!matched) {
       log.push(`  Page ${pg.pageNum} (${pg.charCount} chars): no match — skipped`);
-      console.log(`  [Page ${pg.pageNum}] ❌ NO MATCH — skipped`);
-      console.log(`    First 10 lines:`, pg.lines.slice(0, 10));
-      console.log(`    Formations tried:`, masterAnchors.filter(f=>f.foundOnPage===null).map(f=>f.name));
+      console.log(`  [Page ${pg.pageNum}] ❌ NO MATCH`);
+      console.log(`    First 15 lines:`, headLines);
+      console.log(`    Unmatched formations:`, masterAnchors.filter(f=>f.foundOnPage===null).map(f=>f.name));
       continue;
     }
 
     matched.foundOnPage = pg.pageNum;
-
-    // STEP 3 — Extract plays and tendency from this formation's page
     const lines = pg.lines;
-    let inRuns = false, inPasses = false;
-    const isMergedFav = lines.some(l => /^FAV(?:ORITE)?\s*RUNS?\b.*FAV\s*PASS/i.test(l));
+
+    // Detect merged FAV header ("FAV RUNS  ...  FAV PASSES  ..." on one line)
+    const isMergedFav = lines.some(l => isRunHdr(l) && /FAV\s*PASS/i.test(l));
 
     console.log(`  [Page ${pg.pageNum}] ✅ MATCHED → "${matched.name}" | isMergedFav=${isMergedFav}`);
-    console.log(`    All lines on page:`, lines);
-    // Log FAV RUNS / FAV PASSES sections
-    let logMode = null;
+    console.log(`    All lines (${lines.length}):`, lines);
+
+    // Log what we find under each FAV header (for diagnostics)
+    let logMode2 = null;
     const favRunLines = [], favPassLines = [];
     for (const l of lines) {
-      if (/^FAV(?:ORITE)?\s*RUNS?\b/i.test(l)) { logMode = 'run'; continue; }
-      if (/^FAV(?:ORITE)?\s*PASS/i.test(l)) { logMode = 'pass'; continue; }
-      if (/^(BACKFIELDS|MOTION|STRENGTH|BOUNDARY|CREATED)\b/i.test(l)) { logMode = null; continue; }
-      if (logMode === 'run') favRunLines.push(l);
-      if (logMode === 'pass') favPassLines.push(l);
+      if (isRunHdr(l)) { logMode2 = 'run'; continue; }
+      if (isPassHdr(l)) { logMode2 = 'pass'; continue; }
+      if (isSectionEnd(l)) { logMode2 = null; continue; }
+      if (logMode2 === 'run') favRunLines.push(l);
+      if (logMode2 === 'pass') favPassLines.push(l);
     }
     console.log(`    FAV RUNS lines (${favRunLines.length}):`, favRunLines);
     console.log(`    FAV PASSES lines (${favPassLines.length}):`, favPassLines);
 
+    // ── STEP 3 — Extract plays, tendency, D&D from this page ─────────────────
+    let inRuns = false, inPasses = false;
+
     for (let i = 0; i < lines.length; i++) {
       const s = lines[i];
 
-      // Section transitions
-      if (/^FAV(?:ORITE)?\s*RUNS?\b/i.test(s)) { inRuns = true; inPasses = false; continue; }
-      if (/^FAV(?:ORITE)?\s*PASS/i.test(s)) { inRuns = false; inPasses = true; continue; }
-      if (/^(BACKFIELDS|MOTION|STRENGTH|BOUNDARY|CREATED)\b/i.test(s)) { inRuns = false; inPasses = false; continue; }
+      // Section transitions — flexible headers
+      if (isRunHdr(s)) { inRuns = true; inPasses = false; continue; }
+      if (isPassHdr(s)) { inRuns = false; inPasses = true; continue; }
+      if (isSectionEnd(s)) { inRuns = false; inPasses = false; continue; }
 
       if (inRuns || inPasses) {
+        if (!isLikelyPlay(s)) continue; // skip obvious non-plays
+
         const hasFrac = /\b\d{1,3}\/\d{1,4}\b/.test(s);
         if (hasFrac || isMergedFav) {
           const { run, pass } = pnMergedFromLine(s);
-          if (run && run.length >= 3) {
-            if (inRuns && !matched.runPlays.includes(run)) matched.runPlays.push(run);
-            else if (inPasses && !matched.passPlays.includes(run)) matched.passPlays.push(run);
+          const runPlay = run || (isLikelyPlay(s.replace(/\s+\d.*$/, '').trim()) ? extractPlayName(s) : null);
+          if (runPlay && runPlay.length >= 2) {
+            if (inRuns && !matched.runPlays.includes(runPlay)) matched.runPlays.push(runPlay);
+            else if (inPasses && !matched.passPlays.includes(runPlay)) matched.passPlays.push(runPlay);
           }
-          // Merged format: pass column captured in FAV RUNS section
-          if (isMergedFav && inRuns && pass && pass.length >= 3 && !matched.passPlays.includes(pass)) {
+          if (isMergedFav && inRuns && pass && pass.length >= 2 && !matched.passPlays.includes(pass)) {
             matched.passPlays.push(pass);
           }
         } else {
-          const pn = pnFromLine(s);
-          if (pn && pn.length >= 3) {
+          // Plain text line — extract play name flexibly
+          const pn = pnFromLine(s) || (isLikelyPlay(s) ? extractPlayName(s) : null);
+          if (pn && pn.length >= 2) {
             if (inRuns && !matched.runPlays.includes(pn)) matched.runPlays.push(pn);
             else if (inPasses && !matched.passPlays.includes(pn)) matched.passPlays.push(pn);
           }
@@ -2975,6 +3033,17 @@ function openPreview(data,results){
       <button class="raw-toggle" onclick="toggleSection('rawTxt',this,'Show Raw Text','Hide Raw Text')">Show Raw Text</button>
       <div id="rawTxt" style="display:none"><div class="raw-pre">${esc(data.rawLines.slice(0,150).join('\n'))}</div></div>
     </div>
+
+    ${data.debugPage1||data.debugPage3?`
+    <div class="prev-sec">
+      <button class="raw-toggle" onclick="toggleSection('dbgPages',this,'Show Page Debug (pages 1 &amp; 3)','Hide Page Debug')">Show Page Debug (pages 1 &amp; 3)</button>
+      <div id="dbgPages" style="display:none">
+        <div style="font-size:10px;font-weight:700;color:var(--gold);margin:8px 0 4px">PAGE 1 — Formation List</div>
+        <div class="raw-pre">${esc((data.debugPage1||'(empty)').slice(0,800))}</div>
+        <div style="font-size:10px;font-weight:700;color:var(--gold);margin:8px 0 4px">PAGE 3 — First Formation Detail</div>
+        <div class="raw-pre">${esc((data.debugPage3||'(empty)').slice(0,800))}</div>
+      </div>
+    </div>`:''}
 
     <div class="prev-sec">
       <button class="raw-toggle" onclick="toggleSection('extLog',this,'Show Extraction Details','Hide Extraction Details')">Show Extraction Details</button>
