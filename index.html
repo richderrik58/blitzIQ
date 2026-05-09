@@ -1895,10 +1895,28 @@ function parseHudlByPage(pages, filename, fullText) {
       }
     }
 
+    // ── Pre-extract tendency so play routing can use it ───────────────────────
+    // In merged FAV mode, single-fraction rows are the "extra" plays from whichever
+    // column has more plays. If the formation is pass-heavy (runPct<50), extras = pass.
+    let runPctEarly = 50;
+    for (let i = 0; i < lines.length; i++) {
+      const s = lines[i];
+      if (s !== 'RUN' && !/^RUN\b.*\bPASS\b/i.test(s)) continue;
+      for (let k = i + 1; k < Math.min(i + 15, lines.length); k++) {
+        const fracs = [...lines[k].matchAll(/\b(\d{1,3})\/(\d{1,4})\b/g)];
+        if (fracs.length >= 2) {
+          const rc = +fracs[0][1], pc = +fracs[1][1], tot = rc + pc;
+          if (tot > 0 && tot <= (f.totalPlays || 9999)) runPctEarly = Math.round(rc / tot * 100);
+          break;
+        }
+      }
+      break;
+    }
+
     // ── Extract plays ─────────────────────────────────────────────────────────
-    // When FAV RUNS and FAV PASSES share one header line (isMergedFav), single-fraction
-    // rows have no explicit column label. rawLines encodes X position as leading spaces
-    // (scale 6pt/space): >15 leading spaces means the play is in the right (pass) column.
+    // Two-fraction rows: both run (left) and pass (right) extracted directly.
+    // Single-fraction rows in merged FAV mode: route by leading-space X encoding
+    // (rawLines), with tendency as tiebreaker (pass-heavy → extra rows = pass).
     let inRuns = false, inPasses = false;
     for (let i = 0; i < lines.length; i++) {
       const s = lines[i];
@@ -1909,7 +1927,9 @@ function parseHudlByPage(pages, filename, fullText) {
       if (!isLikelyPlay(s)) continue;
       const raw = rawLinesArr[i] || s;
       const leadSp = (raw.match(/^(\s+)/) || ['',''])[1].length;
-      const isRightCol = isMergedFav && leadSp > 15;
+      // >15 leading spaces = right/pass column (X > ~90pt encoded at 6pt/space)
+      // Also fall back to tendency: if pass-heavy formation, extra single-frac = pass
+      const isRightCol = isMergedFav && (leadSp > 15 || runPctEarly < 50);
       const hasFrac = /\b\d{1,3}\/\d{1,4}\b/.test(s);
       if (hasFrac) {
         const fracs2 = [...s.matchAll(/\b\d{1,3}\/\d{1,4}\b/g)];
@@ -1920,7 +1940,7 @@ function parseHudlByPage(pages, filename, fullText) {
           if (rp && rp.length >= 2 && !f.runPlays.includes(rp)) f.runPlays.push(rp);
           if (pass && pass.length >= 2 && !f.passPlays.includes(pass)) f.passPlays.push(pass);
         } else {
-          // Single fraction — use leading-space column detection when in merged mode
+          // Single fraction — X encoding + tendency fallback
           const pn = run || extractPlayName(s);
           if (pn && pn.length >= 2) {
             if (isRightCol || inPasses) {
