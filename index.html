@@ -1733,66 +1733,32 @@ function parseHudlByPage(pages, filename, fullText) {
   const log = [];
   const blank = pages.filter(p => p.charCount < 50);
   const content = pages.filter(p => p.charCount >= 50);
-  log.push(`→ PDF structure: ${pages.length} pages total, ${blank.length} blank (skipped), ${content.length} with content`);
+  log.push(`→ PDF: ${pages.length} pages, ${blank.length} blank, ${content.length} with content`);
 
-  // ── CONSOLE LOGGING: first 3 pages raw text ─────────────────────────────────
+  // ── Console: first 3 pages raw text ──────────────────────────────────────────
   console.group(`[BlitzIQ Parser] ${filename}`);
-  console.log(`%c[1] PAGE COUNT`, 'font-weight:bold;color:#f0a500',
-    `${pages.length} total | ${blank.length} blank | ${content.length} with content`);
+  console.log(`%cPAGES`, 'font-weight:bold;color:#f0a500',
+    `${pages.length} total | ${blank.length} blank | ${content.length} content`);
   pages.slice(0, 3).forEach(pg => {
-    const status = pg.charCount < 50 ? '⬜ BLANK' : '📄 CONTENT';
-    console.group(`  Page ${pg.pageNum}: ${status} (${pg.charCount} chars)`);
-    console.log('RAW TEXT (first 500 chars):\n' + pg.text.slice(0, 500));
-    console.log('LINES:', pg.lines.slice(0, 20));
+    console.group(`Page ${pg.pageNum} (${pg.charCount} chars)`);
+    console.log('RAW TEXT:\n' + pg.text.slice(0, 600));
     console.groupEnd();
   });
-  // ─────────────────────────────────────────────────────────────────────────────
+
+  const pg1 = content[0];
+  if (!pg1) { console.groupEnd(); return parseHudl(fullText, filename); }
 
   const data = {
-    teamName: 'Imported Team',
-    season: String(new Date().getFullYear()),
+    teamName: extractName(pg1.text, pg1.lines, filename),
+    season: pg1.text.match(/\b(20\d{2})\b/)?.[1] || String(new Date().getFullYear()),
     runPct: 50, passPct: 50,
     notes: '', formations: [], situations: [],
-    rawLines: content[0]?.lines || [],
-    extractionLog: log,
-    // Store pages 1 and 3 raw text for the debug panel in the preview
+    rawLines: pg1.lines, extractionLog: log,
     debugPage1: pages[0]?.text || '',
     debugPage3: pages[2]?.text || ''
   };
 
-  if (!content.length) return data;
-
-  // STEP 1 — Page 1: extract master formation list
-  const pg1 = content[0];
-  data.teamName = extractName(pg1.text, pg1.lines, filename);
-  const ym = pg1.text.match(/\b(20\d{2})\b/);
-  if (ym) data.season = ym[1];
-
-  // Build master list from page 1 using Phase 1 anchor logic
-  const tempData = { extractionLog: [], formations: [], runPct: 50, passPct: 50, notes: '' };
-  const tp = extractTopPlays(pg1.text, pg1.lines, tempData);
-  const masterAnchors = extractFormations(pg1.lines, tempData, tp);
-
-  log.push(`→ Step 1 — Page ${pg1.pageNum}: ${masterAnchors.length} formation(s) in master list`);
-  masterAnchors.forEach(f => log.push(`  • ${f.name} (${f.playCount||'?'}/${f.totalPlays||'?'})`));
-
-  if (!masterAnchors.length) {
-    // Fall back to full-doc parser
-    log.push('  ✗ No formations on page 1 — falling back to full-document parser');
-    return parseHudl(fullText, filename);
-  }
-
-  // Init formation records
-  masterAnchors.forEach(f => {
-    f.runPlays = f.runPlays || [];
-    f.passPlays = f.passPlays || [];
-    f.situations = f.situations || [];
-    f.favoriteRunPlay = f.favoriteRunPlay || '';
-    f.favoritePassPlay = f.favoritePassPlay || '';
-    f.foundOnPage = null;
-  });
-
-  // Helpers — local copies so they work outside updateFormationsFromDetails scope
+  // ── Helper functions ──────────────────────────────────────────────────────────
   function pnFromLine(s) {
     const w0 = s.split(/\s+/)[0];
     if (!isAllCaps(s) || _HEADER_RE.test(s.toUpperCase()) || w0.length < 2 || s.length < 3) return null;
@@ -1820,216 +1786,169 @@ function parseHudlByPage(pages, filename, fullText) {
     }
     return { run, pass };
   }
-
-  // STEPS 2–4 — Scan each remaining content page for formation detail pages
-  const detailPages = content.slice(1);
-  log.push(`→ Step 2 — Scanning ${detailPages.length} content page(s) for formation details`);
-  console.log(`%c[2] DETAIL PAGE SCAN`, 'font-weight:bold;color:#f0a500',
-    `${detailPages.length} content pages to check`);
-
-  // ── FAV section header patterns — flexible, accepts all known Hudl variations ──
-  // "FAV RUNS", "FAVORITE RUNS", "FAV RUN", "TOP RUN PLAYS", "RUN PLAYS"
-  const isRunHdr = s => /^(FAV(?:ORITE)?\s*RUNS?\b|TOP\s*RUN\s*PLAYS?\b|RUN\s*PLAYS?\b)/i.test(s)
-                     || (/^FAV(?:ORITE)?\s*RUNS?\b/i.test(s)); // also matches merged header with trailing content
-  // "FAV PASSES", "FAVORITE PASSES", "FAV PASS", "TOP PASS PLAYS", "PASS PLAYS"
+  const isRunHdr  = s => /^(FAV(?:ORITE)?\s*RUNS?\b|TOP\s*RUN\s*PLAYS?\b|RUN\s*PLAYS?\b)/i.test(s);
   const isPassHdr = s => /^(FAV(?:ORITE)?\s*PASS(?:ES?)?\b|TOP\s*PASS\s*PLAYS?\b|PASS\s*PLAYS?\b)/i.test(s);
-  // Section-end markers
-  const isSectionEnd = s => /^(BACKFIELDS|MOTION|STRENGTH|BOUNDARY|CREATED|DOWN\b)/i.test(s);
-
-  // ── Flexible play line check ─────────────────────────────────────────────────
-  // Accept any line between FAV RUNS/PASSES headers that looks like a play name:
-  // has ≥2 letters, is not pure stats/numbers, is not a header or label
+  const isSectionEnd = s => /^(BACKFIELDS|MOTION|STRENGTH|BOUNDARY|CREATED)\b/i.test(s);
   function isLikelyPlay(s) {
     if (!s || s.length < 2) return false;
-    if (/^[\d\s%.\/\-]+$/.test(s)) return false;               // pure numbers/stats
+    if (/^[\d\s%.\/\-]+$/.test(s)) return false;
     if (/^(Count|Percent|Tot\b|Avg\b|Eff\b|Run\b|Pass\b|Down\b|Strength|Motion|Backfield|Boundary|Created|Left\b|Right\b)/i.test(s)) return false;
-    if (/^[EDABCedabc]\s+[EDABCedabc]\s+/.test(s)) return false; // gap diagram "E D C B A"
-    if (/^[-\s\d]+$/.test(s)) return false;                    // dashes and numbers only
-    return /[A-Za-z]{2}/.test(s);                              // must have ≥2 consecutive letters
+    if (/^[EDCBA]\s+[EDCBA]\s+/i.test(s)) return false;
+    if (/^[-\s\d]+$/.test(s)) return false;
+    return /[A-Za-z]{2}/.test(s);
   }
-
-  // ── Extract best play name from a line (with or without inline stats) ────────
   function extractPlayName(s) {
-    // If line has a fraction, extract what's before it
-    const fracM = s.match(/^(.+?)\s{1,}\d{1,3}\/\d{1,4}/);
-    if (fracM) {
-      const candidate = fracM[1].replace(/\s+[-\d.]+\s*$/, '').trim();
-      if (candidate.length >= 2 && /[A-Za-z]{2}/.test(candidate)) return candidate;
-    }
-    // Otherwise return the whole line (trimmed of trailing stats)
+    const fracM = s.match(/^(.+?)\s+\d{1,3}\/\d{1,4}/);
+    if (fracM) { const c = fracM[1].replace(/\s+[-\d.]+\s*$/, '').trim(); if (c.length >= 2 && /[A-Za-z]{2}/.test(c)) return c; }
     return s.replace(/\s{2,}[\d.%]+.*$/, '').trim() || s.trim();
   }
 
-  for (const pg of detailPages) {
-    let matched = null;
-
-    // ── Page matching: 4 strategies, most-specific first ─────────────────────
-    const headLines = pg.lines.slice(0, 15);
-    const headText = headLines.join('\n');
-
-    // Strategy A: exact formation name in first 15 lines
-    for (const f of masterAnchors) {
-      if (f.foundOnPage !== null) continue;
-      if (headText.includes(f.name)) { matched = f; break; }
-    }
-
-    // Strategy B: all words of formation name appear in first 15 lines (fuzzy)
-    if (!matched) {
-      for (const f of masterAnchors) {
-        if (f.foundOnPage !== null) continue;
-        if (f.name.split(/\s+/).every(w => headText.includes(w))) { matched = f; break; }
+  // ── Extract formation name from a page's opening lines ───────────────────────
+  // Hudl detail pages start: "rank  first_word" | "playCount" | "name_rest" | "/total stats"
+  function extractFormNameFromPage(lines) {
+    for (let i = 0; i < Math.min(6, lines.length); i++) {
+      const rm = lines[i].match(/^(\d{1,2})\s+([A-Z][A-Z0-9\s\-'\(\)#]{1,55})$/);
+      if (!rm) continue;
+      let rname = rm[2].trim();
+      let candidatePC = null;
+      // Strip fused playCount: "DOUBLES  15" → rname="DOUBLES", candidatePC=15
+      const fuse = rname.match(/^([A-Z][A-Z0-9\s\-'\(\)#]+?)\s{2,}(\d{1,3})((?:\s+[A-Z][A-Z\s]*)?)$/);
+      if (fuse && isAllCaps(fuse[1].trim())) {
+        candidatePC = parseInt(fuse[2]);
+        rname = (fuse[1].trim() + (fuse[3] ? ' ' + fuse[3].trim() : '')).trim();
+      }
+      let nameExt = '', tot = null;
+      for (let j = i + 1; j < Math.min(i + 8, lines.length); j++) {
+        const sub = lines[j].trim(); if (!sub) continue;
+        if (/^\/(\d{1,4})(?:\s|$)/.test(sub)) { tot = parseInt(sub.match(/^\/(\d{1,4})/)[1]); break; }
+        if (/^(\d{1,3})\/(\d{1,4})/.test(sub)) break;
+        if (/^(RUN|PASS|FAV|DOWN|BACKFIELD|LEFT|RIGHT)\b/i.test(sub)) break;
+        if (/^[RL]$/.test(sub) || (isAllCaps(sub) && sub.length >= 2)) { nameExt += ' ' + sub; continue; }
+        if (/^\d{1,3}$/.test(sub)) { if (!candidatePC) candidatePC = parseInt(sub); continue; }
+        const lm = sub.match(/^(\d{1,3})\s+\d/); if (lm && !candidatePC) { candidatePC = parseInt(lm[1]); continue; }
+      }
+      const fullName = (rname + nameExt).trim();
+      if (isAllCaps(fullName) && FORM_KEYWORDS.test(fullName) && !isSkipWord(fullName)) {
+        return { name: fullName, playCount: candidatePC, totalPlays: tot };
       }
     }
+    return null;
+  }
 
-    // Strategy C: rank-prefixed line "1  DOUBLES R" or "1  DOUBLES  15" variant
-    if (!matched) {
-      for (const line of headLines) {
-        const rm = line.match(/^\d{1,2}\s+([A-Z][A-Z0-9\s\-'\(\)#]{2,})/);
-        if (rm) {
-          const cand = rm[1].trim().replace(/\s{2,}\d+.*$/, '').trim();
-          const f = masterAnchors.find(x => !x.foundOnPage &&
-            (x.name === cand || x.name.split(/\s+/).every(w => cand.includes(w))));
-          if (f) { matched = f; break; }
-        }
-      }
-    }
+  // ── Scan every content page for formation detail pages ────────────────────────
+  // ROOT CAUSE FIX: page 1 is a summary (3 formations per merged row) — Pattern B
+  // cannot parse those rows. Pages 2-N each contain one formation with its FAV plays.
+  // Solution: discover formation name AND extract plays from each detail page directly.
+  log.push(`→ Scanning ${content.length} pages for formation detail pages`);
+  const formations = [];
+  const seenNames = new Set();
 
-    // Strategy D: fuzzy — any 2+ word ALL CAPS football-looking line on the page
-    // maps to the next unmatched formation in order (formations appear sequentially in PDF)
-    if (!matched) {
-      const hasFormationLike = headLines.some(l => {
-        const t = l.trim();
-        return isAllCaps(t) && t.split(/\s+/).length >= 2 && FORM_KEYWORDS.test(t) && !isSkipWord(t);
-      });
-      if (hasFormationLike) {
-        matched = masterAnchors.find(f => f.foundOnPage === null) || null;
-        if (matched) log.push(`  Page ${pg.pageNum}: Strategy D (fuzzy football text) → "${matched.name}"`);
-      }
-    }
+  for (const pg of content) {
+    const formInfo = extractFormNameFromPage(pg.lines);
+    if (!formInfo) { log.push(`  Page ${pg.pageNum}: no formation header — skipped`); continue; }
+    if (seenNames.has(formInfo.name)) { log.push(`  Page ${pg.pageNum}: "${formInfo.name}" duplicate — skipped`); continue; }
+    seenNames.add(formInfo.name);
 
-    if (!matched) {
-      log.push(`  Page ${pg.pageNum} (${pg.charCount} chars): no match — skipped`);
-      console.log(`  [Page ${pg.pageNum}] ❌ NO MATCH`);
-      console.log(`    First 15 lines:`, headLines);
-      console.log(`    Unmatched formations:`, masterAnchors.filter(f=>f.foundOnPage===null).map(f=>f.name));
-      continue;
-    }
+    const f = {
+      name: formInfo.name, playCount: formInfo.playCount, totalPlays: formInfo.totalPlays,
+      runPct: 50, passPct: 50,
+      runPlays: [], passPlays: [], favoriteRunPlay: '', favoritePassPlay: '',
+      situations: [], foundOnPage: pg.pageNum
+    };
 
-    matched.foundOnPage = pg.pageNum;
     const lines = pg.lines;
-
-    // Detect merged FAV header ("FAV RUNS  ...  FAV PASSES  ..." on one line)
     const isMergedFav = lines.some(l => isRunHdr(l) && /FAV\s*PASS/i.test(l));
 
-    console.log(`  [Page ${pg.pageNum}] ✅ MATCHED → "${matched.name}" | isMergedFav=${isMergedFav}`);
-    console.log(`    All lines (${lines.length}):`, lines);
-
-    // Log what we find under each FAV header (for diagnostics)
-    let logMode2 = null;
-    const favRunLines = [], favPassLines = [];
+    // Console diagnostics
+    console.group(`  Page ${pg.pageNum}: "${f.name}" pc=${f.playCount} tot=${f.totalPlays} merged=${isMergedFav}`);
+    let lm = null; const dbgR = [], dbgP = [];
     for (const l of lines) {
-      if (isRunHdr(l)) { logMode2 = 'run'; continue; }
-      if (isPassHdr(l)) { logMode2 = 'pass'; continue; }
-      if (isSectionEnd(l)) { logMode2 = null; continue; }
-      if (logMode2 === 'run') favRunLines.push(l);
-      if (logMode2 === 'pass') favPassLines.push(l);
+      if (isRunHdr(l)) { lm = 'r'; continue; } if (isPassHdr(l)) { lm = 'p'; continue; }
+      if (isSectionEnd(l)) { lm = null; continue; }
+      if (lm === 'r') dbgR.push(l); if (lm === 'p') dbgP.push(l);
     }
-    console.log(`    FAV RUNS lines (${favRunLines.length}):`, favRunLines);
-    console.log(`    FAV PASSES lines (${favPassLines.length}):`, favPassLines);
+    console.log('FAV RUNS:', dbgR); console.log('FAV PASS:', dbgP);
+    console.groupEnd();
 
-    // ── STEP 3 — Extract plays, tendency, D&D from this page ─────────────────
+    // ── Extract plays ─────────────────────────────────────────────────────────
     let inRuns = false, inPasses = false;
-
     for (let i = 0; i < lines.length; i++) {
       const s = lines[i];
-
-      // Section transitions — flexible headers
       if (isRunHdr(s)) { inRuns = true; inPasses = false; continue; }
       if (isPassHdr(s)) { inRuns = false; inPasses = true; continue; }
       if (isSectionEnd(s)) { inRuns = false; inPasses = false; continue; }
-
-      if (inRuns || inPasses) {
-        if (!isLikelyPlay(s)) continue; // skip obvious non-plays
-
-        const hasFrac = /\b\d{1,3}\/\d{1,4}\b/.test(s);
-        if (hasFrac || isMergedFav) {
-          const { run, pass } = pnMergedFromLine(s);
-          const runPlay = run || (isLikelyPlay(s.replace(/\s+\d.*$/, '').trim()) ? extractPlayName(s) : null);
-          if (runPlay && runPlay.length >= 2) {
-            if (inRuns && !matched.runPlays.includes(runPlay)) matched.runPlays.push(runPlay);
-            else if (inPasses && !matched.passPlays.includes(runPlay)) matched.passPlays.push(runPlay);
-          }
-          if (isMergedFav && inRuns && pass && pass.length >= 2 && !matched.passPlays.includes(pass)) {
-            matched.passPlays.push(pass);
-          }
-        } else {
-          // Plain text line — extract play name flexibly
-          const pn = pnFromLine(s) || (isLikelyPlay(s) ? extractPlayName(s) : null);
-          if (pn && pn.length >= 2) {
-            if (inRuns && !matched.runPlays.includes(pn)) matched.runPlays.push(pn);
-            else if (inPasses && !matched.passPlays.includes(pn)) matched.passPlays.push(pn);
-          }
+      if (!inRuns && !inPasses) continue;
+      if (!isLikelyPlay(s)) continue;
+      const hasFrac = /\b\d{1,3}\/\d{1,4}\b/.test(s);
+      if (hasFrac || isMergedFav) {
+        const { run, pass } = pnMergedFromLine(s);
+        const rp = run || extractPlayName(s);
+        if (rp && rp.length >= 2) {
+          if (inRuns && !f.runPlays.includes(rp)) f.runPlays.push(rp);
+          else if (inPasses && !f.passPlays.includes(rp)) f.passPlays.push(rp);
         }
-      }
-
-      // Tendency: standalone "RUN" or merged "RUN  PASS" header
-      if (s === 'RUN' || /^RUN\b.*\bPASS\b/i.test(s)) {
-        if (matched.runPct === 50) { // only update if not already set
-          for (let k = i + 1; k < Math.min(i + 10, lines.length); k++) {
-            const fracs = [...lines[k].matchAll(/\b(\d{1,3})\/(\d{1,4})\b/g)];
-            if (fracs.length >= 2) {
-              const rc = +fracs[0][1], pc = +fracs[1][1], tot = rc + pc;
-              if (tot > 0) { matched.runPct = Math.round(rc / tot * 100); matched.passPct = 100 - matched.runPct; }
-              break;
-            }
-          }
-        }
-      }
-
-      // D&D situations
-      if (/^(1\s*st|2\s*nd|3\s*rd|4\s*th)\b/i.test(s)) {
-        let pct = null;
-        for (let k = 0; k <= 3; k++) { pct = extractPctPair(lines[i + k] || ''); if (pct) break; }
-        if (pct) {
-          const d = /^1/.test(s) ? 1 : /^2/.test(s) ? 2 : /^3/.test(s) ? 3 : 4;
-          const lbl = `${d}${d===1?'st':d===2?'nd':d===3?'rd':'th'} Down`;
-          if (!matched.situations.find(x => x.distLabel === lbl)) {
-            matched.situations.push({ down: d, distLabel: lbl, runPct: pct.run, passPct: pct.pass, notes: 'Extracted from Hudl.', dc: {} });
-          }
+        if (isMergedFav && inRuns && pass && pass.length >= 2 && !f.passPlays.includes(pass)) f.passPlays.push(pass);
+      } else {
+        const pn = pnFromLine(s) || extractPlayName(s);
+        if (pn && pn.length >= 2) {
+          if (inRuns && !f.runPlays.includes(pn)) f.runPlays.push(pn);
+          else if (inPasses && !f.passPlays.includes(pn)) f.passPlays.push(pn);
         }
       }
     }
+    if (!f.favoriteRunPlay && f.runPlays.length) f.favoriteRunPlay = f.runPlays[0];
+    if (!f.favoritePassPlay && f.passPlays.length) f.favoritePassPlay = f.passPlays[0];
 
-    if (!matched.favoriteRunPlay && matched.runPlays.length) matched.favoriteRunPlay = matched.runPlays[0];
-    if (!matched.favoritePassPlay && matched.passPlays.length) matched.favoritePassPlay = matched.passPlays[0];
+    // ── Extract tendency from RUN/PASS stats line ─────────────────────────────
+    for (let i = 0; i < lines.length; i++) {
+      const s = lines[i];
+      if (s !== 'RUN' && !/^RUN\b.*\bPASS\b/i.test(s)) continue;
+      for (let k = i + 1; k < Math.min(i + 10, lines.length); k++) {
+        const fracs = [...lines[k].matchAll(/\b(\d{1,3})\/(\d{1,4})\b/g)];
+        if (fracs.length >= 2) {
+          const rc = +fracs[0][1], pc = +fracs[1][1], tot = rc + pc;
+          if (tot > 0) { f.runPct = Math.round(rc / tot * 100); f.passPct = 100 - f.runPct; }
+          break;
+        }
+      }
+      break;
+    }
 
-    // STEP 5 — Log this formation's result
-    log.push(`  ✓ ${matched.name} — page ${pg.pageNum} — ${matched.runPlays.length} run play(s) — ${matched.passPlays.length} pass play(s)`);
-    console.log(`    ↳ runPlays extracted:`, matched.runPlays);
-    console.log(`    ↳ passPlays extracted:`, matched.passPlays);
+    // ── Extract D&D situations ────────────────────────────────────────────────
+    for (let i = 0; i < lines.length; i++) {
+      const s = lines[i];
+      if (!/^(1\s*st|2\s*nd|3\s*rd|4\s*th)\b/i.test(s)) continue;
+      let pct = null;
+      for (let k = 0; k <= 3; k++) { pct = extractPctPair(lines[i + k] || ''); if (pct) break; }
+      if (!pct) continue;
+      const d = /^1/.test(s) ? 1 : /^2/.test(s) ? 2 : /^3/.test(s) ? 3 : 4;
+      const lbl = `${d}${d===1?'st':d===2?'nd':d===3?'rd':'th'} Down`;
+      if (!f.situations.find(x => x.distLabel === lbl)) {
+        f.situations.push({ down: d, distLabel: lbl, runPct: pct.run, passPct: pct.pass, notes: 'Extracted from Hudl.', dc: {} });
+      }
+    }
+
+    log.push(`  ✓ Page ${pg.pageNum}: "${f.name}" — ${f.runPlays.length} run / ${f.passPlays.length} pass / ${f.situations.length} D&D`);
+    formations.push(f);
   }
 
-  // Report any formations not found on any detail page
-  const missing = masterAnchors.filter(f => f.foundOnPage === null);
-  if (missing.length) log.push(`  ⚠ Not found on any page: ${missing.map(f => f.name).join(', ')}`);
+  // Sort by playCount descending, keep top 9
+  formations.sort((a, b) => (b.playCount || 0) - (a.playCount || 0));
+  data.formations = formations.slice(0, 9);
 
-  console.log(`%c[3] FINAL RESULTS`, 'font-weight:bold;color:#f0a500');
-  masterAnchors.forEach(f => {
-    console.log(`  ${f.name}: page=${f.foundOnPage} runPlays=[${f.runPlays.join(', ')}] passPlays=[${f.passPlays.join(', ')}] runPct=${f.runPct}%`);
-  });
-  console.groupEnd();
-
-  data.formations = masterAnchors;
-
-  // Derive overall tendency from weighted formation average
-  const totalPlays = masterAnchors.reduce((s, f) => s + (f.playCount || 0), 0);
-  if (totalPlays > 0) {
-    const wr = masterAnchors.reduce((s, f) => s + (f.runPct ?? 50) * (f.playCount || 0), 0);
-    data.runPct = Math.round(wr / totalPlays);
-    data.passPct = 100 - data.runPct;
+  // Overall tendency: weighted average of formation tendencies
+  const totalP = data.formations.reduce((s, f) => s + (f.playCount || 0), 0);
+  if (totalP > 0) {
+    const wr = data.formations.reduce((s, f) => s + (f.runPct ?? 50) * (f.playCount || 0), 0);
+    data.runPct = Math.round(wr / totalP); data.passPct = 100 - data.runPct;
     log.push(`→ Overall tendency (weighted): Run ${data.runPct}% / Pass ${data.passPct}%`);
   }
 
+  const wp = data.formations.filter(f => f.runPlays.length > 0 || f.passPlays.length > 0);
+  log.push(`→ Summary: ${data.formations.length} formations, ${wp.length} with plays`);
+  console.log('%cDONE', 'font-weight:bold;color:#4ade80',
+    `${data.formations.length} formations | ${wp.length} with plays`);
+  console.groupEnd();
   return data;
 }
 
