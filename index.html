@@ -1561,6 +1561,14 @@ function hideProgress(){document.getElementById('progOv').classList.remove('open
 function combineResults(results){
   const log=[`Combining data from ${results.length} PDF${results.length>1?'s':''}`];
 
+  // Include per-PDF parser logs (contains X= diagnostic lines)
+  for(const r of results){
+    if(r.extractionLog&&r.extractionLog.length){
+      log.push(`--- ${r.filename} ---`);
+      r.extractionLog.forEach(e=>log.push(e));
+    }
+  }
+
   // Team name: first non-generic
   let teamName='Imported Team', season=String(new Date().getFullYear());
   let runPct=50, passPct=50, ovFound=false;
