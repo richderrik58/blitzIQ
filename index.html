@@ -1863,6 +1863,7 @@ function parseHudlByPage(pages, filename, fullText) {
     const isMergedFav = lines.some(l => isRunHdr(l) && /FAV\s*PASS/i.test(l));
 
     // Console diagnostics
+    const lineXs0 = pg.lineXs || [];
     console.group(`  Page ${pg.pageNum}: "${f.name}" pc=${f.playCount} tot=${f.totalPlays} merged=${isMergedFav}`);
     let lm = null; const dbgR = [], dbgP = [];
     for (const l of lines) {
@@ -1871,6 +1872,14 @@ function parseHudlByPage(pages, filename, fullText) {
       if (lm === 'r') dbgR.push(l); if (lm === 'p') dbgP.push(l);
     }
     console.log('FAV RUNS:', dbgR); console.log('FAV PASS:', dbgP);
+    // Log X positions for all lines in FAV section so we can tune the threshold
+    let inFav = false;
+    for (let i = 0; i < lines.length; i++) {
+      const l = lines[i];
+      if (isRunHdr(l)) { inFav = true; continue; }
+      if (isSectionEnd(l)) { inFav = false; continue; }
+      if (inFav && isLikelyPlay(l)) console.log(`  X=${Math.round(lineXs0[i]||0).toString().padStart(4)} | ${l.slice(0,60)}`);
+    }
     console.groupEnd();
 
     // ── Extract plays ─────────────────────────────────────────────────────────
