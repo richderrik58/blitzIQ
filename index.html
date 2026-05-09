@@ -1503,7 +1503,10 @@ async function handlePDF(e) {
       const text=await extractPDFText(file);
       setProgress(i,'parsing',65,'Extracting…');
       await new Promise(r=>setTimeout(r,0)); // yield so UI updates
-      const parsed=parseHudl(text,file.name);
+      // Use page-aware parser when per-page data is available (Formation Breakdown PDFs)
+      const parsed=file._pdfPages && file._pdfPages.length > 0
+        ? parseHudlByPage(file._pdfPages, file.name, text)
+        : parseHudl(text, file.name);
       parsed.filename=file.name;
       results.push(parsed);
       setProgress(i,'done',100,'Done ✓');
@@ -1657,6 +1660,9 @@ function combineResults(results){
   return combined;
 }
 
+// ── PDF TEXT EXTRACTION ───────────────────────────────────────────────────────
+// Extracts text from a PDF file, returning both the full combined text and
+// per-page data. Per-page data enables the dynamic page-aware parser.
 async function extractPDFText(file) {
   const ab = await file.arrayBuffer();
   const pdf = await pdfjsLib.getDocument({
@@ -1666,6 +1672,7 @@ async function extractPDFText(file) {
   }).promise;
 
   let full = '';
+  const pdfPages = []; // per-page data for page-aware parser
 
   for (let p = 1; p <= pdf.numPages; p++) {
     const page = await pdf.getPage(p);
@@ -1680,18 +1687,17 @@ async function extractPDFText(file) {
       const existing = clusters.find(c => Math.abs(c.y - y) <= 5);
       if (existing) {
         existing.items.push({ x, str: item.str });
-        existing.y = (existing.y + y) / 2; // recompute centroid
+        existing.y = (existing.y + y) / 2;
       } else {
         clusters.push({ y, items: [{ x, str: item.str }] });
       }
     }
 
-    // Sort clusters top → bottom (PDF Y is bottom-up so sort descending)
     clusters.sort((a, b) => b.y - a.y);
 
+    let pageText = '';
     for (const cl of clusters) {
       cl.items.sort((a, b) => a.x - b.x);
-      // Preserve column gaps: if gap between items > 20pt, insert two spaces
       let line = '';
       for (let i = 0; i < cl.items.length; i++) {
         const item = cl.items[i];
@@ -1702,12 +1708,232 @@ async function extractPDFText(file) {
         line += item.str;
       }
       const trimmed = line.trim();
-      if (trimmed) full += trimmed + '\n';
+      if (trimmed) pageText += trimmed + '\n';
     }
-    full += '\n';
+
+    pdfPages.push({
+      pageNum: p,
+      text: pageText,
+      lines: pageText.split('\n').map(l => l.trim()).filter(l => l.length > 0),
+      charCount: pageText.trim().length
+    });
+
+    full += pageText + '\n';
   }
 
+  // Attach per-page data to the file object so handlePDF can use it
+  file._pdfPages = pdfPages;
   return full;
+}
+
+// ── PAGE-AWARE HUDL PARSER ────────────────────────────────────────────────────
+// Uses per-page data from extractPDFText to handle blank pages and variable
+// page layouts without assuming fixed page numbers.
+function parseHudlByPage(pages, filename, fullText) {
+  const log = [];
+  const blank = pages.filter(p => p.charCount < 50);
+  const content = pages.filter(p => p.charCount >= 50);
+  log.push(`→ PDF structure: ${pages.length} pages total, ${blank.length} blank (skipped), ${content.length} with content`);
+
+  const data = {
+    teamName: 'Imported Team',
+    season: String(new Date().getFullYear()),
+    runPct: 50, passPct: 50,
+    notes: '', formations: [], situations: [],
+    rawLines: content[0]?.lines || [],
+    extractionLog: log
+  };
+
+  if (!content.length) return data;
+
+  // STEP 1 — Page 1: extract master formation list
+  const pg1 = content[0];
+  data.teamName = extractName(pg1.text, pg1.lines, filename);
+  const ym = pg1.text.match(/\b(20\d{2})\b/);
+  if (ym) data.season = ym[1];
+
+  // Build master list from page 1 using Phase 1 anchor logic
+  const tempData = { extractionLog: [], formations: [], runPct: 50, passPct: 50, notes: '' };
+  const tp = extractTopPlays(pg1.text, pg1.lines, tempData);
+  const masterAnchors = extractFormations(pg1.lines, tempData, tp);
+
+  log.push(`→ Step 1 — Page ${pg1.pageNum}: ${masterAnchors.length} formation(s) in master list`);
+  masterAnchors.forEach(f => log.push(`  • ${f.name} (${f.playCount||'?'}/${f.totalPlays||'?'})`));
+
+  if (!masterAnchors.length) {
+    // Fall back to full-doc parser
+    log.push('  ✗ No formations on page 1 — falling back to full-document parser');
+    return parseHudl(fullText, filename);
+  }
+
+  // Init formation records
+  masterAnchors.forEach(f => {
+    f.runPlays = f.runPlays || [];
+    f.passPlays = f.passPlays || [];
+    f.situations = f.situations || [];
+    f.favoriteRunPlay = f.favoriteRunPlay || '';
+    f.favoritePassPlay = f.favoritePassPlay || '';
+    f.foundOnPage = null;
+  });
+
+  // Helpers — local copies so they work outside updateFormationsFromDetails scope
+  function pnFromLine(s) {
+    const w0 = s.split(/\s+/)[0];
+    if (!isAllCaps(s) || _HEADER_RE.test(s.toUpperCase()) || w0.length < 2 || s.length < 3) return null;
+    if (!/\d/.test(s)) return s;
+    if (/^\d{1,2}\s+[A-Z]/.test(s)) return s.replace(/\s+\d+\/.*$|\s+\d+\s+\d.*$/, '').trim();
+    const m = s.match(/^([A-Z][A-Z\s\-'\(\)#]{2,50}?)(?:\s{2,}|\s+\d)/);
+    return m ? m[1].trim() : null;
+  }
+  function pnMergedFromLine(s) {
+    const fracs = [...s.matchAll(/\b\d{1,3}\/\d{1,4}\b/g)];
+    if (!fracs.length) return { run: null, pass: null };
+    const rp = s.slice(0, fracs[0].index).replace(/\s{2,}[-\d.]+(?:\s[-\d.]+)*\s*$/, '').trim();
+    const run = (rp.length >= 3 && /^[A-Z0-9]/.test(rp) && /[A-Z]{2}/.test(rp) && !/[%]/.test(rp)) ? rp : null;
+    let pass = null;
+    if (fracs.length >= 2) {
+      const between = s.slice(fracs[0].index, fracs[1].index);
+      const pm = between.match(/\s{2,}((?:\d{1,2}\s+)?[A-Z][A-Z0-9\s\-'\(\)#]{2,50}?)\s*$/);
+      if (pm) { const pp = pm[1].trim(); if (pp.length >= 3 && /[A-Z]{2}/.test(pp) && !/[%]/.test(pp)) pass = pp; }
+    }
+    if (!run) { const pp = rp.replace(/^[\d%.\s\-]+/, '').trim(); if (pp.length >= 3 && /[A-Z]{2}/.test(pp) && !/[%]/.test(pp)) pass = pp; }
+    if (!pass) {
+      const after = s.slice(fracs[fracs.length-1].index + fracs[fracs.length-1][0].length);
+      const tm = after.match(/\s{2,}([A-Z][A-Z0-9\s\-'\(\)#]{2,50})\s*$/);
+      if (tm) { const pp = tm[1].trim(); if (pp.length >= 3 && /[A-Z]{2}/.test(pp) && !/[%\d]/.test(pp)) pass = pp; }
+    }
+    return { run, pass };
+  }
+
+  // STEPS 2–4 — Scan each remaining content page for formation detail pages
+  const detailPages = content.slice(1);
+  log.push(`→ Step 2 — Scanning ${detailPages.length} content page(s) for formation details`);
+
+  for (const pg of detailPages) {
+    // STEP 4 — Already filtered: only content pages (≥50 chars) reach here
+    // Try to match this page to a formation from the master list
+    let matched = null;
+
+    // Strategy A: first 10 lines contain an exact formation name
+    const headText = pg.lines.slice(0, 10).join('\n');
+    for (const f of masterAnchors) {
+      if (f.foundOnPage !== null) continue;
+      if (headText.includes(f.name)) { matched = f; break; }
+    }
+
+    // Strategy B: fuzzy — all words of the formation name appear in first 10 lines
+    if (!matched) {
+      for (const f of masterAnchors) {
+        if (f.foundOnPage !== null) continue;
+        if (f.name.split(/\s+/).every(w => headText.includes(w))) { matched = f; break; }
+      }
+    }
+
+    // Strategy C: rank+name line like "1  DOUBLES R" or "1  DOUBLES  15"
+    if (!matched) {
+      for (const line of pg.lines.slice(0, 8)) {
+        const rm = line.match(/^\d{1,2}\s+([A-Z][A-Z0-9\s\-'\(\)#]+)/);
+        if (rm) {
+          const cand = rm[1].trim().replace(/\s{2,}\d.*$/, '').trim();
+          const f = masterAnchors.find(x => !x.foundOnPage && (x.name === cand || x.name.split(/\s+/).every(w => cand.includes(w))));
+          if (f) { matched = f; break; }
+        }
+        if (matched) break;
+      }
+    }
+
+    if (!matched) {
+      log.push(`  Page ${pg.pageNum} (${pg.charCount} chars): no match — skipped`);
+      continue;
+    }
+
+    matched.foundOnPage = pg.pageNum;
+
+    // STEP 3 — Extract plays and tendency from this formation's page
+    const lines = pg.lines;
+    let inRuns = false, inPasses = false;
+    const isMergedFav = lines.some(l => /^FAV(?:ORITE)?\s*RUNS?\b.*FAV\s*PASS/i.test(l));
+
+    for (let i = 0; i < lines.length; i++) {
+      const s = lines[i];
+
+      // Section transitions
+      if (/^FAV(?:ORITE)?\s*RUNS?\b/i.test(s)) { inRuns = true; inPasses = false; continue; }
+      if (/^FAV(?:ORITE)?\s*PASS/i.test(s)) { inRuns = false; inPasses = true; continue; }
+      if (/^(BACKFIELDS|MOTION|STRENGTH|BOUNDARY|CREATED)\b/i.test(s)) { inRuns = false; inPasses = false; continue; }
+
+      if (inRuns || inPasses) {
+        const hasFrac = /\b\d{1,3}\/\d{1,4}\b/.test(s);
+        if (hasFrac || isMergedFav) {
+          const { run, pass } = pnMergedFromLine(s);
+          if (run && run.length >= 3) {
+            if (inRuns && !matched.runPlays.includes(run)) matched.runPlays.push(run);
+            else if (inPasses && !matched.passPlays.includes(run)) matched.passPlays.push(run);
+          }
+          // Merged format: pass column captured in FAV RUNS section
+          if (isMergedFav && inRuns && pass && pass.length >= 3 && !matched.passPlays.includes(pass)) {
+            matched.passPlays.push(pass);
+          }
+        } else {
+          const pn = pnFromLine(s);
+          if (pn && pn.length >= 3) {
+            if (inRuns && !matched.runPlays.includes(pn)) matched.runPlays.push(pn);
+            else if (inPasses && !matched.passPlays.includes(pn)) matched.passPlays.push(pn);
+          }
+        }
+      }
+
+      // Tendency: standalone "RUN" or merged "RUN  PASS" header
+      if (s === 'RUN' || /^RUN\b.*\bPASS\b/i.test(s)) {
+        if (matched.runPct === 50) { // only update if not already set
+          for (let k = i + 1; k < Math.min(i + 10, lines.length); k++) {
+            const fracs = [...lines[k].matchAll(/\b(\d{1,3})\/(\d{1,4})\b/g)];
+            if (fracs.length >= 2) {
+              const rc = +fracs[0][1], pc = +fracs[1][1], tot = rc + pc;
+              if (tot > 0) { matched.runPct = Math.round(rc / tot * 100); matched.passPct = 100 - matched.runPct; }
+              break;
+            }
+          }
+        }
+      }
+
+      // D&D situations
+      if (/^(1\s*st|2\s*nd|3\s*rd|4\s*th)\b/i.test(s)) {
+        let pct = null;
+        for (let k = 0; k <= 3; k++) { pct = extractPctPair(lines[i + k] || ''); if (pct) break; }
+        if (pct) {
+          const d = /^1/.test(s) ? 1 : /^2/.test(s) ? 2 : /^3/.test(s) ? 3 : 4;
+          const lbl = `${d}${d===1?'st':d===2?'nd':d===3?'rd':'th'} Down`;
+          if (!matched.situations.find(x => x.distLabel === lbl)) {
+            matched.situations.push({ down: d, distLabel: lbl, runPct: pct.run, passPct: pct.pass, notes: 'Extracted from Hudl.', dc: {} });
+          }
+        }
+      }
+    }
+
+    if (!matched.favoriteRunPlay && matched.runPlays.length) matched.favoriteRunPlay = matched.runPlays[0];
+    if (!matched.favoritePassPlay && matched.passPlays.length) matched.favoritePassPlay = matched.passPlays[0];
+
+    // STEP 5 — Log this formation's result
+    log.push(`  ✓ ${matched.name} — page ${pg.pageNum} — ${matched.runPlays.length} run play(s) — ${matched.passPlays.length} pass play(s)`);
+  }
+
+  // Report any formations not found on any detail page
+  const missing = masterAnchors.filter(f => f.foundOnPage === null);
+  if (missing.length) log.push(`  ⚠ Not found on any page: ${missing.map(f => f.name).join(', ')}`);
+
+  data.formations = masterAnchors;
+
+  // Derive overall tendency from weighted formation average
+  const totalPlays = masterAnchors.reduce((s, f) => s + (f.playCount || 0), 0);
+  if (totalPlays > 0) {
+    const wr = masterAnchors.reduce((s, f) => s + (f.runPct ?? 50) * (f.playCount || 0), 0);
+    data.runPct = Math.round(wr / totalPlays);
+    data.passPct = 100 - data.runPct;
+    log.push(`→ Overall tendency (weighted): Run ${data.runPct}% / Pass ${data.passPct}%`);
+  }
+
+  return data;
 }
 
 // ── HUDL PARSER ───────────────────────────────────────────────────────────────
