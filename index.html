@@ -1705,9 +1705,13 @@ async function extractPDFText(file) {
 
     let pageText = '';
     const lineXs = []; // firstX (PDF points) for each non-empty line, parallel to lines[]
+    const rawLinesList = []; // lines with leading spaces encoding X position
     for (const cl of clusters) {
       cl.items.sort((a, b) => a.x - b.x);
       const firstX = cl.items[0].x;
+      // Encode X position as leading spaces (scale: 6pt per space)
+      // so column detection works without knowing absolute PDF coordinates.
+      const leadSpaces = ' '.repeat(Math.round(firstX / 6));
       let line = '';
       for (let i = 0; i < cl.items.length; i++) {
         const item = cl.items[i];
@@ -1718,13 +1722,18 @@ async function extractPDFText(file) {
         line += item.str;
       }
       const trimmed = line.trim();
-      if (trimmed) { pageText += trimmed + '\n'; lineXs.push(firstX); }
+      if (trimmed) {
+        pageText += trimmed + '\n';
+        lineXs.push(firstX);
+        rawLinesList.push(leadSpaces + trimmed);
+      }
     }
 
     pdfPages.push({
       pageNum: p,
       text: pageText,
       lines: pageText.split('\n').map(l => l.trim()).filter(l => l.length > 0),
+      rawLines: rawLinesList,
       lineXs,
       charCount: pageText.trim().length
     });
@@ -1870,27 +1879,26 @@ function parseHudlByPage(pages, filename, fullText) {
     const lines = pg.lines;
     const isMergedFav = lines.some(l => isRunHdr(l) && /FAV\s*PASS/i.test(l));
 
-    // Diagnostics — X positions shown in "Show Extraction Details" in the preview
-    const lineXs0 = pg.lineXs || [];
+    // Diagnostics — leading spaces (= X/6) shown in extraction log for first formation
+    const rawLinesArr = pg.rawLines || lines;
     if (formations.length === 0) {
-      // Only emit X-position data for the first formation to keep log readable
       let inFavDbg = false;
       for (let i = 0; i < lines.length; i++) {
         const l = lines[i];
         if (isRunHdr(l)) { inFavDbg = true; continue; }
         if (isSectionEnd(l)) { inFavDbg = false; break; }
         if (inFavDbg && isLikelyPlay(l)) {
-          log.push(`  X=${Math.round(lineXs0[i]||0)} | ${l.slice(0,55)}`);
+          const raw = rawLinesArr[i] || l;
+          const sp = (raw.match(/^(\s+)/) || ['',''])[1].length;
+          log.push(`  sp=${sp} X≈${sp*6} | ${l.slice(0,50)}`);
         }
       }
     }
 
     // ── Extract plays ─────────────────────────────────────────────────────────
     // When FAV RUNS and FAV PASSES share one header line (isMergedFav), single-fraction
-    // rows have no explicit column label. Detect column by the first text item's X
-    // position: pass-only plays start at X>200pt (right column) while run plays and
-    // merged rows both start at X<200pt (left column).
-    const lineXs = pg.lineXs || [];
+    // rows have no explicit column label. rawLines encodes X position as leading spaces
+    // (scale 6pt/space): >15 leading spaces means the play is in the right (pass) column.
     let inRuns = false, inPasses = false;
     for (let i = 0; i < lines.length; i++) {
       const s = lines[i];
@@ -1899,8 +1907,9 @@ function parseHudlByPage(pages, filename, fullText) {
       if (isSectionEnd(s)) { inRuns = false; inPasses = false; continue; }
       if (!inRuns && !inPasses) continue;
       if (!isLikelyPlay(s)) continue;
-      const firstX = lineXs[i] || 0;
-      const isRightCol = isMergedFav && firstX > 200;
+      const raw = rawLinesArr[i] || s;
+      const leadSp = (raw.match(/^(\s+)/) || ['',''])[1].length;
+      const isRightCol = isMergedFav && leadSp > 15;
       const hasFrac = /\b\d{1,3}\/\d{1,4}\b/.test(s);
       if (hasFrac) {
         const fracs2 = [...s.matchAll(/\b\d{1,3}\/\d{1,4}\b/g)];
