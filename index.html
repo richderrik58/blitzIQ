@@ -1898,6 +1898,8 @@ function parseHudlByPage(pages, filename, fullText) {
     // ── Pre-extract tendency so play routing can use it ───────────────────────
     // In merged FAV mode, single-fraction rows are the "extra" plays from whichever
     // column has more plays. If the formation is pass-heavy (runPct<50), extras = pass.
+    // Use f.playCount (plays in this formation) as denominator, not rc+pc which
+    // excludes scrambles/other types and inflates the run%.
     let runPctEarly = 50;
     for (let i = 0; i < lines.length; i++) {
       const s = lines[i];
@@ -1905,8 +1907,9 @@ function parseHudlByPage(pages, filename, fullText) {
       for (let k = i + 1; k < Math.min(i + 15, lines.length); k++) {
         const fracs = [...lines[k].matchAll(/\b(\d{1,3})\/(\d{1,4})\b/g)];
         if (fracs.length >= 2) {
-          const rc = +fracs[0][1], pc = +fracs[1][1], tot = rc + pc;
-          if (tot > 0 && tot <= (f.totalPlays || 9999)) runPctEarly = Math.round(rc / tot * 100);
+          const rc = +fracs[0][1], pc = +fracs[1][1];
+          const denom = (f.playCount && f.playCount >= rc + pc) ? f.playCount : rc + pc;
+          if (denom > 0) runPctEarly = Math.round(rc / denom * 100);
           break;
         }
       }
@@ -1965,16 +1968,19 @@ function parseHudlByPage(pages, filename, fullText) {
     if (!f.favoritePassPlay && f.passPlays.length) f.favoritePassPlay = f.passPlays[0];
 
     // ── Extract tendency from RUN/PASS stats line ─────────────────────────────
-    // Method 1: find the RUN header and read the N/M fractions on the next line
+    // Method 1: find the RUN header and read the N/M fractions on the next line.
+    // Use f.playCount as denominator (actual plays in this formation) so scrambles
+    // and other play types are included, giving the same % Hudl shows in the PDF.
     for (let i = 0; i < lines.length; i++) {
       const s = lines[i];
       if (s !== 'RUN' && !/^RUN\b.*\bPASS\b/i.test(s)) continue;
       for (let k = i + 1; k < Math.min(i + 15, lines.length); k++) {
         const fracs = [...lines[k].matchAll(/\b(\d{1,3})\/(\d{1,4})\b/g)];
         if (fracs.length >= 2) {
-          const rc = +fracs[0][1], pc = +fracs[1][1], tot = rc + pc;
-          if (tot > 0 && tot <= (f.totalPlays || 9999)) {
-            f.runPct = Math.round(rc / tot * 100); f.passPct = 100 - f.runPct;
+          const rc = +fracs[0][1], pc = +fracs[1][1];
+          const denom = (f.playCount && f.playCount >= rc + pc) ? f.playCount : rc + pc;
+          if (denom > 0 && rc + pc <= (f.totalPlays || 9999)) {
+            f.runPct = Math.round(rc / denom * 100); f.passPct = 100 - f.runPct;
           }
           break;
         }
