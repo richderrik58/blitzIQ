@@ -1735,6 +1735,17 @@ function parseHudlByPage(pages, filename, fullText) {
   const content = pages.filter(p => p.charCount >= 50);
   log.push(`→ PDF structure: ${pages.length} pages total, ${blank.length} blank (skipped), ${content.length} with content`);
 
+  // ── DIAGNOSTIC LOGGING ──────────────────────────────────────────────────────
+  console.group(`[BlitzIQ Parser] ${filename}`);
+  console.log(`%c[1] PAGE COUNT`, 'font-weight:bold;color:#f0a500',
+    `${pages.length} total pages | ${blank.length} blank | ${content.length} with content`);
+  pages.forEach(pg => {
+    const status = pg.charCount < 50 ? '⬜ BLANK' : '📄 CONTENT';
+    console.log(`  Page ${pg.pageNum}: ${status} (${pg.charCount} chars)`);
+    console.log(`  First 500 chars:`, pg.text.slice(0, 500).replace(/\n/g, '↵'));
+  });
+  // ────────────────────────────────────────────────────────────────────────────
+
   const data = {
     teamName: 'Imported Team',
     season: String(new Date().getFullYear()),
@@ -1808,6 +1819,8 @@ function parseHudlByPage(pages, filename, fullText) {
   // STEPS 2–4 — Scan each remaining content page for formation detail pages
   const detailPages = content.slice(1);
   log.push(`→ Step 2 — Scanning ${detailPages.length} content page(s) for formation details`);
+  console.log(`%c[2] DETAIL PAGE SCAN`, 'font-weight:bold;color:#f0a500',
+    `${detailPages.length} content pages to check`);
 
   for (const pg of detailPages) {
     // STEP 4 — Already filtered: only content pages (≥50 chars) reach here
@@ -1844,6 +1857,9 @@ function parseHudlByPage(pages, filename, fullText) {
 
     if (!matched) {
       log.push(`  Page ${pg.pageNum} (${pg.charCount} chars): no match — skipped`);
+      console.log(`  [Page ${pg.pageNum}] ❌ NO MATCH — skipped`);
+      console.log(`    First 10 lines:`, pg.lines.slice(0, 10));
+      console.log(`    Formations tried:`, masterAnchors.filter(f=>f.foundOnPage===null).map(f=>f.name));
       continue;
     }
 
@@ -1853,6 +1869,21 @@ function parseHudlByPage(pages, filename, fullText) {
     const lines = pg.lines;
     let inRuns = false, inPasses = false;
     const isMergedFav = lines.some(l => /^FAV(?:ORITE)?\s*RUNS?\b.*FAV\s*PASS/i.test(l));
+
+    console.log(`  [Page ${pg.pageNum}] ✅ MATCHED → "${matched.name}" | isMergedFav=${isMergedFav}`);
+    console.log(`    All lines on page:`, lines);
+    // Log FAV RUNS / FAV PASSES sections
+    let logMode = null;
+    const favRunLines = [], favPassLines = [];
+    for (const l of lines) {
+      if (/^FAV(?:ORITE)?\s*RUNS?\b/i.test(l)) { logMode = 'run'; continue; }
+      if (/^FAV(?:ORITE)?\s*PASS/i.test(l)) { logMode = 'pass'; continue; }
+      if (/^(BACKFIELDS|MOTION|STRENGTH|BOUNDARY|CREATED)\b/i.test(l)) { logMode = null; continue; }
+      if (logMode === 'run') favRunLines.push(l);
+      if (logMode === 'pass') favPassLines.push(l);
+    }
+    console.log(`    FAV RUNS lines (${favRunLines.length}):`, favRunLines);
+    console.log(`    FAV PASSES lines (${favPassLines.length}):`, favPassLines);
 
     for (let i = 0; i < lines.length; i++) {
       const s = lines[i];
@@ -1916,11 +1947,19 @@ function parseHudlByPage(pages, filename, fullText) {
 
     // STEP 5 — Log this formation's result
     log.push(`  ✓ ${matched.name} — page ${pg.pageNum} — ${matched.runPlays.length} run play(s) — ${matched.passPlays.length} pass play(s)`);
+    console.log(`    ↳ runPlays extracted:`, matched.runPlays);
+    console.log(`    ↳ passPlays extracted:`, matched.passPlays);
   }
 
   // Report any formations not found on any detail page
   const missing = masterAnchors.filter(f => f.foundOnPage === null);
   if (missing.length) log.push(`  ⚠ Not found on any page: ${missing.map(f => f.name).join(', ')}`);
+
+  console.log(`%c[3] FINAL RESULTS`, 'font-weight:bold;color:#f0a500');
+  masterAnchors.forEach(f => {
+    console.log(`  ${f.name}: page=${f.foundOnPage} runPlays=[${f.runPlays.join(', ')}] passPlays=[${f.passPlays.join(', ')}] runPct=${f.runPct}%`);
+  });
+  console.groupEnd();
 
   data.formations = masterAnchors;
 
