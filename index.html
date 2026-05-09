@@ -1715,6 +1715,7 @@ async function extractPDFText(file) {
       pageNum: p,
       text: pageText,
       lines: pageText.split('\n').map(l => l.trim()).filter(l => l.length > 0),
+      rawLines: pageText.split('\n').filter(l => l.trim().length > 0),
       charCount: pageText.trim().length
     });
 
@@ -1871,6 +1872,10 @@ function parseHudlByPage(pages, filename, fullText) {
     console.groupEnd();
 
     // ── Extract plays ─────────────────────────────────────────────────────────
+    // When FAV RUNS and FAV PASSES share one header line (isMergedFav), single-fraction
+    // rows have no explicit column label. Detect column by leading whitespace in the
+    // raw (untrimmed) line: >15 leading spaces means the play is in the right (pass) column.
+    const rawLines = pg.rawLines || lines;
     let inRuns = false, inPasses = false;
     for (let i = 0; i < lines.length; i++) {
       const s = lines[i];
@@ -1879,25 +1884,37 @@ function parseHudlByPage(pages, filename, fullText) {
       if (isSectionEnd(s)) { inRuns = false; inPasses = false; continue; }
       if (!inRuns && !inPasses) continue;
       if (!isLikelyPlay(s)) continue;
+      const raw = rawLines[i] || s;
+      const leadSpaces = (raw.match(/^(\s+)/) || ['',''])[1].length;
+      const isRightCol = isMergedFav && leadSpaces > 15;
       const hasFrac = /\b\d{1,3}\/\d{1,4}\b/.test(s);
       if (hasFrac) {
         const fracs2 = [...s.matchAll(/\b\d{1,3}\/\d{1,4}\b/g)];
         const { run, pass } = pnMergedFromLine(s);
-        const rp = run || extractPlayName(s);
-        if (rp && rp.length >= 2) {
-          if (inRuns && !f.runPlays.includes(rp)) f.runPlays.push(rp);
-          else if (inPasses && !f.passPlays.includes(rp)) f.passPlays.push(rp);
-        }
-        // If the line has TWO fractions it's a merged run+pass row — extract right column
-        // regardless of isMergedFav flag (covers both merged and split FAV headers)
-        if (fracs2.length >= 2 && inRuns && pass && pass.length >= 2 && !f.passPlays.includes(pass)) {
-          f.passPlays.push(pass);
+        if (fracs2.length >= 2) {
+          // Both columns present on this line
+          const rp = run || extractPlayName(s);
+          if (rp && rp.length >= 2 && !f.runPlays.includes(rp)) f.runPlays.push(rp);
+          if (pass && pass.length >= 2 && !f.passPlays.includes(pass)) f.passPlays.push(pass);
+        } else {
+          // Single fraction — use leading-space column detection when in merged mode
+          const pn = run || extractPlayName(s);
+          if (pn && pn.length >= 2) {
+            if (isRightCol || inPasses) {
+              if (!f.passPlays.includes(pn)) f.passPlays.push(pn);
+            } else if (inRuns) {
+              if (!f.runPlays.includes(pn)) f.runPlays.push(pn);
+            }
+          }
         }
       } else {
         const pn = pnFromLine(s) || extractPlayName(s);
         if (pn && pn.length >= 2) {
-          if (inRuns && !f.runPlays.includes(pn)) f.runPlays.push(pn);
-          else if (inPasses && !f.passPlays.includes(pn)) f.passPlays.push(pn);
+          if (isRightCol || inPasses) {
+            if (!f.passPlays.includes(pn)) f.passPlays.push(pn);
+          } else if (inRuns) {
+            if (!f.runPlays.includes(pn)) f.runPlays.push(pn);
+          }
         }
       }
     }
