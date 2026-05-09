@@ -1775,13 +1775,13 @@ function parseHudlByPage(pages, filename, fullText) {
     let pass = null;
     if (fracs.length >= 2) {
       const between = s.slice(fracs[0].index, fracs[1].index);
-      const pm = between.match(/\s{2,}((?:\d{1,2}\s+)?[A-Z][A-Z0-9\s\-'\(\)#]{2,50}?)\s*$/);
+      const pm = between.match(/\s+((?:\d{1,2}\s+)?[A-Z][A-Z0-9\s\-'\(\)#]{2,50}?)\s*$/);
       if (pm) { const pp = pm[1].trim(); if (pp.length >= 3 && /[A-Z]{2}/.test(pp) && !/[%]/.test(pp)) pass = pp; }
     }
     if (!run) { const pp = rp.replace(/^[\d%.\s\-]+/, '').trim(); if (pp.length >= 3 && /[A-Z]{2}/.test(pp) && !/[%]/.test(pp)) pass = pp; }
     if (!pass) {
       const after = s.slice(fracs[fracs.length-1].index + fracs[fracs.length-1][0].length);
-      const tm = after.match(/\s{2,}([A-Z][A-Z0-9\s\-'\(\)#]{2,50})\s*$/);
+      const tm = after.match(/\s+([A-Z][A-Z0-9\s\-'\(\)#]{2,50})\s*$/);
       if (tm) { const pp = tm[1].trim(); if (pp.length >= 3 && /[A-Z]{2}/.test(pp) && !/[%\d]/.test(pp)) pass = pp; }
     }
     return { run, pass };
@@ -1957,6 +1957,15 @@ function parseHudlByPage(pages, filename, fullText) {
     const wr = data.formations.reduce((s, f) => s + (f.runPct ?? 50) * (f.playCount || 0), 0);
     data.runPct = Math.round(wr / totalP); data.passPct = 100 - data.runPct;
     log.push(`→ Overall tendency (weighted): Run ${data.runPct}% / Pass ${data.passPct}%`);
+  }
+  // Fallback: if weighted avg still 50/50, use unweighted average of non-default formations
+  if (data.runPct === 50) {
+    const nonDef = data.formations.filter(f => f.runPct !== 50);
+    if (nonDef.length > 0) {
+      data.runPct = Math.round(nonDef.reduce((s, f) => s + f.runPct, 0) / nonDef.length);
+      data.passPct = 100 - data.runPct;
+      log.push(`→ Overall tendency (unweighted fallback): Run ${data.runPct}% / Pass ${data.passPct}%`);
+    }
   }
 
   const wp = data.formations.filter(f => f.runPlays.length > 0 || f.passPlays.length > 0);
@@ -2432,7 +2441,7 @@ function updateFormationsFromDetails(lines,formations,data){
       // Optional leading 1-2 digit play number (e.g. "32 RPO BUBBLE") then required [A-Z] start.
       // This prevents stats garbage like "0  -  -  23 RPO SPOT" from matching at the "0".
       const between=s.slice(fracs[0].index,fracs[1].index);
-      const pm=between.match(/\s{2,}((?:\d{1,2}\s+)?[A-Z][A-Z0-9\s\-'\(\)#]{2,50}?)\s*$/);
+      const pm=between.match(/\s+((?:\d{1,2}\s+)?[A-Z][A-Z0-9\s\-'\(\)#]{2,50}?)\s*$/);
       if(pm){ const pp=pm[1].trim(); if(pp.length>=3&&/[A-Z]{2}/.test(pp)&&!/[%]/.test(pp)) pass=pp; }
     }
     // If left column was stats-only (run=null), text before fraction may be the pass play
@@ -2443,7 +2452,7 @@ function updateFormationsFromDetails(lines,formations,data){
     // Trailing ALL CAPS after last stats block (right-column continuation row)
     if(!pass){
       const after=s.slice(fracs[fracs.length-1].index+fracs[fracs.length-1][0].length);
-      const tm=after.match(/\s{2,}([A-Z][A-Z0-9\s\-'\(\)#]{2,50})\s*$/);
+      const tm=after.match(/\s+([A-Z][A-Z0-9\s\-'\(\)#]{2,50})\s*$/);
       if(tm){ const pp=tm[1].trim(); if(pp.length>=3&&/[A-Z]{2}/.test(pp)&&!/[%\d]/.test(pp)) pass=pp; }
     }
     return {run,pass};
