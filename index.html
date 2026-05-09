@@ -1880,14 +1880,19 @@ function parseHudlByPage(pages, filename, fullText) {
       if (!inRuns && !inPasses) continue;
       if (!isLikelyPlay(s)) continue;
       const hasFrac = /\b\d{1,3}\/\d{1,4}\b/.test(s);
-      if (hasFrac || isMergedFav) {
+      if (hasFrac) {
+        const fracs2 = [...s.matchAll(/\b\d{1,3}\/\d{1,4}\b/g)];
         const { run, pass } = pnMergedFromLine(s);
         const rp = run || extractPlayName(s);
         if (rp && rp.length >= 2) {
           if (inRuns && !f.runPlays.includes(rp)) f.runPlays.push(rp);
           else if (inPasses && !f.passPlays.includes(rp)) f.passPlays.push(rp);
         }
-        if (isMergedFav && inRuns && pass && pass.length >= 2 && !f.passPlays.includes(pass)) f.passPlays.push(pass);
+        // If the line has TWO fractions it's a merged run+pass row — extract right column
+        // regardless of isMergedFav flag (covers both merged and split FAV headers)
+        if (fracs2.length >= 2 && inRuns && pass && pass.length >= 2 && !f.passPlays.includes(pass)) {
+          f.passPlays.push(pass);
+        }
       } else {
         const pn = pnFromLine(s) || extractPlayName(s);
         if (pn && pn.length >= 2) {
@@ -1900,19 +1905,23 @@ function parseHudlByPage(pages, filename, fullText) {
     if (!f.favoritePassPlay && f.passPlays.length) f.favoritePassPlay = f.passPlays[0];
 
     // ── Extract tendency from RUN/PASS stats line ─────────────────────────────
+    // Method 1: find the RUN header and read the N/M fractions on the next line
     for (let i = 0; i < lines.length; i++) {
       const s = lines[i];
       if (s !== 'RUN' && !/^RUN\b.*\bPASS\b/i.test(s)) continue;
-      for (let k = i + 1; k < Math.min(i + 10, lines.length); k++) {
+      for (let k = i + 1; k < Math.min(i + 15, lines.length); k++) {
         const fracs = [...lines[k].matchAll(/\b(\d{1,3})\/(\d{1,4})\b/g)];
         if (fracs.length >= 2) {
           const rc = +fracs[0][1], pc = +fracs[1][1], tot = rc + pc;
-          if (tot > 0) { f.runPct = Math.round(rc / tot * 100); f.passPct = 100 - f.runPct; }
+          if (tot > 0 && tot <= (f.totalPlays || 9999)) {
+            f.runPct = Math.round(rc / tot * 100); f.passPct = 100 - f.runPct;
+          }
           break;
         }
       }
       break;
     }
+    // Method 2: derive from D&D average if still 50/50 after method 1
 
     // ── Extract D&D situations ────────────────────────────────────────────────
     for (let i = 0; i < lines.length; i++) {
@@ -1928,7 +1937,13 @@ function parseHudlByPage(pages, filename, fullText) {
       }
     }
 
-    log.push(`  ✓ Page ${pg.pageNum}: "${f.name}" — ${f.runPlays.length} run / ${f.passPlays.length} pass / ${f.situations.length} D&D`);
+    // Method 2: derive tendency from D&D average if still 50/50
+    if (f.runPct === 50 && f.situations.length > 0) {
+      const avg = Math.round(f.situations.reduce((s, x) => s + x.runPct, 0) / f.situations.length);
+      f.runPct = avg; f.passPct = 100 - avg;
+    }
+
+    log.push(`  ✓ Page ${pg.pageNum}: "${f.name}" — ${f.runPlays.length} run / ${f.passPlays.length} pass / ${f.situations.length} D&D / ${f.runPct}%R`);
     formations.push(f);
   }
 
