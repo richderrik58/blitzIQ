@@ -1041,22 +1041,41 @@ function sbar(run, pass) {
 }
 
 // ── SCREEN 1 ──────────────────────────────────────────────────────────────────
+function isDemoLoaded(){
+  return DB.opponents.some(o=>o.notes?.includes('DEMO-Riverside-Knights-2025'));
+}
+function dismissDemo(){
+  const o=DB.opponents.find(o=>o.notes?.includes('DEMO-Riverside-Knights-2025'));
+  if(o) delOpp(o.id,{stopPropagation:()=>{}});
+}
+function demoBanner(onScreen2){
+  if(!isDemoLoaded()) return '';
+  const uploadBtn=onScreen2
+    ?`<button onclick="document.getElementById('pdfIn').click()" style="background:var(--gold);color:var(--navy);border:none;border-radius:6px;padding:5px 12px;font-size:11px;font-weight:900;cursor:pointer;font-family:inherit;white-space:nowrap">Import Hudl PDF</button>`
+    :`<button onclick="dismissDemo()" style="background:none;border:1px solid rgba(240,165,0,.5);color:var(--gold);font-size:11px;font-weight:700;padding:4px 10px;border-radius:6px;cursor:pointer;font-family:inherit;white-space:nowrap">Dismiss</button>`;
+  return `<div style="background:rgba(240,165,0,.12);border:1.5px solid rgba(240,165,0,.45);border-radius:10px;padding:10px 14px;margin-bottom:12px;display:flex;align-items:center;gap:10px;flex-wrap:wrap">
+    <div style="flex:1;min-width:0">
+      <div style="font-size:11px;font-weight:900;color:var(--gold);letter-spacing:1px;margin-bottom:2px">DEMO MODE</div>
+      <div style="font-size:11px;color:var(--grayl)">Load your own Hudl PDF to scout your opponent</div>
+    </div>
+    ${uploadBtn}
+  </div>`;
+}
 function loadDemo(){
-  if(!confirm('Load demo data? This adds a sample opponent so you can explore the app immediately. You can delete it anytime.')) return;
+  if(isDemoLoaded()){ selOpp(DB.opponents.find(o=>o.notes?.includes('DEMO-Riverside-Knights-2025')).id); return; }
   const mk=(name,playCount,totalPlays,runPct,runs,passes,sits)=>({
     id:uid(),name,runPct,passPct:100-runPct,
     playCount,totalPlays,
     favoriteRunPlay:runs[0]||'',favoritePassPlay:passes[0]||'',
     runPlays:runs,passPlays:passes,
-    downTendency:'Demo data',
-    recommendation:null,
+    downTendency:'Demo data',recommendation:null,
     situations:sits.map(s=>({...s,id:uid(),dc:{coverage:'',blitz:'',reason:'',alert:''}}))
   });
   const demoOpp={
-    id:uid(),name:'Riverside Knights',season:'2025',
+    id:uid(),name:'Riverside Knights 2025',season:'2025',
     runPct:55,passPct:45,
-    notes:'Demo opponent — tap Import Hudl PDF to replace with real scouting data.',
-    gameNotes:'',importLog:'Demo mode loaded.',
+    notes:'DEMO-Riverside-Knights-2025 — tap Import Hudl PDF to replace with real scouting data.',
+    gameNotes:'',importLog:'Demo mode loaded. Explore every feature, then import a real Hudl PDF to scout your next opponent.',
     formations:[
       mk('GUN SPREAD WEAK',12,120,40,
         ['Inside Zone','QB Draw','Counter'],['Curl Flat','Four Verticals','Mesh'],
@@ -1064,26 +1083,41 @@ function loadDemo(){
          {down:2,distLabel:'2nd Down',runPct:50,passPct:50,notes:'',dc:{}},
          {down:3,distLabel:'3rd Down',runPct:10,passPct:90,notes:'',dc:{}}]),
       mk('TRIPS LEFT STRONG',10,120,25,
-        ['Outside Zone'],['Bubble Screen','Slant Out Go','Post Wheel'],
+        ['Outside Zone','Toss Sweep'],['Bubble Screen','Slant Out Go','Post Wheel'],
         [{down:1,distLabel:'1st Down',runPct:30,passPct:70,notes:'',dc:{}},
+         {down:2,distLabel:'2nd Down',runPct:25,passPct:75,notes:'',dc:{}},
          {down:3,distLabel:'3rd Down',runPct:5,passPct:95,notes:'',dc:{}}]),
       mk('PRO RIGHT TWINS LEFT',8,120,70,
-        ['Power O','Counter','Iso'],['Play Action Post','Boot Waggle'],
+        ['Power O','Counter','Iso','Lead Draw'],['Play Action Post','Boot Waggle'],
         [{down:1,distLabel:'1st Down',runPct:75,passPct:25,notes:'',dc:{}},
-         {down:2,distLabel:'2nd Down',runPct:65,passPct:35,notes:'',dc:{}}]),
+         {down:2,distLabel:'2nd Down',runPct:65,passPct:35,notes:'',dc:{}},
+         {down:3,distLabel:'3rd Down',runPct:35,passPct:65,notes:'',dc:{}}]),
       mk('EMPTY LEFT',6,120,15,
-        ['QB Draw'],['Four Verticals','Mesh','Hitch Go Go Go'],
-        [{down:3,distLabel:'3rd Down',runPct:5,passPct:95,notes:'',dc:{}}]),
+        ['QB Draw'],['Four Verticals','Mesh','Hitch Go Go Go','Curl Flat Combo'],
+        [{down:3,distLabel:'3rd Down',runPct:5,passPct:95,notes:'',dc:{}},
+         {down:2,distLabel:'2nd Down',runPct:15,passPct:85,notes:'',dc:{}}]),
       mk('PISTOL STRONG RIGHT',5,120,75,
-        ['Zone Read','Power Read','Jet Sweep'],['RPO Bubble'],
+        ['Zone Read','Power Read','Jet Sweep','Inside Counter'],['RPO Bubble','Boot Naked'],
         [{down:1,distLabel:'1st Down',runPct:80,passPct:20,notes:'',dc:{}},
          {down:2,distLabel:'2nd Down',runPct:70,passPct:30,notes:'',dc:{}}]),
     ],
     situations:[
-      {id:uid(),down:1,distLabel:'1st & 10',runPct:55,passPct:45,notes:'',dc:{coverage:'Cover 3',blitz:'Base 4-3 — No Blitz',reason:'Balanced — stay assignment-sound.',alert:'Watch for jet motion and RPO reads.',}},
-      {id:uid(),down:2,distLabel:'2nd & 7+',runPct:40,passPct:60,notes:'',dc:{coverage:'Cover 2',blitz:'Weak-side Edge Pressure',reason:'Pass-leaning — protect both halves.',alert:'Quick screens and slants to beat zone.',}},
-      {id:uid(),down:3,distLabel:'3rd & Long',runPct:5,passPct:95,notes:'',dc:{coverage:'Cover 4 (Quarters)',blitz:'A-Gap Fire Zone',reason:'95% pass — Quarters carries every route vertically.',alert:'Four Verticals is their go-to 3rd & long call.',}},
-      {id:uid(),down:1,distLabel:'Red Zone',runPct:70,passPct:30,notes:'',dc:{coverage:'Cover 1 Man',blitz:'Edge Blitz — 8 in Box',reason:'Run-heavy in red zone — stack the box.',alert:'Watch for quick QB sneaks on short yardage.',}},
+      {id:uid(),down:1,distLabel:'1st & 10',runPct:55,passPct:45,notes:'',dc:{
+        coverage:'Cover 3',blitz:'Base 4-3 — No Blitz',
+        reason:'Balanced offense on first down — play assignment-sound Cover 3 and let them show their hand.',
+        alert:'Watch for jet motion pre-snap and RPO reads off the linebacker.'}},
+      {id:uid(),down:2,distLabel:'2nd & 7+',runPct:40,passPct:60,notes:'',dc:{
+        coverage:'Cover 2 Zone',blitz:'Weak-side Edge Pressure',
+        reason:'Pass-leaning on 2nd & long — Cover 2 protects both halves. Edge brings pressure without exposing deep.',
+        alert:'Quick screens and slant-out combos are their favorite 2nd & long answers.'}},
+      {id:uid(),down:3,distLabel:'3rd & Long',runPct:5,passPct:95,notes:'',dc:{
+        coverage:'Cover 4 (Quarters)',blitz:'Corner Blitz',
+        reason:'95% pass on 3rd & long — Quarters carries every receiver vertically. Corner blitz creates unblocked pressure off the edge.',
+        alert:'Four Verticals is their signature 3rd & long call — safeties must not bail early.'}},
+      {id:uid(),down:1,distLabel:'Red Zone',runPct:70,passPct:30,notes:'',dc:{
+        coverage:'Cover 1 Man',blitz:'Edge Blitz — 8 in Box',
+        reason:'Run-heavy in the red zone — stack the box with Cover 1. Edge blitz outnumbers the run and forces cutbacks.',
+        alert:'Watch for quick QB sneaks on 3rd & short inside the 5. Call it pre-snap.'}},
     ]
   };
   applyRecommendations(demoOpp);
@@ -1091,6 +1125,8 @@ function loadDemo(){
   DB.opponents.push(demoOpp);
   saveDB();
   renderOpps();
+  // Auto-navigate into the demo opponent
+  st.opp=demoOpp; renderForms(); showScreen(2);
 }
 
 function renderOpps() {
@@ -1100,20 +1136,14 @@ function renderOpps() {
       <div class="empty">
         <div class="empty-icon">🏟</div>
         <div class="empty-txt" style="margin-bottom:20px">No opponents yet.<br>Add one manually or import a Hudl PDF.</div>
-        <button onclick="loadDemo()" style="background:var(--gold);color:var(--navy);border:none;border-radius:12px;padding:14px 28px;font-size:15px;font-weight:900;cursor:pointer;font-family:inherit;letter-spacing:.3px;margin-bottom:8px;display:block;width:100%;max-width:280px;margin-left:auto;margin-right:auto">
-          &#9654; Load Demo — See it in action
+        <button onclick="loadDemo()" style="background:var(--gold);color:var(--navy);border:none;border-radius:12px;padding:16px 28px;font-size:16px;font-weight:900;cursor:pointer;font-family:inherit;letter-spacing:.3px;margin-bottom:10px;display:block;width:100%;max-width:300px;margin-left:auto;margin-right:auto;box-shadow:0 4px 16px rgba(240,165,0,.35)">
+          &#9654; Load Demo
         </button>
-        <div style="font-size:11px;color:var(--gray);text-align:center">Loads a sample opponent so you can explore every feature immediately</div>
+        <div style="font-size:12px;color:var(--grayl);text-align:center;max-width:280px;margin:0 auto;line-height:1.5">Instantly loads a full sample opponent — explore every feature before importing your own Hudl PDF</div>
       </div>`;
     return;
   }
-  // Show demo banner if demo opponent is present
-  const demoOppId=DB.opponents.find(o=>o.name==='Riverside Knights'&&o.notes?.includes('Demo opponent'))?.id;
-  const demoBanner=demoOppId?`<div style="background:rgba(240,165,0,.1);border:1.5px solid rgba(240,165,0,.4);border-radius:10px;padding:10px 14px;margin-bottom:12px;display:flex;align-items:center;justify-content:space-between;gap:10px">
-    <div style="font-size:11px;font-weight:800;color:var(--gold);letter-spacing:1px">DEMO MODE — sample data</div>
-    <button onclick="delOpp(${demoOppId},{stopPropagation:()=>{}})" style="background:none;border:1px solid rgba(240,165,0,.4);color:var(--gold);font-size:11px;font-weight:700;padding:4px 10px;border-radius:6px;cursor:pointer;font-family:inherit">Remove Demo</button>
-  </div>`:'';
-  el.innerHTML = demoBanner + DB.opponents.map(o => `
+  el.innerHTML = demoBanner(false) + DB.opponents.map(o => `
     <div class="card" onclick="selOpp(${o.id})">
       <div class="card-hd">
         <div><div class="card-name">${esc(o.name)}</div><div class="card-meta">Season ${esc(o.season)} &nbsp;·&nbsp; ${o.formations.length} Formation${o.formations.length!==1?'s':''}</div></div>
@@ -1130,7 +1160,10 @@ function selOpp(id) { st.opp=DB.opponents.find(o=>o.id===id); renderForms(); sho
 // ── SCREEN 2 ──────────────────────────────────────────────────────────────────
 function renderForms() {
   const o = st.opp;
-  document.getElementById('oppOv').innerHTML = `<div class="ov-ttl">${esc(o.name)} ${esc(o.season)} — Overall Tendency</div>${sbar(o.runPct,o.passPct)}<div class="ov-note">${esc(o.notes)}</div>`;
+  const isDemo=o.notes?.includes('DEMO-Riverside-Knights-2025');
+  document.getElementById('oppOv').innerHTML =
+    (isDemo?demoBanner(true):'') +
+    `<div class="ov-ttl">${esc(o.name)} ${esc(o.season)} — Overall Tendency</div>${sbar(o.runPct,o.passPct)}<div class="ov-note">${isDemo?'Sample opponent — explore the app, then import your real Hudl PDF':esc(o.notes)}</div>`;
   // Game notes card
   // Import log (only for Hudl-imported opponents)
   const logEl=document.getElementById('gameNotesCard');
