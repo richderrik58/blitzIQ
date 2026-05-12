@@ -362,9 +362,13 @@
 <div class="hdr">
   <button id="backBtn" onclick="goBack()">&#8249;</button>
   <div class="hdr-txt">
-    <div class="logo">BLITZ<span>IQ</span></div>
+    <div style="display:flex;align-items:center;gap:8px">
+      <div class="logo">BLITZ<span>IQ</span></div>
+      <span style="background:var(--gold);color:var(--navy);font-size:9px;font-weight:900;letter-spacing:1.5px;padding:2px 7px;border-radius:10px;text-transform:uppercase">Beta</span>
+    </div>
     <div class="hdr-sub" id="hdrSub">Defensive Scouting</div>
   </div>
+  <button onclick="openFeedback()" style="margin-left:auto;background:rgba(255,255,255,0.08);border:1px solid rgba(255,255,255,0.2);color:var(--grayl);border-radius:8px;padding:6px 12px;font-size:11px;font-weight:700;cursor:pointer;font-family:inherit;letter-spacing:.5px">&#128172; Feedback</button>
 </div>
 
 <!-- BREADCRUMB -->
@@ -625,6 +629,26 @@
 </div>
 
 <!-- MODAL: ADD OPPONENT -->
+<!-- FEEDBACK MODAL -->
+<div class="modal-ov" id="mFeedback">
+  <div class="modal-sheet">
+    <div class="modal-handle"></div>
+    <div class="modal-hdr">
+      <span class="modal-title">&#128172; Send Feedback</span>
+      <button class="modal-x" onclick="closeModal('mFeedback')">&#10005;</button>
+    </div>
+    <div class="modal-body">
+      <p style="font-size:13px;color:var(--grayl);margin-bottom:14px;line-height:1.5">Found a bug? Have a feature request? We want to hear from you.</p>
+      <div class="fld"><label class="fld-lbl">Your Name (optional)</label><input class="fld-in" id="fb_name" type="text" placeholder="Coach Smith"></div>
+      <div class="fld"><label class="fld-lbl">Feedback</label><textarea class="fld-in" id="fb_msg" rows="5" style="resize:vertical;height:120px" placeholder="Describe the issue or idea..."></textarea></div>
+    </div>
+    <div class="modal-foot">
+      <button class="btn-sec" onclick="closeModal('mFeedback')">Cancel</button>
+      <button class="btn-pri" onclick="submitFeedback()">Send via Email</button>
+    </div>
+  </div>
+</div>
+
 <div class="modal-ov" id="mOpp">
   <div class="modal-sheet">
     <div class="modal-handle"></div>
@@ -1375,6 +1399,16 @@ function renderDefCall() {
 // ── MODALS ────────────────────────────────────────────────────────────────────
 function openModal(id) { document.getElementById(id).classList.add('open'); document.body.style.overflow='hidden'; }
 function closeModal(id){ document.getElementById(id).classList.remove('open'); document.body.style.overflow=''; }
+function openFeedback(){ document.getElementById('fb_name').value=''; document.getElementById('fb_msg').value=''; openModal('mFeedback'); }
+function submitFeedback(){
+  const name=document.getElementById('fb_name').value.trim()||'Anonymous coach';
+  const msg=document.getElementById('fb_msg').value.trim();
+  if(!msg){ alert('Please enter your feedback before sending.'); return; }
+  const subject=encodeURIComponent('BlitzIQ Beta Feedback');
+  const body=encodeURIComponent(`From: ${name}\n\n${msg}\n\n---\nSent from BlitzIQ Beta`);
+  window.location.href=`mailto:richderrik58@yahoo.com?subject=${subject}&body=${body}`;
+  closeModal('mFeedback');
+}
 
 // ── PCT PICKER ────────────────────────────────────────────────────────────────
 function adjPct(aId,bId,d){
