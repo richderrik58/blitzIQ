@@ -991,16 +991,17 @@ const SEED = { opponents: [{
        dc:{coverage:'Cover 2',blitz:'No Blitz — Contain Rush',reason:'Contain the QB bootleg — DE must NOT crash inside. Cover 2 accounts for the TE crossing and protects the deep seam.',alert:'BOOT ALERT — DE stays home on the edge! LB must spy the QB on the rollout.'}}
     ]
   }]
-}]};
+}], scheme: null }; // scheme: '4-3' | '3-4' | '3-3-5' — set on first launch
 
 // ── STORAGE ───────────────────────────────────────────────────────────────────
 const SKEY = 'blitziq_v1';
 let DB;
 function loadDB() {
-  try { const r = localStorage.getItem(SKEY); if (r) { DB = JSON.parse(r); return; } } catch(e) {}
+  try { const r = localStorage.getItem(SKEY); if (r) { DB = JSON.parse(r); if(!('scheme' in DB)) DB.scheme=null; return; } } catch(e) {}
   DB = JSON.parse(JSON.stringify(SEED));
   saveDB();
 }
+function setScheme(s){ DB.scheme=s; saveDB(); renderOpps(); }
 function saveDB() { localStorage.setItem(SKEY, JSON.stringify(DB)); }
 function uid() { return Date.now() * 1000 + Math.floor(Math.random() * 999); }
 
@@ -1132,6 +1133,21 @@ function loadDemo(){
 function renderOpps() {
   const el = document.getElementById('oppList');
   if (!DB.opponents.length) {
+    if (!DB.scheme) {
+      el.innerHTML = `
+        <div class="empty">
+          <div class="empty-icon">🛡</div>
+          <div style="font-size:20px;font-weight:900;color:var(--text);margin-bottom:8px">Welcome to BlitzIQ</div>
+          <div class="empty-txt" style="margin-bottom:24px">What is your base defensive scheme?<br><span style="font-size:12px;color:var(--grayl)">This loads your default alignment on every play canvas.</span></div>
+          <div style="display:flex;flex-direction:column;gap:12px;width:100%;max-width:300px;margin:0 auto 20px">
+            <button onclick="setScheme('4-3')" style="background:var(--navy);color:#fff;border:2px solid var(--gold);border-radius:12px;padding:14px 20px;font-size:15px;font-weight:900;cursor:pointer;font-family:inherit;letter-spacing:.3px">4-3 Defense</button>
+            <button onclick="setScheme('3-4')" style="background:var(--navy);color:#fff;border:2px solid var(--gold);border-radius:12px;padding:14px 20px;font-size:15px;font-weight:900;cursor:pointer;font-family:inherit;letter-spacing:.3px">3-4 Defense</button>
+            <button onclick="setScheme('3-3-5')" style="background:var(--navy);color:#fff;border:2px solid var(--gold);border-radius:12px;padding:14px 20px;font-size:15px;font-weight:900;cursor:pointer;font-family:inherit;letter-spacing:.3px">3-3-5 Stack</button>
+          </div>
+          <div style="font-size:11px;color:var(--grayl);text-align:center">You can change this any time in settings</div>
+        </div>`;
+      return;
+    }
     el.innerHTML = `
       <div class="empty">
         <div class="empty-icon">🏟</div>
@@ -3464,7 +3480,7 @@ function getDefPreset(f){
   const nm=(f.name||'').toUpperCase();
   if(f.passPct>=75)                    return '3-3-5';
   if(/TRIPS|TREY|EMPTY/.test(nm))      return '3-4';
-  return '4-3';
+  return DB.scheme || '4-3'; // fall back to coach's chosen scheme
 }
 
 // ── GAP ASSIGNMENT HTML (for game plan cheat sheet) ───────────────────────────
@@ -3800,21 +3816,28 @@ function identifyRushers(blitz){
     const mlb=LBs.find(p=>p.type==='MLB')||LBs[Math.floor(LBs.length/2)];
     if(mlb) rushers.add(mlb.id);
   }
-  // Weak-side / Will / Edge — leftmost LB rushes
+  // Weak-side / Will / Edge — LB on the weak side of the formation
   if(/WEAK|WILL|EDGE|BOUNDARY/.test(b)&&isBlitz){
-    if(LBs[0]) rushers.add(LBs[0].id);
+    const str=window._cvStrength||'right';
+    // Strong=right → weak=left → leftmost LB; Strong=left → weak=right → rightmost LB
+    const weakLB=str==='right'?LBs[0]:LBs[LBs.length-1];
+    if(weakLB) rushers.add(weakLB.id);
   }
-  // Strong-side / Sam — rightmost LB rushes
+  // Strong-side / Sam — LB on the strong side of the formation
   if(/SAM|STRONG.SIDE/.test(b)&&isBlitz){
-    if(LBs[LBs.length-1]) rushers.add(LBs[LBs.length-1].id);
+    const str=window._cvStrength||'right';
+    const samLB=str==='right'?LBs[LBs.length-1]:LBs[0];
+    if(samLB) rushers.add(samLB.id);
   }
   // Double A-gap / 5-man — all LBs rush
   if(/DOUBLE|DBL|5.MAN|OVERLOAD/.test(b)){
     LBs.forEach(p=>rushers.add(p.id));
   }
-  // Corner blitz — leftmost CB rushes
+  // Corner blitz — weak-side CB rushes
   if(/CORNER/.test(b)&&isBlitz){
-    if(CBs[0]) rushers.add(CBs[0].id);
+    const str=window._cvStrength||'right';
+    const weakCB=str==='right'?CBs[0]:CBs[CBs.length-1];
+    if(weakCB) rushers.add(weakCB.id);
   }
   // Fire zone — drop one DL, one LB rushes instead
   if(/FIRE.?ZONE/.test(b)){
@@ -4155,7 +4178,7 @@ let cvDragging=null;                  // player being dragged
 let cvDragOffX=0, cvDragOffY=0;
 let cvRouteCanvas=null;               // offscreen canvas storing ONLY freehand routes
 let cvPid=0;                          // player ID counter
-let CV_R=14;                           // player radius — 28px diameter, set in openCanvas
+let CV_R=10;                           // player radius — 20px diameter, set in openCanvas
 
 function drawField(ctx,w,h){
   // Field background
@@ -4577,15 +4600,15 @@ const CV_PRESETS = {
     {type:'CB',  team:'def', xf:0.94, yd:-108}, // sCB — 5 yds, 1 yd inside sWR
   ],
   // ── OFFENSIVE — WRs at sidelines, OL tighter (18px gap / 46px c-to-c) ──────────
-  // OL at center±0.072 increments (46px on 640px canvas)
+  // OL at center±0.044 increments (28px on 640px canvas)
   'pro-set':[
     {type:'WR', team:'off', xf:0.04, yd:30},
-    {type:'OL', team:'off', xf:0.356,yd:30},
-    {type:'OL', team:'off', xf:0.428,yd:30},
+    {type:'OL', team:'off', xf:0.412,yd:30},
+    {type:'OL', team:'off', xf:0.456,yd:30},
     {type:'C',  team:'off', xf:0.50, yd:30},
-    {type:'OL', team:'off', xf:0.572,yd:30},
-    {type:'OL', team:'off', xf:0.644,yd:30},
-    {type:'TE', team:'off', xf:0.742,yd:30},
+    {type:'OL', team:'off', xf:0.544,yd:30},
+    {type:'OL', team:'off', xf:0.588,yd:30},
+    {type:'TE', team:'off', xf:0.672,yd:30},
     {type:'WR', team:'off', xf:0.96, yd:30},
     {type:'QB', team:'off', xf:0.50, yd:72},
     {type:'FB', team:'off', xf:0.50, yd:108},
@@ -4593,11 +4616,11 @@ const CV_PRESETS = {
   ],
   'trips':[
     {type:'WR', team:'off', xf:0.04, yd:30},
-    {type:'OL', team:'off', xf:0.356,yd:30},
-    {type:'OL', team:'off', xf:0.428,yd:30},
+    {type:'OL', team:'off', xf:0.412,yd:30},
+    {type:'OL', team:'off', xf:0.456,yd:30},
     {type:'C',  team:'off', xf:0.50, yd:30},
-    {type:'OL', team:'off', xf:0.572,yd:30},
-    {type:'OL', team:'off', xf:0.644,yd:30},
+    {type:'OL', team:'off', xf:0.544,yd:30},
+    {type:'OL', team:'off', xf:0.588,yd:30},
     {type:'QB', team:'off', xf:0.50, yd:72},
     {type:'RB', team:'off', xf:0.60, yd:72},
     {type:'WR', team:'off', xf:0.77, yd:30},
@@ -4607,11 +4630,11 @@ const CV_PRESETS = {
   'spread':[
     {type:'WR', team:'off', xf:0.04, yd:30},
     {type:'WR', team:'off', xf:0.17, yd:30},
-    {type:'OL', team:'off', xf:0.356,yd:30},
-    {type:'OL', team:'off', xf:0.428,yd:30},
+    {type:'OL', team:'off', xf:0.412,yd:30},
+    {type:'OL', team:'off', xf:0.456,yd:30},
     {type:'C',  team:'off', xf:0.50, yd:30},
-    {type:'OL', team:'off', xf:0.572,yd:30},
-    {type:'OL', team:'off', xf:0.644,yd:30},
+    {type:'OL', team:'off', xf:0.544,yd:30},
+    {type:'OL', team:'off', xf:0.588,yd:30},
     {type:'WR', team:'off', xf:0.83, yd:30},
     {type:'WR', team:'off', xf:0.96, yd:30},
     {type:'QB', team:'off', xf:0.50, yd:72},
@@ -4619,12 +4642,12 @@ const CV_PRESETS = {
   ],
   'i-form':[
     {type:'WR', team:'off', xf:0.04, yd:30},
-    {type:'OL', team:'off', xf:0.356,yd:30},
-    {type:'OL', team:'off', xf:0.428,yd:30},
+    {type:'OL', team:'off', xf:0.412,yd:30},
+    {type:'OL', team:'off', xf:0.456,yd:30},
     {type:'C',  team:'off', xf:0.50, yd:30},
-    {type:'OL', team:'off', xf:0.572,yd:30},
-    {type:'OL', team:'off', xf:0.644,yd:30},
-    {type:'TE', team:'off', xf:0.742,yd:30},
+    {type:'OL', team:'off', xf:0.544,yd:30},
+    {type:'OL', team:'off', xf:0.588,yd:30},
+    {type:'TE', team:'off', xf:0.672,yd:30},
     {type:'WR', team:'off', xf:0.96, yd:30},
     {type:'QB', team:'off', xf:0.50, yd:68},
     {type:'FB', team:'off', xf:0.50, yd:105},
@@ -4633,11 +4656,11 @@ const CV_PRESETS = {
   'empty':[
     {type:'WR', team:'off', xf:0.04, yd:30},
     {type:'WR', team:'off', xf:0.17, yd:30},
-    {type:'OL', team:'off', xf:0.356,yd:30},
-    {type:'OL', team:'off', xf:0.428,yd:30},
+    {type:'OL', team:'off', xf:0.412,yd:30},
+    {type:'OL', team:'off', xf:0.456,yd:30},
     {type:'C',  team:'off', xf:0.50, yd:30},
-    {type:'OL', team:'off', xf:0.572,yd:30},
-    {type:'OL', team:'off', xf:0.644,yd:30},
+    {type:'OL', team:'off', xf:0.544,yd:30},
+    {type:'OL', team:'off', xf:0.588,yd:30},
     {type:'WR', team:'off', xf:0.78, yd:30},
     {type:'WR', team:'off', xf:0.87, yd:30},
     {type:'WR', team:'off', xf:0.96, yd:30},
@@ -4646,12 +4669,12 @@ const CV_PRESETS = {
   // ── BROAD RUN 2025 SPECIFIC FORMATIONS (Issues 2 & 6) ─────────────────────────
   'trey-r-weak':[  // TE right, 2 WRs right stacked, 1 WR far left, RB left
     {type:'WR', team:'off', xf:0.04, yd:30},
-    {type:'OL', team:'off', xf:0.356,yd:30},
-    {type:'OL', team:'off', xf:0.428,yd:30},
+    {type:'OL', team:'off', xf:0.412,yd:30},
+    {type:'OL', team:'off', xf:0.456,yd:30},
     {type:'C',  team:'off', xf:0.50, yd:30},
-    {type:'OL', team:'off', xf:0.572,yd:30},
-    {type:'OL', team:'off', xf:0.644,yd:30},
-    {type:'TE', team:'off', xf:0.742,yd:30},
+    {type:'OL', team:'off', xf:0.544,yd:30},
+    {type:'OL', team:'off', xf:0.588,yd:30},
+    {type:'TE', team:'off', xf:0.672,yd:30},
     {type:'WR', team:'off', xf:0.84, yd:30},
     {type:'WR', team:'off', xf:0.93, yd:30},
     {type:'QB', team:'off', xf:0.50, yd:72},
@@ -4661,11 +4684,11 @@ const CV_PRESETS = {
     {type:'WR', team:'off', xf:0.07, yd:30},
     {type:'WR', team:'off', xf:0.16, yd:30},
     {type:'WR', team:'off', xf:0.25, yd:30},
-    {type:'OL', team:'off', xf:0.356,yd:30},
-    {type:'OL', team:'off', xf:0.428,yd:30},
+    {type:'OL', team:'off', xf:0.412,yd:30},
+    {type:'OL', team:'off', xf:0.456,yd:30},
     {type:'C',  team:'off', xf:0.50, yd:30},
-    {type:'OL', team:'off', xf:0.572,yd:30},
-    {type:'OL', team:'off', xf:0.644,yd:30},
+    {type:'OL', team:'off', xf:0.544,yd:30},
+    {type:'OL', team:'off', xf:0.588,yd:30},
     {type:'WR', team:'off', xf:0.96, yd:30},
     {type:'QB', team:'off', xf:0.50, yd:72},
     {type:'RB', team:'off', xf:0.65, yd:72},
@@ -4673,11 +4696,11 @@ const CV_PRESETS = {
   'pro-l-twins-r-strong':[ // TE left, 2 WRs right, 1 WR left, FB+RB behind QB
     {type:'WR', team:'off', xf:0.04, yd:30},
     {type:'TE', team:'off', xf:0.258,yd:30},
-    {type:'OL', team:'off', xf:0.356,yd:30},
-    {type:'OL', team:'off', xf:0.428,yd:30},
+    {type:'OL', team:'off', xf:0.412,yd:30},
+    {type:'OL', team:'off', xf:0.456,yd:30},
     {type:'C',  team:'off', xf:0.50, yd:30},
-    {type:'OL', team:'off', xf:0.572,yd:30},
-    {type:'OL', team:'off', xf:0.644,yd:30},
+    {type:'OL', team:'off', xf:0.544,yd:30},
+    {type:'OL', team:'off', xf:0.588,yd:30},
     {type:'WR', team:'off', xf:0.83, yd:30},
     {type:'WR', team:'off', xf:0.96, yd:30},
     {type:'QB', team:'off', xf:0.50, yd:72},
@@ -4688,22 +4711,22 @@ const CV_PRESETS = {
     {type:'WR', team:'off', xf:0.07, yd:30},
     {type:'WR', team:'off', xf:0.16, yd:30},
     {type:'WR', team:'off', xf:0.25, yd:30},
-    {type:'OL', team:'off', xf:0.356,yd:30},
-    {type:'OL', team:'off', xf:0.428,yd:30},
+    {type:'OL', team:'off', xf:0.412,yd:30},
+    {type:'OL', team:'off', xf:0.456,yd:30},
     {type:'C',  team:'off', xf:0.50, yd:30},
-    {type:'OL', team:'off', xf:0.572,yd:30},
-    {type:'OL', team:'off', xf:0.644,yd:30},
+    {type:'OL', team:'off', xf:0.544,yd:30},
+    {type:'OL', team:'off', xf:0.588,yd:30},
     {type:'WR', team:'off', xf:0.96, yd:30},
     {type:'QB', team:'off', xf:0.50, yd:72},
     {type:'RB', team:'off', xf:0.62, yd:72},
   ],
   'trey-l-strong':[ // TE left, 2 WRs left stacked, 1 WR right, RB strong (left)
     {type:'WR', team:'off', xf:0.96, yd:30},
-    {type:'OL', team:'off', xf:0.356,yd:30},
-    {type:'OL', team:'off', xf:0.428,yd:30},
+    {type:'OL', team:'off', xf:0.412,yd:30},
+    {type:'OL', team:'off', xf:0.456,yd:30},
     {type:'C',  team:'off', xf:0.50, yd:30},
-    {type:'OL', team:'off', xf:0.572,yd:30},
-    {type:'OL', team:'off', xf:0.644,yd:30},
+    {type:'OL', team:'off', xf:0.544,yd:30},
+    {type:'OL', team:'off', xf:0.588,yd:30},
     {type:'TE', team:'off', xf:0.258,yd:30},
     {type:'WR', team:'off', xf:0.16, yd:30},
     {type:'WR', team:'off', xf:0.07, yd:30},
@@ -4713,24 +4736,24 @@ const CV_PRESETS = {
   'pro-r-twins-l-weak':[ // TE right, 2 WRs left, 1 WR right, RB weak (left)
     {type:'WR', team:'off', xf:0.04, yd:30},
     {type:'WR', team:'off', xf:0.17, yd:30},
-    {type:'OL', team:'off', xf:0.356,yd:30},
-    {type:'OL', team:'off', xf:0.428,yd:30},
+    {type:'OL', team:'off', xf:0.412,yd:30},
+    {type:'OL', team:'off', xf:0.456,yd:30},
     {type:'C',  team:'off', xf:0.50, yd:30},
-    {type:'OL', team:'off', xf:0.572,yd:30},
-    {type:'OL', team:'off', xf:0.644,yd:30},
-    {type:'TE', team:'off', xf:0.742,yd:30},
+    {type:'OL', team:'off', xf:0.544,yd:30},
+    {type:'OL', team:'off', xf:0.588,yd:30},
+    {type:'TE', team:'off', xf:0.672,yd:30},
     {type:'WR', team:'off', xf:0.96, yd:30},
     {type:'QB', team:'off', xf:0.50, yd:72},
     {type:'RB', team:'off', xf:0.38, yd:72},
   ],
   'trey-r-strong':[ // TE right, 2 WRs right, 1 WR left, RB strong (right)
     {type:'WR', team:'off', xf:0.04, yd:30},
-    {type:'OL', team:'off', xf:0.356,yd:30},
-    {type:'OL', team:'off', xf:0.428,yd:30},
+    {type:'OL', team:'off', xf:0.412,yd:30},
+    {type:'OL', team:'off', xf:0.456,yd:30},
     {type:'C',  team:'off', xf:0.50, yd:30},
-    {type:'OL', team:'off', xf:0.572,yd:30},
-    {type:'OL', team:'off', xf:0.644,yd:30},
-    {type:'TE', team:'off', xf:0.742,yd:30},
+    {type:'OL', team:'off', xf:0.544,yd:30},
+    {type:'OL', team:'off', xf:0.588,yd:30},
+    {type:'TE', team:'off', xf:0.672,yd:30},
     {type:'WR', team:'off', xf:0.84, yd:30},
     {type:'WR', team:'off', xf:0.93, yd:30},
     {type:'QB', team:'off', xf:0.50, yd:72},
@@ -4740,11 +4763,11 @@ const CV_PRESETS = {
     {type:'WR', team:'off', xf:0.04, yd:30},
     {type:'WR', team:'off', xf:0.17, yd:50}, // wing left slightly behind LOS
     {type:'TE', team:'off', xf:0.258,yd:30},
-    {type:'OL', team:'off', xf:0.356,yd:30},
-    {type:'OL', team:'off', xf:0.428,yd:30},
+    {type:'OL', team:'off', xf:0.412,yd:30},
+    {type:'OL', team:'off', xf:0.456,yd:30},
     {type:'C',  team:'off', xf:0.50, yd:30},
-    {type:'OL', team:'off', xf:0.572,yd:30},
-    {type:'OL', team:'off', xf:0.644,yd:30},
+    {type:'OL', team:'off', xf:0.544,yd:30},
+    {type:'OL', team:'off', xf:0.588,yd:30},
     {type:'WR', team:'off', xf:0.83, yd:30},
     {type:'WR', team:'off', xf:0.96, yd:30},
     {type:'QB', team:'off', xf:0.50, yd:72},
@@ -4753,11 +4776,11 @@ const CV_PRESETS = {
   'pro-l-twins-r-weak':[ // TE left, 2 WRs right, 1 WR left, RB weak (right)
     {type:'WR', team:'off', xf:0.04, yd:30},
     {type:'TE', team:'off', xf:0.258,yd:30},
-    {type:'OL', team:'off', xf:0.356,yd:30},
-    {type:'OL', team:'off', xf:0.428,yd:30},
+    {type:'OL', team:'off', xf:0.412,yd:30},
+    {type:'OL', team:'off', xf:0.456,yd:30},
     {type:'C',  team:'off', xf:0.50, yd:30},
-    {type:'OL', team:'off', xf:0.572,yd:30},
-    {type:'OL', team:'off', xf:0.644,yd:30},
+    {type:'OL', team:'off', xf:0.544,yd:30},
+    {type:'OL', team:'off', xf:0.588,yd:30},
     {type:'WR', team:'off', xf:0.83, yd:30},
     {type:'WR', team:'off', xf:0.96, yd:30},
     {type:'QB', team:'off', xf:0.50, yd:72},
@@ -4800,7 +4823,7 @@ function openCanvas(onReady){
     const wrap=document.querySelector('.canvas-wrap');
     const cw=Math.min(window.innerWidth,640);
     const ch=Math.max(200, wrap?.clientHeight||window.innerHeight-104);
-    CV_R=14; // 28px on all screens
+    CV_R=10; // 20px on all screens
     canvas.width=cw*dpr; canvas.height=ch*dpr;
     canvas.style.width=cw+'px'; canvas.style.height=ch+'px';
     cvCtx=canvas.getContext('2d');
