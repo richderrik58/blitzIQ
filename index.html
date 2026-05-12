@@ -2009,6 +2009,16 @@ function parseHudlByPage(pages, filename, fullText) {
       f.runPct = avg; f.passPct = 100 - avg;
     }
 
+    // Method 3: floor — if run plays were found but tendency says <15%,
+    // the plays should count. Set a 20% run floor so coaches see the run threat.
+    if (f.runPlays.length > 0 && f.runPct < 15) {
+      f.runPct = 20; f.passPct = 80;
+    }
+    // Symmetric ceiling for pass-only formations
+    if (f.passPlays.length > 0 && f.passPct < 15) {
+      f.passPct = 20; f.runPct = 80;
+    }
+
     log.push(`  ✓ Page ${pg.pageNum}: "${f.name}" — ${f.runPlays.length} run / ${f.passPlays.length} pass / ${f.situations.length} D&D / ${f.runPct}%R`);
     formations.push(f);
   }
