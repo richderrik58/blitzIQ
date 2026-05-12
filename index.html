@@ -380,13 +380,13 @@
   <p class="sc-sub">Select a team to begin scouting</p>
   <div class="action-row">
     <button class="act-pri" onclick="openModal('mOpp')">+ Add Opponent</button>
-    <button class="act-sec" onclick="document.getElementById('pdfIn').click()">&#8679; Import Hudl PDFs</button>
+    <button class="act-sec" onclick="document.getElementById('pdfIn').click()">&#8679; Import Scouting PDFs</button>
   </div>
   <button class="act-sec" style="width:100%;margin-bottom:14px" onclick="showBlitzLib()">&#9889; Blitz Library — 12 Packages</button>
   <!-- Hudl export guide -->
   <div style="background:var(--navy2);border:1px solid rgba(240,165,0,.2);border-radius:12px;margin-bottom:18px;overflow:hidden">
     <button onclick="toggleHudlGuide()" style="width:100%;padding:12px 16px;background:none;border:none;color:var(--gold);font-size:12px;font-weight:700;cursor:pointer;display:flex;justify-content:space-between;align-items:center;font-family:inherit;letter-spacing:.5px;text-transform:uppercase">
-      <span>&#128218; Which Hudl PDF to Upload?</span>
+      <span>&#128218; Which PDF to Upload?</span>
       <span id="hudlGuideArrow">&#8964;</span>
     </button>
     <div id="hudlGuide" style="display:none;padding:0 16px 16px">
@@ -394,11 +394,11 @@
       <div style="font-size:12px;color:var(--grayl);line-height:1.7;margin-bottom:12px">
         The Formation Tendencies report contains the formation names (TREY R WEAK, GUN TRIPS, etc.), usage fractions like 8/125, and run/pass splits BlitzIQ needs to build your scouting report.
       </div>
-      <div style="font-size:11px;color:var(--gray);font-weight:700;text-transform:uppercase;letter-spacing:1px;margin-bottom:8px">How to export from Hudl:</div>
+      <div style="font-size:11px;color:var(--gray);font-weight:700;text-transform:uppercase;letter-spacing:1px;margin-bottom:8px">How to export from your scouting platform:</div>
       <div style="display:flex;flex-direction:column;gap:7px">
         <div style="display:flex;gap:10px;align-items:flex-start">
           <span style="background:var(--gold);color:var(--navy);font-size:10px;font-weight:900;width:20px;height:20px;border-radius:50%;display:flex;align-items:center;justify-content:center;flex-shrink:0">1</span>
-          <span style="font-size:12px;color:var(--grayl)">Open your opponent in Hudl and go to <strong style="color:var(--white)">Tendencies</strong></span>
+          <span style="font-size:12px;color:var(--grayl)">Open your opponent's report and go to <strong style="color:var(--white)">Tendencies</strong></span>
         </div>
         <div style="display:flex;gap:10px;align-items:flex-start">
           <span style="background:var(--gold);color:var(--navy);font-size:10px;font-weight:900;width:20px;height:20px;border-radius:50%;display:flex;align-items:center;justify-content:center;flex-shrink:0">2</span>
@@ -467,7 +467,7 @@
 <!-- PROGRESS MODAL -->
 <div class="prog-ov" id="progOv">
   <div class="prog-box">
-    <div class="prog-box-title">&#8679; Importing Hudl PDFs</div>
+    <div class="prog-box-title">&#8679; Importing Scouting PDFs</div>
     <div class="prog-box-sub" id="progSub">Starting…</div>
     <div id="progList"></div>
   </div>
@@ -924,7 +924,7 @@
 <div class="prev-ov" id="prevOv">
   <div class="prev-hdr">
     <div class="prev-hdr-l">
-      <div class="prev-title">Hudl Import Preview</div>
+      <div class="prev-title">Scouting Import Preview</div>
       <div class="prev-file" id="prevFile"></div>
     </div>
     <div class="conf-badge" id="confBadge"></div>
@@ -1076,12 +1076,12 @@ function dismissDemo(){
 function demoBanner(onScreen2){
   if(!isDemoLoaded()) return '';
   const uploadBtn=onScreen2
-    ?`<button onclick="document.getElementById('pdfIn').click()" style="background:var(--gold);color:var(--navy);border:none;border-radius:6px;padding:5px 12px;font-size:11px;font-weight:900;cursor:pointer;font-family:inherit;white-space:nowrap">Import Hudl PDF</button>`
+    ?`<button onclick="document.getElementById('pdfIn').click()" style="background:var(--gold);color:var(--navy);border:none;border-radius:6px;padding:5px 12px;font-size:11px;font-weight:900;cursor:pointer;font-family:inherit;white-space:nowrap">Import Scouting PDF</button>`
     :`<button onclick="dismissDemo()" style="background:none;border:1px solid rgba(240,165,0,.5);color:var(--gold);font-size:11px;font-weight:700;padding:4px 10px;border-radius:6px;cursor:pointer;font-family:inherit;white-space:nowrap">Dismiss</button>`;
   return `<div style="background:rgba(240,165,0,.12);border:1.5px solid rgba(240,165,0,.45);border-radius:10px;padding:10px 14px;margin-bottom:12px;display:flex;align-items:center;gap:10px;flex-wrap:wrap">
     <div style="flex:1;min-width:0">
       <div style="font-size:11px;font-weight:900;color:var(--gold);letter-spacing:1px;margin-bottom:2px">DEMO MODE</div>
-      <div style="font-size:11px;color:var(--grayl)">Load your own Hudl PDF to scout your opponent</div>
+      <div style="font-size:11px;color:var(--grayl)">Load your own scouting PDF to build a game plan</div>
     </div>
     ${uploadBtn}
   </div>`;
@@ -1099,8 +1099,8 @@ function loadDemo(){
   const demoOpp={
     id:uid(),name:'Riverside Knights 2025',season:'2025',
     runPct:55,passPct:45,
-    notes:'DEMO-Riverside-Knights-2025 — tap Import Hudl PDF to replace with real scouting data.',
-    gameNotes:'',importLog:'Demo mode loaded. Explore every feature, then import a real Hudl PDF to scout your next opponent.',
+    notes:'DEMO-Riverside-Knights-2025 — tap Import Scouting PDF to replace with real scouting data.',
+    gameNotes:'',importLog:'Demo mode loaded. Explore every feature, then import a real scouting PDF to scout your next opponent.',
     formations:[
       mk('GUN SPREAD WEAK',12,120,40,
         ['Inside Zone','QB Draw','Counter'],['Curl Flat','Four Verticals','Mesh'],
@@ -1175,11 +1175,11 @@ function renderOpps() {
     el.innerHTML = `
       <div class="empty">
         <div class="empty-icon">🏟</div>
-        <div class="empty-txt" style="margin-bottom:20px">No opponents yet.<br>Add one manually or import a Hudl PDF.</div>
+        <div class="empty-txt" style="margin-bottom:20px">No opponents yet.<br>Add one manually or import a scouting PDF.</div>
         <button onclick="loadDemo()" style="background:var(--gold);color:var(--navy);border:none;border-radius:12px;padding:16px 28px;font-size:16px;font-weight:900;cursor:pointer;font-family:inherit;letter-spacing:.3px;margin-bottom:10px;display:block;width:100%;max-width:300px;margin-left:auto;margin-right:auto;box-shadow:0 4px 16px rgba(240,165,0,.35)">
           &#9654; Load Demo
         </button>
-        <div style="font-size:12px;color:var(--grayl);text-align:center;max-width:280px;margin:0 auto;line-height:1.5">Instantly loads a full sample opponent — explore every feature before importing your own Hudl PDF</div>
+        <div style="font-size:12px;color:var(--grayl);text-align:center;max-width:280px;margin:0 auto;line-height:1.5">Instantly loads a full sample opponent — explore every feature before importing your own scouting PDF</div>
       </div>`;
     return;
   }
@@ -1203,7 +1203,7 @@ function renderForms() {
   const isDemo=o.notes?.includes('DEMO-Riverside-Knights-2025');
   document.getElementById('oppOv').innerHTML =
     (isDemo?demoBanner(true):'') +
-    `<div class="ov-ttl">${esc(o.name)} ${esc(o.season)} — Overall Tendency</div>${sbar(o.runPct,o.passPct)}<div class="ov-note">${isDemo?'Sample opponent — explore the app, then import your real Hudl PDF':esc(o.notes)}</div>`;
+    `<div class="ov-ttl">${esc(o.name)} ${esc(o.season)} — Overall Tendency</div>${sbar(o.runPct,o.passPct)}<div class="ov-note">${isDemo?'Sample opponent — explore the app, then import your real scouting PDF':esc(o.notes)}</div>`;
   // Game notes card
   // Import log (only for Hudl-imported opponents)
   const logEl=document.getElementById('gameNotesCard');
@@ -1572,7 +1572,7 @@ async function handlePDF(e) {
 
   const valid=results.filter(r=>r.formations.length>0||r.situations.length>0);
   if(!valid.length&&results.length>0){
-    alert('No scouting data was detected in the uploaded PDF(s). Make sure these are text-based Hudl tendency exports, not scanned images.');
+    alert('No scouting data was detected in the uploaded PDF(s). Make sure these are text-based scouting tendency exports, not scanned images.');
     return;
   }
   if(!results.length){
@@ -1685,7 +1685,7 @@ function combineResults(results){
     else if(formations.length===0){
       formations.push({name:'Overall Tendency',runPct,passPct,
         favoriteRunPlay:'',favoritePassPlay:'',
-        downTendency:'Imported from Hudl reports.',
+        downTendency:'Imported from scouting report.',
         situations:topSits,sourcePDF:'Multiple files'});
     }
   }
@@ -1707,7 +1707,7 @@ function combineResults(results){
 
   const combined={
     teamName,season,runPct,passPct,
-    notes:`Imported from ${results.length} Hudl PDF${results.length>1?'s':''}.`,
+    notes:`Imported from ${results.length} scouting PDF${results.length>1?'s':''}.`,
     formations,situations:topSits,
     rawLines:results.flatMap(r=>[`=== ${r.filename} ===`,...r.rawLines.slice(0,80)]),
     extractionLog:log,
@@ -2049,7 +2049,7 @@ function parseHudlByPage(pages, filename, fullText) {
       const d = /^1/.test(s) ? 1 : /^2/.test(s) ? 2 : /^3/.test(s) ? 3 : 4;
       const lbl = `${d}${d===1?'st':d===2?'nd':d===3?'rd':'th'} Down`;
       if (!f.situations.find(x => x.distLabel === lbl)) {
-        f.situations.push({ down: d, distLabel: lbl, runPct: pct.run, passPct: pct.pass, notes: 'Extracted from Hudl.', dc: {} });
+        f.situations.push({ down: d, distLabel: lbl, runPct: pct.run, passPct: pct.pass, notes: 'Extracted from scouting report.', dc: {} });
       }
     }
 
@@ -2189,7 +2189,7 @@ function parseHudl(text,filename) {
   if(data.formations.length===0&&data.situations.length>0){
     data.formations.push({name:'Overall Tendency',runPct:data.runPct,passPct:data.passPct,
       favoriteRunPlay:tp.run||'',favoritePassPlay:tp.pass||'',
-      downTendency:'Extracted from Hudl report.',situations:data.situations});
+      downTendency:'Extracted from scouting report.',situations:data.situations});
   } else if(data.formations.length>0&&data.situations.length>0){
     const noSit=data.formations.find(f=>f.situations.length===0);
     if(noSit)noSit.situations=data.situations;
@@ -2455,7 +2455,7 @@ function extractFormations(lines,data,tp){
       playCount:a.playCount, totalPlays:a.totalPlays,
       favoriteRunPlay:'', favoritePassPlay:'',
       runPlays:[], passPlays:[],          // arrays for all plays
-      downTendency:'Imported from Hudl.',
+      downTendency:'Imported from scouting report.',
       situations:[]
     });
     const badge=a.playCount?` (${a.playCount}/${a.totalPlays} plays)`:'';
@@ -2471,7 +2471,7 @@ function extractFormations(lines,data,tp){
         seenNames.add(parsed.name);
         parsed.favoriteRunPlay=''; parsed.favoritePassPlay='';
         parsed.runPlays=[]; parsed.passPlays=[];
-        parsed.downTendency='Imported from Hudl.'; parsed.situations=[];
+        parsed.downTendency='Imported from scouting report.'; parsed.situations=[];
         formations.push(parsed);
         if(formations.length>=9) break; // cap at 9
       }
@@ -2696,7 +2696,7 @@ function updateFormationsFromDetails(lines,formations,data){
     const lbl=`${d}${d===1?'st':d===2?'nd':d===3?'rd':'th'} Down`;
     if(!f.situations.find(s=>s.distLabel===lbl))
       f.situations.push({down:d,distLabel:lbl,runPct:pct.run,passPct:pct.pass,
-        notes:'Extracted from Hudl.',dc:{}});
+        notes:'Extracted from scouting report.',dc:{}});
   }
 
   // ── Fallback: derive tendency from D&D average if still 50/50 ────────────
@@ -2869,7 +2869,7 @@ function extractSituations(lines,data){
 
       seen.add(pat.label);
       sits.push({down:pat.down,distLabel:pat.label,runPct:pct.run,passPct:pct.pass,
-        notes:'Extracted from Hudl report. Add tendency notes in app.',
+        notes:'Extracted from scouting report. Add tendency notes in app.',
         dc:{coverage:'',blitz:'',reason:'',alert:''}});
       data.extractionLog.push(`✓ Situation: ${pat.label} — Run ${pct.run}% / Pass ${pct.pass}%`);
       break;
@@ -2895,7 +2895,7 @@ function extractSituations(lines,data){
         if(!pct) continue;
         seen.add(pat.label);
         sits.push({down:pat.down,distLabel:pat.label,runPct:pct.run,passPct:pct.pass,
-          notes:'Extracted from Hudl report. Add tendency notes in app.',
+          notes:'Extracted from scouting report. Add tendency notes in app.',
           dc:{coverage:'',blitz:'',reason:'',alert:''}});
         data.extractionLog.push(`✓ Situation (global): ${pat.label} — Run ${pct.run}% / Pass ${pct.pass}%`);
         break;
@@ -3008,7 +3008,7 @@ function openPreview(data,results){
     ?'Good match — review the data below and tap Import when ready.'
     :conf>=35
     ?'Partial match — some data was found. Review all fields carefully before importing.'
-    :'Low match — these may not be Hudl tendency reports, or could be scanned images. Review carefully or add this opponent manually.';
+    :'Low match — these may not be scouting tendency reports, or could be scanned images. Review carefully or add this opponent manually.';
 
   const allSits=data.formations.flatMap(f=>f.situations);
 
@@ -3020,7 +3020,7 @@ function openPreview(data,results){
       <div class="fld"><label class="fld-lbl">Team Name</label><input class="fld-in" id="p_name" value="${esc(data.teamName)}" type="text" placeholder="Team name"></div>
       <div style="display:flex;gap:12px">
         <div class="fld" style="flex:1"><label class="fld-lbl">Season</label><input class="fld-in" id="p_season" value="${esc(data.season)}" type="text"></div>
-        <div class="fld" style="flex:1"><label class="fld-lbl">Notes</label><input class="fld-in" id="p_notes" value="Imported from Hudl." type="text"></div>
+        <div class="fld" style="flex:1"><label class="fld-lbl">Notes</label><input class="fld-in" id="p_notes" value="Imported from scouting report." type="text"></div>
       </div>
       <div class="fld">
         <label class="fld-lbl">Overall Run / Pass</label>
@@ -3050,7 +3050,7 @@ function openPreview(data,results){
         ?`<div class="conf-msg lo">
             <strong>No formations detected in this PDF.</strong><br>
             This is usually a <strong>Run/Pass Breakdown</strong> report — it only contains overall totals, not formation names.<br><br>
-            To get formations, re-export from Hudl using <strong>Tendencies → Formation → Export PDF</strong> and upload that file instead.
+            To get formations, re-export from your platform using <strong>Tendencies → Formation → Export PDF</strong> and upload that file instead.
             You can upload multiple PDFs together (formation report + down-distance report).
           </div>`
         :data.formations.map((f,i)=>`
@@ -3152,12 +3152,12 @@ function importPreview(){
       runPlays:f.runPlays||[],    // preserve full run play array
       passPlays:f.passPlays||[], // preserve full pass play array
       playCount:f.playCount||null, totalPlays:f.totalPlays||null,
-      downTendency:'Imported from Hudl.',
+      downTendency:'Imported from scouting report.',
       situations:f.situations.map(s=>({...s,id:uid(),dc:{coverage:'',blitz:'',reason:'',alert:''}}))});
   });
   const newOpp={id:uid(),name,season:season||String(new Date().getFullYear()),
     runPct:run,passPct:100-run,
-    notes:document.getElementById('p_notes').value.trim()||'Imported from Hudl scouting report.',
+    notes:document.getElementById('p_notes').value.trim()||'Imported from scouting report.',
     gameNotes:'',
     importLog:(prevData.extractionLog||[]).join('\n'), // save extraction log for review
     formations};
