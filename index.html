@@ -629,25 +629,7 @@
 </div>
 
 <!-- MODAL: ADD OPPONENT -->
-<!-- FEEDBACK MODAL -->
-<div class="modal-ov" id="mFeedback">
-  <div class="modal-sheet">
-    <div class="modal-handle"></div>
-    <div class="modal-hdr">
-      <span class="modal-title">&#128172; Send Feedback</span>
-      <button class="modal-x" onclick="closeModal('mFeedback')">&#10005;</button>
-    </div>
-    <div class="modal-body">
-      <p style="font-size:13px;color:var(--grayl);margin-bottom:14px;line-height:1.5">Found a bug? Have a feature request? We want to hear from you.</p>
-      <div class="fld"><label class="fld-lbl">Your Name (optional)</label><input class="fld-in" id="fb_name" type="text" placeholder="Coach Smith"></div>
-      <div class="fld"><label class="fld-lbl">Feedback</label><textarea class="fld-in" id="fb_msg" rows="5" style="resize:vertical;height:120px" placeholder="Describe the issue or idea..."></textarea></div>
-    </div>
-    <div class="modal-foot">
-      <button class="btn-sec" onclick="closeModal('mFeedback')">Cancel</button>
-      <button class="btn-pri" onclick="submitFeedback()">Send via Email</button>
-    </div>
-  </div>
-</div>
+
 
 <div class="modal-ov" id="mOpp">
   <div class="modal-sheet">
@@ -1399,15 +1381,8 @@ function renderDefCall() {
 // ── MODALS ────────────────────────────────────────────────────────────────────
 function openModal(id) { document.getElementById(id).classList.add('open'); document.body.style.overflow='hidden'; }
 function closeModal(id){ document.getElementById(id).classList.remove('open'); document.body.style.overflow=''; }
-function openFeedback(){ document.getElementById('fb_name').value=''; document.getElementById('fb_msg').value=''; openModal('mFeedback'); }
-function submitFeedback(){
-  const name=document.getElementById('fb_name').value.trim()||'Anonymous coach';
-  const msg=document.getElementById('fb_msg').value.trim();
-  if(!msg){ alert('Please enter your feedback before sending.'); return; }
-  const subject=encodeURIComponent('BlitzIQ Beta Feedback');
-  const body=encodeURIComponent(`From: ${name}\n\n${msg}\n\n---\nSent from BlitzIQ Beta`);
-  window.location.href=`mailto:richderrik58@yahoo.com?subject=${subject}&body=${body}`;
-  closeModal('mFeedback');
+function openFeedback(){
+  window.open('https://docs.google.com/forms/d/1DG_mTv5XCzTwfbGC4tiDTZbjP2Y5S7trx7Uxfq5O36E/viewform','_blank');
 }
 
 // ── PCT PICKER ────────────────────────────────────────────────────────────────
@@ -6045,8 +6020,8 @@ renderOpps(); syncHdr();
       <p style="font-weight:700;color:var(--white);margin-bottom:6px">PDF files</p>
       <p style="margin-bottom:14px">When you import a scouting PDF, it is processed entirely within your browser. The file is never uploaded to any server or third party. It is read once, parsed for formation data, and the original file is discarded.</p>
 
-      <p style="font-weight:700;color:var(--white);margin-bottom:6px">Feedback emails</p>
-      <p style="margin-bottom:14px">If you choose to send feedback, tapping "Send via Email" opens your device's email app with a pre-filled message. BlitzIQ does not transmit or store your message — it is sent by your email app directly.</p>
+      <p style="font-weight:700;color:var(--white);margin-bottom:6px">Feedback form</p>
+      <p style="margin-bottom:14px">If you choose to send feedback, tapping the Feedback button opens a Google Form in a new tab. Any information you submit is governed by Google's Privacy Policy. BlitzIQ only receives what you voluntarily enter in that form.</p>
 
       <p style="font-weight:700;color:var(--white);margin-bottom:6px">No accounts, no tracking</p>
       <p style="margin-bottom:14px">BlitzIQ has no user accounts, no login, no cookies, and no analytics or tracking of any kind. We do not know who uses the app or how often.</p>
