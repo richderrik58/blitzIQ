@@ -530,9 +530,19 @@
       <button class="cbtn-clear" onclick="flipCanvas()" title="Mirror play left/right">&#8596; Flip</button>
       <button class="cbtn-clear" onclick="clearCanvas()">Clear</button>
       <button class="cbtn-save" onclick="saveCanvas()">Save</button>
+      <button class="cbtn-save" onclick="addToScript()" style="background:rgba(34,197,94,.18);border:1.5px solid rgba(34,197,94,.5);color:#4ade80" title="Add to install script">+ Script</button>
       <button class="cbtn-close" onclick="printPlayCard()" title="Print play card">&#128438;</button>
       <button class="cbtn-save" onclick="sharePlayCard()" style="background:rgba(240,165,0,.18);border:1.5px solid rgba(240,165,0,.5);color:var(--gold)">&#11014; Share</button>
       <button class="cbtn-close" onclick="closeCanvas()">&#10005;</button>
+    </div>
+  </div>
+  <!-- Script queue bar — shown when plays have been added -->
+  <div id="scriptBar" style="display:none;background:rgba(34,197,94,.12);border-bottom:1px solid rgba(34,197,94,.3);padding:5px 12px;display:none;align-items:center;justify-content:space-between">
+    <span style="font-size:11px;color:#4ade80;font-weight:700">&#128196; Script: <span id="scriptCount">0</span> play(s) queued</span>
+    <div style="display:flex;gap:8px">
+      <button onclick="viewScript()" style="background:none;border:1px solid rgba(34,197,94,.5);color:#4ade80;border-radius:6px;padding:3px 10px;font-size:10px;font-weight:700;cursor:pointer;font-family:inherit">View</button>
+      <button onclick="printScript()" style="background:rgba(34,197,94,.2);border:1px solid rgba(34,197,94,.5);color:#4ade80;border-radius:6px;padding:3px 10px;font-size:10px;font-weight:700;cursor:pointer;font-family:inherit">&#128438; Print</button>
+      <button onclick="clearScript()" style="background:none;border:1px solid rgba(239,68,68,.4);color:var(--red);border-radius:6px;padding:3px 10px;font-size:10px;font-weight:700;cursor:pointer;font-family:inherit">Clear</button>
     </div>
   </div>
   <!-- Defensive call banner (shown after AI/demo generation) -->
@@ -5990,6 +6000,145 @@ loadDB();
   if(changed) saveDB();
 })();
 renderOpps(); syncHdr();
+
+// ── INSTALL SCRIPT ────────────────────────────────────────────────────────────
+let cvScript = [];
+
+const INSTALL_ALIGN = {
+  'DE':'5-tech (C gap contain)', 'DT':'3-tech (B gap)', 'NT':'0-tech (A gap)',
+  'LB':'2-pt stance, stacked', 'OLB':'2-pt stance, outside', 'MLB':'2-pt stance, A gap',
+  'CB':'Off coverage (5 yds)', 'NB':'Slot — press/trail', 'SS':'8 yds strong side', 'FS':'Deep center field'
+};
+const INSTALL_RUN = {
+  'DE':'Contain — set the edge', 'DT':'Penetrate assigned gap', 'NT':'Occupy center / clog',
+  'LB':'Fill gap / scrape over top', 'OLB':'Fill gap / scrape over top', 'MLB':'Fill A gap / take on blocks',
+  'CB':'Force — alley support', 'NB':'Force — alley support', 'SS':'Run support — box', 'FS':'Pursuit / cutback lane'
+};
+
+function buildInstallTable(){
+  const dc=window._cvDefCall||{};
+  const rushers=identifyRushers(dc.blitz||'');
+  const assignments=buildAssignments(rushers);
+  const gapMap=window._cvGapMap||new Map();
+  const def=cvPlayers.filter(p=>p.team==='def').sort((a,b)=>a.x-b.x);
+  return def.map(p=>{
+    const isRush=rushers.has(p.id);
+    const gap=gapMap.get(p.id)||'';
+    const asgn=assignments.find(a=>a.id===p.id);
+    return{
+      pos:p.type,
+      align:INSTALL_ALIGN[p.type]||p.type,
+      run:isRush?`RUSH — ${gap||'gap'} penetrate`:(INSTALL_RUN[p.type]||'Fill gap'),
+      pass:isRush?`RUSH (${gap||'gap'})`:(asgn?.zone||'Zone coverage')
+    };
+  });
+}
+
+function addToScript(){
+  if(!cvPlayers.some(p=>p.team==='def')){showToast('Place defenders on the canvas first');return;}
+  const canvas=document.getElementById('cvCanvas');
+  const dc=window._cvDefCall||{};
+  const formName=window._cvFormName||'Formation';
+  const playName=`${formName}${dc.coverage?' — '+dc.coverage:''}${dc.blitz?' / '+dc.blitz:''}`;
+  const imgData=canvas.toDataURL('image/png');
+  const table=buildInstallTable();
+  cvScript.push({num:cvScript.length+1,name:playName,imgData,table});
+  updateScriptBar();
+  showToast(`Play ${cvScript.length} added to script ✓`);
+}
+
+function updateScriptBar(){
+  const bar=document.getElementById('scriptBar');
+  const ct=document.getElementById('scriptCount');
+  if(ct) ct.textContent=cvScript.length;
+  if(bar) bar.style.display=cvScript.length>0?'flex':'none';
+}
+
+function viewScript(){
+  if(!cvScript.length){showToast('No plays in script yet');return;}
+  const body=document.getElementById('scriptModalBody');
+  body.innerHTML=cvScript.map((play,i)=>`
+    <div style="border-bottom:1px solid rgba(255,255,255,.07);padding:14px 16px">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
+        <div style="font-size:13px;font-weight:800;color:var(--white)">Play ${play.num}: ${esc(play.name)}</div>
+        <button onclick="removeScriptPlay(${i})" style="background:none;border:none;color:var(--red);font-size:11px;cursor:pointer;font-family:inherit">Remove</button>
+      </div>
+      <img src="${play.imgData}" style="width:100%;border-radius:6px;margin-bottom:8px">
+      <table style="width:100%;border-collapse:collapse;font-size:10px">
+        <tr style="background:rgba(255,255,255,.07)">
+          <th style="padding:4px 6px;text-align:left;color:var(--gray);font-weight:700;font-size:9px;letter-spacing:.5px">POS</th>
+          <th style="padding:4px 6px;text-align:left;color:var(--gray);font-weight:700;font-size:9px;letter-spacing:.5px">ALIGNMENT</th>
+          <th style="padding:4px 6px;text-align:left;color:var(--gray);font-weight:700;font-size:9px;letter-spacing:.5px">RUN</th>
+          <th style="padding:4px 6px;text-align:left;color:var(--gray);font-weight:700;font-size:9px;letter-spacing:.5px">PASS</th>
+        </tr>
+        ${play.table.map(r=>`<tr style="border-top:1px solid rgba(255,255,255,.05);${r.pass.startsWith('RUSH')?'background:rgba(239,68,68,.08)':''}">
+          <td style="padding:4px 6px;font-weight:700;color:var(--white)">${esc(r.pos)}</td>
+          <td style="padding:4px 6px;color:var(--grayl)">${esc(r.align)}</td>
+          <td style="padding:4px 6px;color:var(--grayl)">${esc(r.run)}</td>
+          <td style="padding:4px 6px;color:${r.pass.startsWith('RUSH')?'var(--red)':'var(--grayl)'};font-weight:${r.pass.startsWith('RUSH')?'700':'400'}">${esc(r.pass)}</td>
+        </tr>`).join('')}
+      </table>
+    </div>`).join('');
+  openModal('mScript');
+}
+
+function removeScriptPlay(i){
+  cvScript.splice(i,1);
+  cvScript.forEach((p,idx)=>p.num=idx+1);
+  updateScriptBar();
+  viewScript();
+}
+
+function clearScript(){
+  if(!cvScript.length)return;
+  if(!confirm('Clear all plays from the script?'))return;
+  cvScript=[];
+  updateScriptBar();
+  closeModal('mScript');
+  showToast('Script cleared');
+}
+
+function printScript(){
+  if(!cvScript.length){showToast('No plays in script yet');return;}
+  const html=`<!DOCTYPE html><html><head><title>BlitzIQ Install Script</title><style>
+    *{margin:0;padding:0;box-sizing:border-box}
+    body{font-family:Arial,Helvetica,sans-serif;font-size:9pt;color:#111;background:#fff}
+    .page{page-break-after:always;padding:16px;max-width:720px;margin:0 auto}
+    .page:last-child{page-break-after:auto}
+    .play-hdr{display:flex;justify-content:space-between;align-items:flex-end;border-bottom:2.5px solid #111;padding-bottom:6px;margin-bottom:10px}
+    .play-num{font-size:22pt;font-weight:900;color:#111;line-height:1}
+    .play-name{font-size:11pt;font-weight:700;color:#111}
+    .play-brand{font-size:7pt;color:#999;letter-spacing:1px;text-transform:uppercase}
+    img{width:100%;max-width:480px;display:block;margin:0 auto 10px;border:1px solid #e5e7eb;border-radius:4px}
+    table{width:100%;border-collapse:collapse;margin-top:6px}
+    th{background:#111;color:#fff;padding:5px 8px;text-align:left;font-size:8pt;letter-spacing:.5px;text-transform:uppercase}
+    td{border:1px solid #e5e7eb;padding:4px 8px;font-size:8.5pt}
+    tr:nth-child(even) td{background:#f9fafb}
+    .rush td{background:#fee2e2!important;font-weight:700}
+    .rush td:last-child{color:#dc2626}
+    @media print{.page{page-break-after:always}}
+  </style></head><body>
+  ${cvScript.map(play=>`
+    <div class="page">
+      <div class="play-hdr">
+        <div><div class="play-num">${play.num}</div><div class="play-name">${esc(play.name)}</div></div>
+        <div class="play-brand">BlitzIQ Install Script</div>
+      </div>
+      <img src="${play.imgData}" alt="Play diagram">
+      <table>
+        <tr><th>Position</th><th>Alignment</th><th>Run Responsibility</th><th>Pass Responsibility</th></tr>
+        ${play.table.map(r=>`<tr class="${r.pass.startsWith('RUSH')?'rush':''}">
+          <td><strong>${esc(r.pos)}</strong></td><td>${esc(r.align)}</td>
+          <td>${esc(r.run)}</td><td>${esc(r.pass)}</td>
+        </tr>`).join('')}
+      </table>
+    </div>`).join('')}
+  </body></html>`;
+  const w=window.open('','_blank','width=820,height=1100');
+  if(!w){alert('Allow pop-ups to print.');return;}
+  w.document.write(html);w.document.close();w.focus();
+  setTimeout(()=>w.print(),400);
+}
 </script>
 <div class="toast" id="toastEl"></div>
 <div id="printPage" class="pp-h"></div>
@@ -6000,6 +6149,22 @@ renderOpps(); syncHdr();
   <div style="margin-top:8px;display:flex;justify-content:center;gap:18px">
     <button onclick="openModal('mPrivacy')" style="background:none;border:none;color:var(--grayl);font-size:11px;cursor:pointer;text-decoration:underline;font-family:inherit;padding:0">Privacy Policy</button>
     <button onclick="openModal('mTerms')" style="background:none;border:none;color:var(--grayl);font-size:11px;cursor:pointer;text-decoration:underline;font-family:inherit;padding:0">Terms of Use</button>
+  </div>
+</div>
+
+<!-- SCRIPT VIEW MODAL -->
+<div class="modal-ov" id="mScript">
+  <div class="modal-sheet" style="max-height:90vh;overflow-y:auto">
+    <div class="modal-handle"></div>
+    <div class="modal-hdr">
+      <span class="modal-title">&#128196; Install Script</span>
+      <button class="modal-x" onclick="closeModal('mScript')">&#10005;</button>
+    </div>
+    <div class="modal-body" id="scriptModalBody" style="padding:0"></div>
+    <div class="modal-foot">
+      <button class="btn-sec" onclick="clearScript()">Clear Script</button>
+      <button class="btn-pri" onclick="printScript()">&#128438; Print Script</button>
+    </div>
   </div>
 </div>
 
