@@ -708,9 +708,9 @@ function drawGapLabels(ctx,cw,los){
 }
 
 function drawPlayerSymbol(ctx,p){
-  const r=p.team==='def'?CV_R-2:CV_R;
+  const r=p.team==='def'?CV_R-4:CV_R;
   ctx.save();
-  ctx.font='bold 8px -apple-system,Helvetica,sans-serif';
+  ctx.font=`bold ${p.team==='def'?7:8}px -apple-system,Helvetica,sans-serif`;
   ctx.textAlign='center'; ctx.textBaseline='middle';
 
   if(cvSelectedPlayer===p||cvDragging===p){
@@ -746,7 +746,6 @@ function drawPlayerSymbol(ctx,p){
     ctx.lineWidth=1.5;
     ctx.stroke();
     ctx.fillStyle='#ffffff';
-    ctx.font='bold 8px -apple-system,Helvetica,sans-serif';
     ctx.fillText(p.type,p.x,p.y+0.5);
   }
   ctx.restore();
