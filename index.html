@@ -1408,7 +1408,6 @@ function setHash(pos,btn){
   cvHashPos=pos;
   const newHcx=hashCenterX(cw);
   const dx=newHcx-oldHcx;
-  showToast(`cw=${Math.round(cw)} dx=${Math.round(dx)} players=${cvPlayers.length}`);
   if(dx!==0){
     const pad=cw*0.04;
     cvPlayers.forEach(p=>{p.x=Math.round(Math.max(pad,Math.min(cw-pad,p.x+dx)));});
@@ -1526,20 +1525,38 @@ function placePreset(name){
   } else {
     const hcx=hashCenterX(cw);
     const pad=cw*0.04;
-    const normalHalf=cw*0.46;
-    preset.forEach(pd=>{
-      const offset=(pd.xf-0.5)*cw;
-      const isBoundary=(cvHashPos==='left'&&offset<0)||(cvHashPos==='right'&&offset>0);
-      let x;
-      if(isBoundary){
-        const avail=cvHashPos==='left'?hcx-pad:cw-pad-hcx;
-        x=hcx+offset*Math.min(1,avail/normalHalf);
-      } else {
-        x=hcx+offset;
-      }
-      x=Math.round(Math.max(pad,Math.min(cw-pad,x)));
-      cvPlayers.push({id:++cvPid,type:pd.type,team:pd.team,x,y:Math.round(los+pd.yd*ppy)});
-    });
+    if(cvHashPos==='mid'){
+      preset.forEach(pd=>{
+        cvPlayers.push({id:++cvPid,type:pd.type,team:pd.team,
+          x:Math.round(cw*pd.xf),y:Math.round(los+pd.yd*ppy)});
+      });
+    } else {
+      const isLeft=cvHashPos==='left';
+      // HS field: numbers at ~7 yds from each sideline (7/53.33 ≈ 0.131)
+      const farNum =isLeft?cw*0.87:cw*0.13; // numbers on wide side
+      const nearNum=isLeft?cw*0.13:cw*0.87; // numbers on short side
+      const nearOut=isLeft?cw*0.08:cw*0.92; // just outside near numbers (toward sideline)
+      // field-side WRs sorted outermost first; boundary-side sorted innermost (hash-side) first
+      const wrField=preset.filter(pd=>pd.type==='WR'&&(isLeft?pd.xf>=0.5:pd.xf<=0.5))
+        .sort((a,b)=>isLeft?b.xf-a.xf:a.xf-b.xf);
+      const wrBound=preset.filter(pd=>pd.type==='WR'&&(isLeft?pd.xf<0.5:pd.xf>0.5))
+        .sort((a,b)=>isLeft?b.xf-a.xf:a.xf-b.xf);
+      // field targets: WR1 near far numbers, WR2 splits gap to hash, WR3 splits again
+      const fieldT=[farNum,(farNum+hcx)/2,((farNum+hcx)/2+hcx)/2];
+      // boundary targets: WR1 at near numbers, WR2 just outside numbers
+      const boundT=[nearNum,nearOut];
+      preset.forEach(pd=>{
+        let x;
+        if(pd.type==='WR'){
+          const fi=wrField.indexOf(pd), bi=wrBound.indexOf(pd);
+          if(fi>=0) x=Math.round(fi<fieldT.length?fieldT[fi]:Math.max(pad,Math.min(cw-pad,hcx+(pd.xf-0.5)*cw)));
+          else      x=Math.round(bi<boundT.length?boundT[bi]:Math.max(pad,Math.min(cw-pad,hcx+(pd.xf-0.5)*cw)));
+        } else {
+          x=Math.round(Math.max(pad,Math.min(cw-pad,hcx+(pd.xf-0.5)*cw)));
+        }
+        cvPlayers.push({id:++cvPid,type:pd.type,team:pd.team,x,y:Math.round(los+pd.yd*ppy)});
+      });
+    }
   }
   redrawAll();
 }
