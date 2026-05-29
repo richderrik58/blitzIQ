@@ -519,22 +519,6 @@ function drawField(ctx,w,h){
   ctx.fillStyle='rgba(34,197,94,0.25)';
   ctx.fillText('OFFENSE',8,h-10);
 
-  if(window._cvStrength){
-    const str=window._cvStrength;
-    const arrowX=str==='right'?w-10:10;
-    ctx.save();
-    ctx.textAlign=str==='right'?'right':'left';
-    ctx.fillStyle='rgba(240,165,0,0.85)';
-    ctx.font='bold 11px -apple-system,sans-serif';
-    const label=`STRONG ${str.toUpperCase()}`;
-    ctx.fillText(`${str==='right'?'':'◀ '}${label}${str==='right'?' ▶':''}`, arrowX, los-18);
-    ctx.strokeStyle='rgba(240,165,0,0.6)'; ctx.lineWidth=2; ctx.setLineDash([4,3]);
-    ctx.beginPath();
-    ctx.moveTo(w*0.5,los-12);
-    ctx.lineTo(str==='right'?w*0.85:w*0.15, los-12);
-    ctx.stroke(); ctx.setLineDash([]);
-    ctx.restore();
-  }
 }
 
 function redrawAll(){
@@ -543,7 +527,6 @@ function redrawAll(){
   const dpr=window.devicePixelRatio||1;
   const cw=canvas.width/dpr, ch=canvas.height/dpr;
   const los=ch*0.62;
-  window._cvGapMap=computeGapAssignments();
   cvCtx.clearRect(0,0,cw,ch);
   drawField(cvCtx,cw,ch);
   if(window._cvDefCall) drawCoverageZones(cvCtx,cw,ch,los,window._cvDefCall.coverage);
@@ -758,7 +741,7 @@ function drawPlayerSymbol(ctx,p){
     ctx.fillStyle='rgba(0,10,28,0.92)';
     ctx.fill();
     ctx.strokeStyle='#ffffff';
-    ctx.lineWidth=2.5;
+    ctx.lineWidth=1.5;
     ctx.stroke();
     ctx.fillStyle='#ffffff';
     ctx.font='bold 8px -apple-system,Helvetica,sans-serif';
