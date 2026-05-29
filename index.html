@@ -917,6 +917,61 @@ const CV_PRESETS = {
   ],
 };
 
+function getOLAnchors(){
+  const canvas=document.getElementById('playCanvas');
+  const dpr=window.devicePixelRatio||1;
+  const olAll=cvPlayers.filter(p=>p.team==='off'&&(p.type==='OL'||p.type==='C'));
+  if(olAll.length<3) return null;
+  const sorted=[...olAll].sort((a,b)=>a.x-b.x);
+  const center=sorted.find(p=>p.type==='C')||sorted[Math.floor(sorted.length/2)];
+  if(!center) return null;
+  const cx=center.x, losY=center.y;
+  const leftOL=sorted.filter(p=>p.x<cx-5).sort((a,b)=>b.x-a.x);
+  const rightOL=sorted.filter(p=>p.x>cx+5).sort((a,b)=>a.x-b.x);
+  const lgx=leftOL[0]?.x??(cx-32);
+  const ltx=leftOL[1]?.x??(cx-64);
+  const rgx=rightOL[0]?.x??(cx+32);
+  const rtx=rightOL[1]?.x??(cx+64);
+  const sp=Math.abs((rtx-ltx)/4);
+  const te=cvPlayers.find(p=>p.team==='off'&&p.type==='TE'&&Math.abs(p.y-losY)<40);
+  return{cx,lgx,ltx,rgx,rtx,tex:te?te.x:null,sp,losY};
+}
+
+function defXFromOL(presetName,pdIndex,anchors,strength){
+  const{cx,lgx,ltx,rgx,rtx,tex,sp}=anchors;
+  const isRight=strength!=='left';
+  const stx=isRight?rtx:ltx;   // strong tackle x
+  const wtx=isRight?ltx:rtx;   // weak tackle x
+  const sgx=isRight?rgx:lgx;   // strong guard x
+  const wgx=isRight?lgx:rgx;   // weak guard x
+  const ss=isRight?1:-1;        // +1 = strong is rightward, -1 = leftward
+  const sw=-ss;
+  const teX=(tex!==null&&((isRight&&tex>cx)||(!isRight&&tex<cx)))?tex:null;
+  const aGapS=(cx+sgx)/2;
+  const aGapW=(wgx+cx)/2;
+  const bGapS=(sgx+stx)/2;
+  const bGapW=(wgx+wtx)/2;
+  const cGapS=teX!==null?(stx+teX)/2:stx+ss*sp*0.8;
+  const cGapW=wtx+sw*sp*0.8;
+  const edgeS=teX!==null?teX+ss*sp*0.8:stx+ss*sp*1.5;
+  const edgeW=wtx+sw*sp*1.5;
+  let x=null;
+  if(presetName==='4-3'){
+    // [0]DE-weak [1]DT-1tech [2]DT-3tech [3]DE-strong [4]Will [5]MLB [6]Sam
+    const pos=[cGapW, cx+sw*sp*0.3, bGapS, cGapS, bGapW, cx, stx+ss*sp*0.4];
+    if(pdIndex<pos.length) x=pos[pdIndex];
+  } else if(presetName==='3-4'){
+    // [0]DE-weak [1]NT [2]DE-strong [3]OLB-weak [4]ILB-weak [5]ILB-strong [6]OLB-strong
+    const pos=[bGapW, cx, bGapS, edgeW, aGapW, aGapS, edgeS];
+    if(pdIndex<pos.length) x=pos[pdIndex];
+  } else if(presetName==='3-3-5'){
+    // [0]DE-weak [1]NT [2]DE-strong [3]LB-weak [4]MLB [5]LB-strong
+    const pos=[bGapW, cx, bGapS, cGapW, cx, cGapS];
+    if(pdIndex<pos.length) x=pos[pdIndex];
+  }
+  return x!==null?Math.round(x):null;
+}
+
 function placePreset(name){
   if(!cvCtx) return;
   const canvas=document.getElementById('playCanvas');
@@ -928,14 +983,28 @@ function placePreset(name){
   if(!preset) return;
   const team=preset[0].team;
   cvPlayers=cvPlayers.filter(p=>p.team!==team);
-  preset.forEach(pd=>{
-    cvPlayers.push({id:++cvPid, type:pd.type, team:pd.team,
-      x:Math.round(cw*pd.xf), y:Math.round(los+pd.yd)});
-  });
   if(team==='def'){
-    window._cvPresetType=name;
+    const anchors=getOLAnchors();
     const strength=getFormationStrength(cw);
-    if(strength) adjustDefenseToStrength(strength, cw);
+    preset.forEach((pd,i)=>{
+      const ox=anchors?defXFromOL(name,i,anchors,strength):null;
+      const x=ox!==null?ox:Math.round(cw*pd.xf);
+      cvPlayers.push({id:++cvPid,type:pd.type,team:pd.team,x,y:Math.round(los+pd.yd)});
+    });
+    window._cvPresetType=name;
+    window._cvStrength=strength;
+    // SS to strong side; when OL anchors used LBs are already correct so skip full adjust
+    const defNew=cvPlayers.filter(p=>p.team==='def');
+    const ssP=defNew.find(p=>p.type==='SS');
+    const fsP=defNew.find(p=>p.type==='FS');
+    if(ssP) ssP.x=Math.round(cw*(strength==='right'?0.70:0.30));
+    if(fsP) fsP.x=Math.round(cw*0.50);
+    if(!anchors) adjustDefenseToStrength(strength,cw);
+  } else {
+    preset.forEach(pd=>{
+      cvPlayers.push({id:++cvPid,type:pd.type,team:pd.team,
+        x:Math.round(cw*pd.xf),y:Math.round(los+pd.yd)});
+    });
   }
   redrawAll();
 }
