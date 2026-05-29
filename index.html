@@ -496,7 +496,17 @@ function loadDB() {
   DB.playlists.forEach(pl=>{ if(typeof pl.id!=='string') pl.id=String(pl.id); });
   saveDB();
 }
-function saveDB() { localStorage.setItem(SKEY, JSON.stringify(DB)); }
+function saveDB() {
+  const json = JSON.stringify(DB);
+  try {
+    localStorage.setItem(SKEY, json);
+  } catch(e) {
+    // Quota exceeded — retry without route image data to save at least player positions
+    const compact = {...DB, templates: DB.templates.map(t=>({...t,cvRoutes:null}))};
+    try { localStorage.setItem(SKEY, JSON.stringify(compact)); } catch(e2) {}
+    showToast('Storage full — routes not saved, player positions kept');
+  }
+}
 function uid() { return String(Date.now() * 1000 + Math.floor(Math.random() * 999)); }
 function fillFld(id,val){ document.getElementById(id).value=val; }
 function openModal(id) { document.getElementById(id).classList.add('open'); document.body.style.overflow='hidden'; }
@@ -1653,7 +1663,16 @@ function saveCanvas(){
   thumb.width=thumbW; thumb.height=thumbH||180;
   thumb.getContext('2d').drawImage(canvas, 0, 0, canvas.width, canvas.height, 0, 0, thumbW, thumb.height);
   const thumbnailData=thumb.toDataURL('image/jpeg',0.7);
-  const routesData=cvRouteCanvas?cvRouteCanvas.toDataURL('image/png'):null;
+  // Save routes at 1× resolution (not device DPR) to keep localStorage size small
+  let routesData=null;
+  if(cvRouteCanvas){
+    const dpr=window.devicePixelRatio||1;
+    const rw=cvRouteCanvas.width/dpr, rh=cvRouteCanvas.height/dpr;
+    const flat=document.createElement('canvas');
+    flat.width=rw; flat.height=rh;
+    flat.getContext('2d').drawImage(cvRouteCanvas,0,0,cvRouteCanvas.width,cvRouteCanvas.height,0,0,rw,rh);
+    routesData=flat.toDataURL('image/png');
+  }
   const playersData=JSON.parse(JSON.stringify(cvPlayers));
   const presetData=window._cvPresetType||null;
 
