@@ -130,7 +130,7 @@
     .cbtn-save:active{background:var(--goldd)}
     .cbtn-close{padding:7px 12px;background:rgba(255,255,255,.07);border:1px solid rgba(255,255,255,.12);border-radius:8px;color:var(--grayl);font-size:12px;font-weight:700;cursor:pointer;font-family:inherit}
     .canvas-toolbar{background:var(--navyc);border-top:1px solid rgba(255,255,255,.1);padding:6px 12px;min-height:50px;display:flex;flex-direction:column;gap:6px;flex-shrink:0}
-    .toolbar-body{transition:max-height .25s ease,opacity .25s ease;overflow:hidden;max-height:400px;opacity:1}
+    .toolbar-body{transition:max-height .25s ease,opacity .25s ease;overflow-y:auto;max-height:140px;opacity:1}
     .toolbar-body.collapsed{max-height:0;opacity:0}
     .collapse-btn{background:rgba(255,255,255,.07);border:1px solid rgba(255,255,255,.12);border-radius:7px;color:var(--grayl);font-size:13px;cursor:pointer;width:34px;height:34px;display:flex;align-items:center;justify-content:center;flex-shrink:0}
     .cv-def-call{background:rgba(240,165,0,.1);border-top:1px solid rgba(240,165,0,.2);padding:8px 14px;flex-shrink:0;display:none}
@@ -304,6 +304,7 @@
         <div class="tool-sep"></div>
         <button class="ctool-btn active" onclick="setDrawTool('pen',this)">&#9998; Draw</button>
         <button class="ctool-btn" onclick="setDrawTool('erase',this)">&#9633; Erase</button>
+        <button class="ctool-btn" onclick="undoRoute()" title="Undo last stroke">&#8617; Undo</button>
         <div class="tool-sep"></div>
         <button class="cw-btn active" onclick="setDrawWidth(3,this)">&#11835;</button>
         <button class="cw-btn" onclick="setDrawWidth(6,this)">&#9135;</button>
@@ -476,6 +477,7 @@ let cvSelectedPlayer=null;
 let cvDragging=null;
 let cvDragOffX=0, cvDragOffY=0;
 let cvRouteCanvas=null;
+let cvRouteUndoStack=[];
 let cvPid=0;
 let CV_R=10;
 
@@ -706,7 +708,7 @@ function drawGapLabels(ctx,cw,los){
 }
 
 function drawPlayerSymbol(ctx,p){
-  const r=CV_R;
+  const r=p.team==='def'?CV_R-2:CV_R;
   ctx.save();
   ctx.font='bold 8px -apple-system,Helvetica,sans-serif';
   ctx.textAlign='center'; ctx.textBaseline='middle';
@@ -823,7 +825,7 @@ const CV_PRESETS = {
     {type:'C',  team:'off', xf:0.50, yd:30},
     {type:'OL', team:'off', xf:0.532,yd:30},
     {type:'OL', team:'off', xf:0.564,yd:30},
-    {type:'TE', team:'off', xf:0.672,yd:30},
+    {type:'TE', team:'off', xf:0.596,yd:30},
     {type:'WR', team:'off', xf:0.96, yd:30},
     {type:'QB', team:'off', xf:0.50, yd:72},
     {type:'FB', team:'off', xf:0.50, yd:108},
@@ -862,7 +864,7 @@ const CV_PRESETS = {
     {type:'C',  team:'off', xf:0.50, yd:30},
     {type:'OL', team:'off', xf:0.532,yd:30},
     {type:'OL', team:'off', xf:0.564,yd:30},
-    {type:'TE', team:'off', xf:0.672,yd:30},
+    {type:'TE', team:'off', xf:0.596,yd:30},
     {type:'WR', team:'off', xf:0.96, yd:30},
     {type:'QB', team:'off', xf:0.50, yd:68},
     {type:'FB', team:'off', xf:0.50, yd:105},
@@ -1152,6 +1154,7 @@ function openCanvas(onReady){
 
     cvRouteCanvas=document.createElement('canvas');
     cvRouteCanvas.width=cw*dpr; cvRouteCanvas.height=ch*dpr;
+    cvRouteUndoStack=[];
     const rCtx=cvRouteCanvas.getContext('2d');
     rCtx.scale(dpr,dpr);
 
@@ -1311,6 +1314,16 @@ function setDrawWidth(w,btn){
   document.querySelectorAll('.cw-btn').forEach(b=>b.classList.remove('active'));
   btn.classList.add('active');
 }
+function undoRoute(){
+  if(!cvRouteCanvas||cvRouteUndoStack.length===0) return;
+  const snap=cvRouteUndoStack.pop();
+  const rCtx=cvRouteCanvas.getContext('2d');
+  const dpr=window.devicePixelRatio||1;
+  const cw=cvRouteCanvas.width/dpr, ch=cvRouteCanvas.height/dpr;
+  rCtx.clearRect(0,0,cvRouteCanvas.width,cvRouteCanvas.height);
+  rCtx.drawImage(snap,0,0,cw,ch);
+  redrawAll();
+}
 
 // ── POINTER HANDLERS ──────────────────────────────────────────────────────────
 function cvGetPos(e){
@@ -1368,6 +1381,12 @@ function cvStart(e){
   }
   if(!cvRouteCanvas) return;
   cvDrawing=true; cvLX=p.x; cvLY=p.y;
+  // snapshot before stroke for undo
+  const snap=document.createElement('canvas');
+  snap.width=cvRouteCanvas.width; snap.height=cvRouteCanvas.height;
+  snap.getContext('2d').drawImage(cvRouteCanvas,0,0);
+  cvRouteUndoStack.push(snap);
+  if(cvRouteUndoStack.length>30) cvRouteUndoStack.shift();
   const rCtx=cvRouteCanvas.getContext('2d');
   if(cvTool==='erase'){
     rCtx.save();
