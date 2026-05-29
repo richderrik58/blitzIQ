@@ -191,6 +191,24 @@
     .tmpl-info{padding:14px 18px}
     .custom-preset-wrap{display:inline-flex;align-items:center;gap:2px}
     .custom-preset-del{background:rgba(239,68,68,.15);border:1px solid rgba(239,68,68,.3);border-radius:50%;width:16px;height:16px;color:var(--red);font-size:9px;cursor:pointer;display:inline-flex;align-items:center;justify-content:center;flex-shrink:0;margin-left:-6px;line-height:1;font-family:inherit;padding:0}
+    .tmpl-card.selected{border-color:var(--gold);box-shadow:0 0 0 2px rgba(240,165,0,.35)}
+    .card-select-cb{position:absolute;top:10px;right:10px;width:22px;height:22px;border-radius:50%;border:2px solid rgba(255,255,255,.35);background:rgba(0,0,0,.4);display:flex;align-items:center;justify-content:center;font-size:13px;color:var(--gold);z-index:2}
+    .tmpl-card.selected .card-select-cb{background:var(--gold);border-color:var(--gold);color:var(--navy)}
+    .playlist-card{background:var(--navy2);border:1px solid rgba(255,255,255,.06);border-radius:14px;margin-bottom:14px;padding:14px 18px;cursor:pointer;position:relative;transition:border-color .15s,transform .1s}
+    .playlist-card:active{transform:scale(.985);border-color:var(--gold)}
+    .playlist-name{font-size:18px;font-weight:800;margin-bottom:4px;padding-right:80px}
+    .playlist-meta{font-size:12px;color:var(--gray);font-weight:600}
+    .playlist-actions{position:absolute;top:14px;right:14px;display:flex;gap:6px}
+    .pl-play-row{display:flex;gap:10px;align-items:center;padding:8px 0;border-bottom:1px solid rgba(255,255,255,.06)}
+    .pl-play-row:last-child{border-bottom:none}
+    .pl-play-thumb{width:80px;height:50px;object-fit:cover;border-radius:6px;flex-shrink:0;background:var(--navy2)}
+    .pl-play-info{flex:1;min-width:0}
+    .pl-play-name{font-size:14px;font-weight:700;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+    .pl-play-note{font-size:11px;color:var(--gray);margin-top:2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+    .lib-tab-bar{display:flex;gap:0;border-bottom:1px solid rgba(255,255,255,.1);margin-bottom:14px}
+    .lib-tab{flex:1;padding:10px 4px;text-align:center;font-size:12px;font-weight:800;letter-spacing:.5px;text-transform:uppercase;color:var(--gray);background:none;border:none;border-bottom:2px solid transparent;cursor:pointer;font-family:inherit;transition:color .15s,border-color .15s}
+    .lib-tab.active{color:var(--gold);border-bottom-color:var(--gold)}
+    .select-bar{background:rgba(240,165,0,.08);border:1px solid rgba(240,165,0,.25);border-radius:10px;padding:10px 14px;margin-bottom:10px}
   </style>
 </head>
 <body>
@@ -211,10 +229,19 @@
 <div class="screen active" id="screen1">
   <p class="sc-title">Play Library</p>
   <p class="sc-sub">Draw, save, and reuse formations, plays, and motions</p>
-  <div class="action-row">
-    <button class="act-pri" onclick="openNewTemplate()">+ New Template</button>
+  <div class="action-row" style="gap:8px;flex-wrap:wrap">
+    <button class="act-pri" onclick="openNewTemplate()">+ New Play</button>
+    <button class="act-sec" id="selectModeBtn" onclick="toggleSelectMode()">&#9776; Select</button>
+    <button class="act-sec" id="playlistTabBtn" onclick="showPlaylists()">&#9654; Playlists</button>
+  </div>
+  <div id="selectBar" style="display:none;align-items:center;gap:8px;padding:8px 0;flex-wrap:wrap">
+    <span id="selectCount" style="color:var(--gold);font-size:13px;font-weight:700">0 selected</span>
+    <button class="act-pri" style="font-size:12px;padding:7px 14px" onclick="createPlaylistFromSelected()">+ New Playlist</button>
+    <button class="act-sec" style="font-size:12px;padding:7px 14px" onclick="addToExistingPlaylist()">Add to Playlist</button>
+    <button class="act-sec" style="font-size:12px;padding:7px 14px;margin-left:auto" onclick="cancelSelectMode()">Cancel</button>
   </div>
   <div id="templateList"></div>
+  <div id="playlistList" style="display:none"></div>
 </div>
 
 <!-- LOADING -->
@@ -388,6 +415,65 @@
   </div>
 </div>
 
+<!-- MODAL: NAME PLAYLIST -->
+<div class="modal-ov" id="mNamePlaylist">
+  <div class="modal-sheet">
+    <div class="modal-handle"></div>
+    <div class="modal-hdr">
+      <span class="modal-title" id="mNamePlaylistTitle">New Playlist</span>
+      <button class="modal-x" onclick="closeModal('mNamePlaylist')">&#10005;</button>
+    </div>
+    <div class="modal-body">
+      <div class="fld">
+        <label class="fld-lbl">Playlist Name *</label>
+        <input class="fld-in" id="playlistNameIn" placeholder="e.g. 3rd Down Defense" type="text">
+        <div class="chips">
+          <button class="chip" onclick="fillFld('playlistNameIn','Red Zone')">Red Zone</button>
+          <button class="chip" onclick="fillFld('playlistNameIn','3rd Down')">3rd Down</button>
+          <button class="chip" onclick="fillFld('playlistNameIn','2-Minute')">2-Minute</button>
+          <button class="chip" onclick="fillFld('playlistNameIn','Goal Line')">Goal Line</button>
+          <button class="chip" onclick="fillFld('playlistNameIn','Opening Script')">Opening Script</button>
+        </div>
+      </div>
+    </div>
+    <div class="modal-foot">
+      <button class="btn-cancel" onclick="closeModal('mNamePlaylist')">Cancel</button>
+      <button class="btn-save" onclick="confirmCreatePlaylist()">Save Playlist</button>
+    </div>
+  </div>
+</div>
+
+<!-- MODAL: VIEW PLAYLIST -->
+<div class="modal-ov" id="mViewPlaylist">
+  <div class="modal-sheet" style="max-height:90vh;overflow:hidden;display:flex;flex-direction:column">
+    <div class="modal-handle"></div>
+    <div class="modal-hdr" style="flex-shrink:0">
+      <span class="modal-title" id="mViewPlaylistTitle">Playlist</span>
+      <button class="modal-x" onclick="closeModal('mViewPlaylist')">&#10005;</button>
+    </div>
+    <div class="modal-body" id="mViewPlaylistBody" style="overflow-y:auto;flex:1;padding-top:4px"></div>
+    <div class="modal-foot" style="flex-shrink:0;gap:8px;flex-wrap:wrap">
+      <button class="btn-cancel" onclick="closeModal('mViewPlaylist')">Close</button>
+      <button class="btn-save" onclick="printPlaylist()" style="background:rgba(255,255,255,0.1);border-color:rgba(255,255,255,0.3);color:#fff">&#128438; Print</button>
+    </div>
+  </div>
+</div>
+
+<!-- MODAL: ADD TO EXISTING PLAYLIST -->
+<div class="modal-ov" id="mAddToPlaylist">
+  <div class="modal-sheet">
+    <div class="modal-handle"></div>
+    <div class="modal-hdr">
+      <span class="modal-title">Add to Playlist</span>
+      <button class="modal-x" onclick="closeModal('mAddToPlaylist')">&#10005;</button>
+    </div>
+    <div class="modal-body" id="mAddToPlaylistBody"></div>
+    <div class="modal-foot">
+      <button class="btn-cancel" onclick="closeModal('mAddToPlaylist')">Cancel</button>
+    </div>
+  </div>
+</div>
+
 <!-- TOAST -->
 <div class="toast" id="toastEl"></div>
 
@@ -403,10 +489,15 @@ function loadDB() {
   try { const r = localStorage.getItem(SKEY); if (r) DB = JSON.parse(r); } catch(e) {}
   if(!DB.templates) DB.templates=[];
   if(!DB.customPresets) DB.customPresets=[];
+  if(!DB.playlists) DB.playlists=[];
+  // Migrate: ensure all IDs are strings (numeric IDs from older saves would break strict equality)
+  DB.templates.forEach(t=>{ if(typeof t.id!=='string') t.id=String(t.id); });
+  DB.customPresets.forEach(cp=>{ if(typeof cp.id!=='string') cp.id=String(cp.id); });
+  DB.playlists.forEach(pl=>{ if(typeof pl.id!=='string') pl.id=String(pl.id); });
   saveDB();
 }
 function saveDB() { localStorage.setItem(SKEY, JSON.stringify(DB)); }
-function uid() { return Date.now() * 1000 + Math.floor(Math.random() * 999); }
+function uid() { return String(Date.now() * 1000 + Math.floor(Math.random() * 999)); }
 function fillFld(id,val){ document.getElementById(id).value=val; }
 function openModal(id) { document.getElementById(id).classList.add('open'); document.body.style.overflow='hidden'; }
 function closeModal(id){ document.getElementById(id).classList.remove('open'); document.body.style.overflow=''; }
@@ -416,29 +507,203 @@ function hideLoad(){ document.getElementById('loadOv').classList.remove('open');
 
 // ── TEMPLATE LIBRARY ─────────────────────────────────────────────────────────
 let cvEditingId = null;
+let _selectMode = false;
+let _selectedIds = new Set();
+let _libTab = 'plays'; // 'plays' | 'playlists'
+let _viewPlaylistId = null;
 
 function renderLibrary() {
   const el = document.getElementById('templateList');
   if (!DB.templates.length) {
     el.innerHTML = `<div class="empty">
       <div class="empty-icon">&#9999;</div>
-      <div class="empty-txt">No templates yet.<br>Tap <strong>+ New Template</strong> to draw your first formation.</div>
+      <div class="empty-txt">No plays yet.<br>Tap <strong>+ New Play</strong> to draw your first play.</div>
     </div>`;
     return;
   }
   el.innerHTML = DB.templates.map(t => {
     const date = t.createdAt ? new Date(t.createdAt).toLocaleDateString('en-US',{month:'short',day:'numeric',year:'numeric'}) : '';
-    return `<div class="tmpl-card" onclick="openTemplate('${t.id}')">
+    const sel = _selectedIds.has(t.id);
+    const cardClick = _selectMode ? `toggleSelectPlay('${t.id}')` : `openTemplate('${t.id}')`;
+    return `<div class="tmpl-card${sel?' selected':''}" id="card-${t.id}" onclick="${cardClick}">
+      ${_selectMode ? `<div class="card-select-cb">${sel?'&#10003;':''}</div>` : ''}
       ${t.thumbnail ? `<img src="${t.thumbnail}" class="play-thumb" alt="${esc(t.name)}">` : ''}
       <div class="tmpl-info">
         <div class="card-name-sm">${esc(t.name)}</div>
-        <button class="del-btn" onclick="deleteTemplate('${t.id}',event)" title="Delete">&#10005;</button>
-        <button class="edit-btn" onclick="renameTemplate('${t.id}',event)" title="Rename">&#9998;</button>
+        ${!_selectMode ? `<button class="del-btn" onclick="deleteTemplate('${t.id}',event)" title="Delete">&#10005;</button>
+        <button class="edit-btn" onclick="renameTemplate('${t.id}',event)" title="Rename">&#9998;</button>` : ''}
         ${t.notes ? `<div class="card-note">${esc(t.notes)}</div>` : ''}
         ${date ? `<div class="card-meta">${date}</div>` : ''}
       </div>
     </div>`;
   }).join('');
+}
+
+function toggleSelectMode(){
+  _selectMode=true; _selectedIds.clear();
+  document.getElementById('selectBar').style.display='flex';
+  document.getElementById('selectModeBtn').style.display='none';
+  updateSelectCount();
+  renderLibrary();
+}
+function cancelSelectMode(){
+  _selectMode=false; _selectedIds.clear();
+  document.getElementById('selectBar').style.display='none';
+  document.getElementById('selectModeBtn').style.display='';
+  document.getElementById('playlistTabBtn').textContent='&#9654; Playlists';
+  document.getElementById('playlistTabBtn').onclick=showPlaylists;
+  renderLibrary();
+}
+function toggleSelectPlay(id){
+  if(_selectedIds.has(id)) _selectedIds.delete(id); else _selectedIds.add(id);
+  updateSelectCount();
+  renderLibrary();
+}
+function updateSelectCount(){
+  document.getElementById('selectCount').textContent=`${_selectedIds.size} selected`;
+}
+
+function showPlays(){
+  _libTab='plays';
+  document.getElementById('templateList').style.display='';
+  document.getElementById('playlistList').style.display='none';
+  document.getElementById('selectModeBtn').style.display=_selectMode?'none':'';
+  document.getElementById('playlistTabBtn').textContent='&#9654; Playlists';
+  document.getElementById('playlistTabBtn').onclick=showPlaylists;
+  renderLibrary();
+}
+function showPlaylists(){
+  _libTab='playlists';
+  cancelSelectMode();
+  document.getElementById('templateList').style.display='none';
+  document.getElementById('playlistList').style.display='';
+  document.getElementById('selectModeBtn').style.display='none';
+  document.getElementById('playlistTabBtn').textContent='&#8592; All Plays';
+  document.getElementById('playlistTabBtn').onclick=showPlays;
+  renderPlaylists();
+}
+
+function renderPlaylists(){
+  const el=document.getElementById('playlistList');
+  if(!DB.playlists.length){
+    el.innerHTML=`<div class="empty"><div class="empty-icon">&#9654;</div><div class="empty-txt">No playlists yet.<br>Select plays and tap <strong>+ New Playlist</strong>.</div></div>`;
+    return;
+  }
+  el.innerHTML=DB.playlists.map(pl=>{
+    const count=pl.playIds.length;
+    const date=pl.createdAt?new Date(pl.createdAt).toLocaleDateString('en-US',{month:'short',day:'numeric',year:'numeric'}):'';
+    return `<div class="playlist-card" onclick="viewPlaylist('${pl.id}')">
+      <div class="playlist-name">${esc(pl.name)}</div>
+      <div class="playlist-meta">${count} play${count===1?'':'s'}${date?' &nbsp;·&nbsp; '+date:''}</div>
+      <div class="playlist-actions">
+        <button class="edit-btn" onclick="renamePlaylist('${pl.id}',event)" title="Rename">&#9998;</button>
+        <button class="del-btn" onclick="deletePlaylist('${pl.id}',event)" title="Delete">&#10005;</button>
+      </div>
+    </div>`;
+  }).join('');
+}
+
+function createPlaylistFromSelected(){
+  if(_selectedIds.size===0){ showToast('Select at least one play'); return; }
+  document.getElementById('playlistNameIn').value='';
+  document.getElementById('playlistNameIn').classList.remove('err');
+  document.getElementById('mNamePlaylistTitle').textContent='New Playlist';
+  window._pendingPlaylistIds=[..._selectedIds];
+  window._pendingPlaylistMode='create';
+  openModal('mNamePlaylist');
+}
+function addToExistingPlaylist(){
+  if(_selectedIds.size===0){ showToast('Select at least one play'); return; }
+  if(!DB.playlists.length){ showToast('No playlists yet — create one first'); return; }
+  const body=document.getElementById('mAddToPlaylistBody');
+  body.innerHTML=`<div style="padding:4px 0">`+DB.playlists.map(pl=>`
+    <div onclick="doAddToPlaylist('${pl.id}')" style="padding:14px 18px;border-bottom:1px solid rgba(255,255,255,.06);cursor:pointer;font-size:15px;font-weight:700">
+      ${esc(pl.name)} <span style="color:var(--gray);font-size:12px;font-weight:600">${pl.playIds.length} plays</span>
+    </div>`).join('')+`</div>`;
+  openModal('mAddToPlaylist');
+}
+function doAddToPlaylist(plId){
+  const pl=DB.playlists.find(p=>p.id===plId);
+  if(!pl) return;
+  let added=0;
+  _selectedIds.forEach(id=>{ if(!pl.playIds.includes(id)){ pl.playIds.push(id); added++; } });
+  saveDB(); closeModal('mAddToPlaylist');
+  cancelSelectMode();
+  showToast(`${added} play${added===1?'':'s'} added to "${pl.name}"`);
+}
+function confirmCreatePlaylist(){
+  const inp=document.getElementById('playlistNameIn');
+  const name=inp.value.trim();
+  if(!name){ inp.classList.add('err'); return; }
+  const ids=window._pendingPlaylistIds||[];
+  const pl={id:uid(),name,playIds:[...ids],createdAt:Date.now()};
+  DB.playlists.unshift(pl);
+  saveDB();
+  closeModal('mNamePlaylist');
+  cancelSelectMode();
+  showToast(`Playlist "${name}" created`);
+}
+function renamePlaylist(id,e){
+  e.stopPropagation();
+  const pl=DB.playlists.find(p=>p.id===id);
+  if(!pl) return;
+  const name=prompt('Rename playlist:',pl.name);
+  if(name&&name.trim()){ pl.name=name.trim(); saveDB(); renderPlaylists(); }
+}
+function deletePlaylist(id,e){
+  e.stopPropagation();
+  if(!confirm('Delete this playlist? Plays are not deleted.')) return;
+  DB.playlists=DB.playlists.filter(p=>p.id!==id);
+  saveDB(); renderPlaylists();
+}
+function viewPlaylist(id){
+  const pl=DB.playlists.find(p=>p.id===id);
+  if(!pl) return;
+  _viewPlaylistId=id;
+  document.getElementById('mViewPlaylistTitle').textContent=pl.name;
+  const plays=pl.playIds.map(pid=>DB.templates.find(t=>t.id===pid)).filter(Boolean);
+  const body=document.getElementById('mViewPlaylistBody');
+  if(!plays.length){
+    body.innerHTML=`<div style="padding:20px;color:var(--gray);text-align:center">No plays in this playlist</div>`;
+  } else {
+    body.innerHTML=plays.map((t,i)=>`
+      <div class="pl-play-row">
+        <span style="color:var(--gold);font-size:13px;font-weight:800;width:20px;flex-shrink:0">${i+1}</span>
+        ${t.thumbnail?`<img src="${t.thumbnail}" class="pl-play-thumb">`:`<div class="pl-play-thumb"></div>`}
+        <div class="pl-play-info">
+          <div class="pl-play-name">${esc(t.name)}</div>
+          ${t.notes?`<div class="pl-play-note">${esc(t.notes)}</div>`:''}
+        </div>
+        <button onclick="openPlayFromPlaylist('${t.id}')" style="background:rgba(240,165,0,.12);border:1px solid rgba(240,165,0,.4);color:var(--gold);border-radius:8px;padding:5px 10px;font-size:11px;font-weight:700;cursor:pointer;font-family:inherit;flex-shrink:0">Edit</button>
+      </div>`).join('');
+  }
+  openModal('mViewPlaylist');
+}
+function openPlayFromPlaylist(id){
+  closeModal('mViewPlaylist');
+  openTemplate(id);
+}
+function printPlaylist(){
+  const pl=DB.playlists.find(p=>p.id===_viewPlaylistId);
+  if(!pl) return;
+  const plays=pl.playIds.map(pid=>DB.templates.find(t=>t.id===pid)).filter(Boolean);
+  const pages=plays.map((t,i)=>`
+    <div style="page-break-after:always">
+      <div class="pp-h">
+        <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:4px">
+          <div><div class="pp-logo">BLITZ<span>IQ</span></div></div>
+          <div style="text-align:right"><div class="pp-form-name">${esc(pl.name)} — ${i+1} of ${plays.length}</div></div>
+        </div>
+        <hr class="pp-divider">
+        <div style="text-align:center;margin-bottom:8px"><div class="pp-form-name">${esc(t.name)}</div></div>
+        ${t.thumbnail?`<img src="${t.thumbnail}" style="width:100%;max-width:500px;display:block;margin:0 auto;border:1.5px solid #ccc;border-radius:4px">`:''}
+        ${t.notes?`<div class="pp-reason" style="margin-top:10px">${esc(t.notes)}</div>`:''}
+        <div class="pp-footer">BlitzIQ &nbsp;·&nbsp; ${esc(pl.name)} &nbsp;·&nbsp; richderrik58.github.io/blitzIQ</div>
+      </div>
+    </div>`).join('');
+  document.getElementById('printPage').innerHTML=`<style>@page{size:letter;margin:.45in}</style>${pages}`;
+  window.print();
+  setTimeout(()=>{ document.getElementById('printPage').innerHTML=''; }, 800);
 }
 
 function openNewTemplate() {
@@ -1029,6 +1294,21 @@ function placePreset(name){
     if(ssP) ssP.x=Math.round(cw*(strength==='right'?0.70:0.30));
     if(fsP) fsP.x=Math.round(cw*0.50);
     if(!anchors) adjustDefenseToStrength(strength,cw);
+    // Align CBs just inside the outermost offensive WRs
+    const offWRs=cvPlayers.filter(p=>p.team==='off'&&p.type==='WR');
+    if(offWRs.length>=1){
+      const leftWR=offWRs.reduce((a,b)=>b.x<a.x?b:a);
+      const rightWR=offWRs.reduce((a,b)=>b.x>a.x?b:a);
+      const nudge=Math.round(cw*0.025);
+      const defCBs=defNew.filter(p=>p.type==='CB');
+      const sortedCBs=[...defCBs].sort((a,b)=>a.x-b.x);
+      if(sortedCBs.length>=2){
+        sortedCBs[0].x=leftWR.x+nudge;
+        sortedCBs[sortedCBs.length-1].x=rightWR.x-nudge;
+      } else if(sortedCBs.length===1){
+        sortedCBs[0].x=Math.round(cw/2)<sortedCBs[0].x?rightWR.x-nudge:leftWR.x+nudge;
+      }
+    }
   } else {
     preset.forEach(pd=>{
       cvPlayers.push({id:++cvPid,type:pd.type,team:pd.team,
@@ -1297,6 +1577,7 @@ function openCanvas(onReady){
     if(routeSrc){
       const img=new Image();
       img.onload=()=>{ rCtx.drawImage(img,0,0,cw,ch); redrawAll(); };
+      img.onerror=()=>redrawAll();
       img.src=routeSrc;
     } else {
       redrawAll();
@@ -1695,9 +1976,10 @@ function confirmSaveFormation(){
   const dpr=window.devicePixelRatio||1;
   const cw=canvas.width/dpr, ch=canvas.height/dpr;
   const los=ch*0.62;
+  const ppy=los/20;
   const players=cvPlayers
     .filter(p=>p.team==='off')
-    .map(p=>({type:p.type,team:p.team,xf:Math.round((p.x/cw)*1000)/1000,yd:Math.round(p.y-los)}));
+    .map(p=>({type:p.type,team:p.team,xf:Math.round((p.x/cw)*1000)/1000,yd:Math.round(((p.y-los)/ppy)*10)/10}));
   DB.customPresets.push({id:uid(),name,players});
   saveDB();
   renderCustomPresets();
