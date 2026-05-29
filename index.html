@@ -1621,18 +1621,18 @@ function flipCanvas(){
   if(!cvCtx) return;
   const canvas=document.getElementById('playCanvas');
   const dpr=window.devicePixelRatio||1;
-  const cw=canvas.width/dpr;
+  const cw=canvas.width/dpr, ch=canvas.height/dpr;
   cvPlayers.forEach(p=>{ p.x=Math.round(cw-p.x); });
   if(cvRouteCanvas){
     const snap=document.createElement('canvas');
     snap.width=cvRouteCanvas.width; snap.height=cvRouteCanvas.height;
     snap.getContext('2d').drawImage(cvRouteCanvas,0,0);
     const rCtx=cvRouteCanvas.getContext('2d');
-    rCtx.clearRect(0,0,cvRouteCanvas.width,cvRouteCanvas.height);
+    rCtx.clearRect(0,0,cw,ch);
     rCtx.save();
     rCtx.translate(cw,0);
     rCtx.scale(-1,1);
-    rCtx.drawImage(snap,0,0);
+    rCtx.drawImage(snap,0,0,cw,ch);
     rCtx.restore();
   }
   redrawAll();
