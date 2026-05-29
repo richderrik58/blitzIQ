@@ -1381,6 +1381,24 @@ function updateHashBtns(){
     b.classList.toggle('selected', b.dataset.hash===cvHashPos);
   });
 }
+function shiftRouteCanvas(c,dxPhys){
+  const w=c.width, h=c.height;
+  const ctx=c.getContext('2d');
+  ctx.setTransform(1,0,0,1,0,0);
+  const src=ctx.getImageData(0,0,w,h);
+  const dst=new Uint8ClampedArray(src.data.length);
+  for(let y=0;y<h;y++){
+    for(let x=0;x<w;x++){
+      const nx=x+dxPhys;
+      if(nx<0||nx>=w) continue;
+      const s=(y*w+x)*4, d=(y*w+nx)*4;
+      dst[d]=src.data[s]; dst[d+1]=src.data[s+1];
+      dst[d+2]=src.data[s+2]; dst[d+3]=src.data[s+3];
+    }
+  }
+  ctx.putImageData(new ImageData(dst,w,h),0,0);
+}
+
 function setHash(pos,btn){
   if(cvHashPos===pos) return;
   const canvas=document.getElementById('playCanvas');
@@ -1393,25 +1411,12 @@ function setHash(pos,btn){
   if(dx!==0){
     const pad=cw*0.04;
     cvPlayers.forEach(p=>{p.x=Math.round(Math.max(pad,Math.min(cw-pad,p.x+dx)));});
+    const dxPhys=Math.round(dx*dpr);
     if(cvRouteCanvas){
-      const rw=cvRouteCanvas.width, rh=cvRouteCanvas.height;
-      const rCtx=cvRouteCanvas.getContext('2d');
-      rCtx.setTransform(1,0,0,1,0,0);
-      const src=rCtx.getImageData(0,0,rw,rh);
-      const dst=new Uint8ClampedArray(src.data.length);
-      const dxPhys=Math.round(dx*dpr);
-      for(let y=0;y<rh;y++){
-        for(let x=0;x<rw;x++){
-          const nx=x+dxPhys;
-          if(nx<0||nx>=rw) continue;
-          const s=(y*rw+x)*4, d=(y*rw+nx)*4;
-          dst[d]=src.data[s]; dst[d+1]=src.data[s+1];
-          dst[d+2]=src.data[s+2]; dst[d+3]=src.data[s+3];
-        }
-      }
-      rCtx.putImageData(new ImageData(dst,rw,rh),0,0);
-      rCtx.setTransform(dpr,0,0,dpr,0,0);
+      shiftRouteCanvas(cvRouteCanvas,dxPhys);
+      cvRouteCanvas.getContext('2d').setTransform(dpr,0,0,dpr,0,0);
     }
+    cvRouteUndoStack.forEach(snap=>shiftRouteCanvas(snap,dxPhys));
   }
   document.querySelectorAll('.hash-btn').forEach(b=>b.classList.remove('selected'));
   btn.classList.add('selected');
