@@ -518,52 +518,70 @@ let CV_R=10;
 function drawField(ctx,w,h){
   ctx.fillStyle='#15391f';
   ctx.fillRect(0,0,w,h);
+
+  const los=h*0.62;
+  const ppy=los/20; // pixels per yard (20 yards above LOS fills the defense zone)
+
+  // Yard lines at 5-yard intervals (defense side: 5–20, offense side: 5)
   ctx.strokeStyle='rgba(255,255,255,0.30)';
   ctx.lineWidth=1;
-  const spacing=h/6;
-  for(let i=0;i<=6;i++){
-    ctx.beginPath();ctx.moveTo(0,i*spacing);ctx.lineTo(w,i*spacing);ctx.stroke();
+  for(let yd=5;yd<=20;yd+=5){
+    const y=los-yd*ppy;
+    ctx.beginPath();ctx.moveTo(0,y);ctx.lineTo(w,y);ctx.stroke();
   }
+  const y5off=los+5*ppy;
+  if(y5off<h){ ctx.beginPath();ctx.moveTo(0,y5off);ctx.lineTo(w,y5off);ctx.stroke(); }
+
+  // Vertical field stripes
   ctx.strokeStyle='rgba(255,255,255,0.20)';
   [0.1,0.3,0.5,0.7,0.9].forEach(x=>{
     ctx.beginPath();ctx.moveTo(w*x,0);ctx.lineTo(w*x,h);ctx.stroke();
   });
-  // High school hashes: 1/3 of field width from each sideline
+
+  // High school hashes (1/3 from each sideline)
   const hL=w*0.333, hR=w*0.667;
-  // Vertical dashed lines marking hash zones
   ctx.strokeStyle='rgba(255,255,255,0.15)';
   ctx.lineWidth=1;
   ctx.setLineDash([4,6]);
   ctx.beginPath();ctx.moveTo(hL,0);ctx.lineTo(hL,h);ctx.stroke();
   ctx.beginPath();ctx.moveTo(hR,0);ctx.lineTo(hR,h);ctx.stroke();
   ctx.setLineDash([]);
-  // Perpendicular tick marks crossing each yard line at the hash position
+  // Perpendicular hash ticks at each yard line
   ctx.strokeStyle='rgba(255,255,255,0.70)';
   ctx.lineWidth=1.5;
-  for(let i=0;i<=6;i++){
-    const y=i*spacing;
+  for(let yd=5;yd<=20;yd+=5){
+    const y=los-yd*ppy;
     ctx.beginPath();ctx.moveTo(hL,y-9);ctx.lineTo(hL,y+9);ctx.stroke();
     ctx.beginPath();ctx.moveTo(hR,y-9);ctx.lineTo(hR,y+9);ctx.stroke();
   }
-  const los=h*0.62;
+  if(y5off<h){
+    ctx.beginPath();ctx.moveTo(hL,y5off-9);ctx.lineTo(hL,y5off+9);ctx.stroke();
+    ctx.beginPath();ctx.moveTo(hR,y5off-9);ctx.lineTo(hR,y5off+9);ctx.stroke();
+  }
+
+  // Yard number labels on both sidelines
+  ctx.font='bold 11px sans-serif';
+  ctx.textBaseline='middle';
+  for(let yd=5;yd<=20;yd+=5){
+    const y=los-yd*ppy;
+    ctx.fillStyle='rgba(255,255,255,0.45)';
+    ctx.textAlign='left';  ctx.fillText(yd,5,y);
+    ctx.textAlign='right'; ctx.fillText(yd,w-5,y);
+  }
+  ctx.textBaseline='alphabetic'; ctx.textAlign='left';
+
+  // LOS (dashed gold, no label)
   ctx.strokeStyle='rgba(240,165,0,0.55)';
   ctx.lineWidth=1;
   ctx.setLineDash([10,5]);
   ctx.beginPath();ctx.moveTo(0,los);ctx.lineTo(w,los);ctx.stroke();
   ctx.setLineDash([]);
-  ctx.fillStyle='rgba(240,165,0,0.5)';
-  ctx.font='bold 10px sans-serif';
-  ctx.fillText('LINE OF SCRIMMAGE',8,los-5);
+
+  // Zone tints
   ctx.fillStyle='rgba(255,255,255,0.04)';
   ctx.fillRect(0,0,w,los);
   ctx.fillStyle='rgba(240,165,0,0.07)';
   ctx.fillRect(0,los,w,h-los);
-  ctx.fillStyle='rgba(255,255,255,0.12)';
-  ctx.font='bold 13px sans-serif';
-  ctx.fillText('DEFENSE',8,20);
-  ctx.fillStyle='rgba(34,197,94,0.25)';
-  ctx.fillText('OFFENSE',8,h-10);
-
 }
 
 function redrawAll(){
