@@ -630,7 +630,7 @@ function saveDB() {
     localStorage.setItem(SKEY, json);
   } catch(e) {
     // Quota exceeded — retry without route image data to save at least player positions
-    const compact = {...DB, templates: DB.templates.map(t=>({...t,cvRoutes:null}))};
+    const compact = {...DB, templates: DB.templates.map(t=>({...t,cvRoutes:null,cvStrokes:[]}))};
     try { localStorage.setItem(SKEY, JSON.stringify(compact)); } catch(e2) {}
     showToast('Storage full — routes not saved, player positions kept');
   }
@@ -895,6 +895,7 @@ function confirmSaveTemplate() {
     name,
     notes,
     cvPlayers: pending.cvPlayers || [],
+    cvStrokes: pending.cvStrokes || [],
     cvRoutes: pending.cvRoutes || null,
     cvPresetType: pending.cvPresetType || null,
     cvHashPos: pending.cvHashPos || 'mid',
@@ -925,6 +926,9 @@ let cvDragging=null;
 let cvDragOffX=0, cvDragOffY=0;
 let cvRouteCanvas=null;
 let cvRouteUndoStack=[];
+let cvStrokes=[];
+let cvCurrentStroke=null;
+let cvLegacyCanvas=null;
 let cvPid=0;
 let CV_R=10;
 
@@ -1010,6 +1014,43 @@ function drawField(ctx,w,h){
   ctx.beginPath();ctx.arc(bx,los,5,0,Math.PI*2);ctx.stroke();
 }
 
+function renderStrokes(){
+  if(!cvRouteCanvas) return;
+  const dpr=window.devicePixelRatio||1;
+  const cw=cvRouteCanvas.width/dpr, ch=cvRouteCanvas.height/dpr;
+  const rCtx=cvRouteCanvas.getContext('2d');
+  rCtx.setTransform(dpr,0,0,dpr,0,0);
+  rCtx.clearRect(0,0,cw,ch);
+  if(cvLegacyCanvas) rCtx.drawImage(cvLegacyCanvas,0,0,cvLegacyCanvas.width,cvLegacyCanvas.height,0,0,cw,ch);
+  const all=cvCurrentStroke?[...cvStrokes,cvCurrentStroke]:cvStrokes;
+  all.forEach(s=>{
+    if(!s.pts.length) return;
+    let pts=s.pts;
+    if(s.attachedTo){
+      const pl=cvPlayers.find(p=>p.id===s.attachedTo);
+      if(pl){const ox=pl.x-s.attachOrigin.x,oy=pl.y-s.attachOrigin.y;pts=pts.map(pt=>({x:pt.x+ox,y:pt.y+oy}));}
+    }
+    rCtx.save();
+    if(s.tool==='erase'){
+      rCtx.globalCompositeOperation='destination-out';
+      rCtx.fillStyle='rgba(0,0,0,1)';
+      pts.forEach(pt=>{rCtx.beginPath();rCtx.arc(pt.x,pt.y,s.width*2.5,0,Math.PI*2);rCtx.fill();});
+    } else {
+      rCtx.strokeStyle=s.color; rCtx.lineWidth=s.width;
+      rCtx.lineCap='round'; rCtx.lineJoin='round';
+      if(pts.length===1){
+        rCtx.beginPath();rCtx.arc(pts[0].x,pts[0].y,s.width/2,0,Math.PI*2);
+        rCtx.fillStyle=s.color;rCtx.fill();
+      } else {
+        rCtx.beginPath();rCtx.moveTo(pts[0].x,pts[0].y);
+        pts.slice(1).forEach(pt=>rCtx.lineTo(pt.x,pt.y));
+        rCtx.stroke();
+      }
+    }
+    rCtx.restore();
+  });
+}
+
 function redrawAll(){
   if(!cvCtx) return;
   const canvas=document.getElementById('playCanvas');
@@ -1019,6 +1060,7 @@ function redrawAll(){
   cvCtx.clearRect(0,0,cw,ch);
   drawField(cvCtx,cw,ch);
   if(window._cvDefCall) drawCoverageZones(cvCtx,cw,ch,los,window._cvDefCall.coverage);
+  renderStrokes();
   if(cvRouteCanvas) cvCtx.drawImage(cvRouteCanvas,0,0,cw,ch);
   cvPlayers.forEach(p=>drawPlayerSymbol(cvCtx,p));
   if(window._cvDefCall){
@@ -1245,6 +1287,14 @@ function playerAt(x,y){
   }
   return null;
 }
+function nearestPlayer(x,y,r){
+  let best=null,bestD=r*r;
+  cvPlayers.forEach(p=>{
+    const d=(p.x-x)*(p.x-x)+(p.y-y)*(p.y-y);
+    if(d<bestD){bestD=d;best=p;}
+  });
+  return best;
+}
 
 // ── MODE & SYMBOL SELECTION ────────────────────────────────────────────────────
 function setCanvasMode(mode,btn){
@@ -1411,12 +1461,15 @@ function setHash(pos,btn){
   if(dx!==0){
     const pad=cw*0.04;
     cvPlayers.forEach(p=>{p.x=Math.round(Math.max(pad,Math.min(cw-pad,p.x+dx)));});
-    const dxPhys=Math.round(dx*dpr);
-    if(cvRouteCanvas){
-      shiftRouteCanvas(cvRouteCanvas,dxPhys);
-      cvRouteCanvas.getContext('2d').setTransform(dpr,0,0,dpr,0,0);
+    cvStrokes.forEach(s=>{
+      if(!s.attachedTo){
+        s.pts=s.pts.map(pt=>({x:Math.max(pad,Math.min(cw-pad,pt.x+dx)),y:pt.y}));
+      }
+    });
+    if(cvLegacyCanvas){
+      const dxPhys=Math.round(dx*dpr);
+      shiftRouteCanvas(cvLegacyCanvas,dxPhys);
     }
-    cvRouteUndoStack.forEach(snap=>shiftRouteCanvas(snap,dxPhys));
   }
   document.querySelectorAll('.hash-btn').forEach(b=>b.classList.remove('selected'));
   btn.classList.add('selected');
@@ -1809,6 +1862,8 @@ function openCanvas(onReady){
     cvRouteCanvas=document.createElement('canvas');
     cvRouteCanvas.width=cw*dpr; cvRouteCanvas.height=ch*dpr;
     cvRouteUndoStack=[];
+    cvStrokes=(t?.cvStrokes||[]).map(s=>({...s,pts:s.pts.map(pt=>({...pt}))}));
+    cvCurrentStroke=null; cvLegacyCanvas=null;
     const rCtx=cvRouteCanvas.getContext('2d');
     rCtx.scale(dpr,dpr);
 
@@ -1820,12 +1875,15 @@ function openCanvas(onReady){
     updateHashBtns();
     loadScriptFields(t?.sf||null);
 
-    const routeSrc = t?.cvRoutes;
-    if(routeSrc){
+    if(t?.cvStrokes&&t.cvStrokes.length>0){
+      redrawAll();
+    } else if(t?.cvRoutes){
+      const legCv=document.createElement('canvas');
+      legCv.width=cw*dpr; legCv.height=ch*dpr;
       const img=new Image();
-      img.onload=()=>{ rCtx.drawImage(img,0,0,cw,ch); redrawAll(); };
+      img.onload=()=>{legCv.getContext('2d').drawImage(img,0,0,legCv.width,legCv.height);cvLegacyCanvas=legCv;redrawAll();};
       img.onerror=()=>redrawAll();
-      img.src=routeSrc;
+      img.src=t.cvRoutes;
     } else {
       redrawAll();
     }
@@ -1850,6 +1908,7 @@ function closeCanvas(){
   window._cvFormName=null; window._cvPresetType=null;
   window._cvTeDetected=false; window._cvGapMap=null;
   cvEditingId=null;
+  cvStrokes=[]; cvCurrentStroke=null; cvLegacyCanvas=null;
   cvHashPos='mid'; updateHashBtns();
   loadScriptFields(null);
   document.body.style.overflow='';
@@ -1861,14 +1920,15 @@ function flipCanvas(){
   const dpr=window.devicePixelRatio||1;
   const cw=canvas.width/dpr;
   cvPlayers.forEach(p=>{ p.x=Math.round(cw-p.x); });
-  if(cvRouteCanvas){
-    const rw=cvRouteCanvas.width, rh=cvRouteCanvas.height;
-    const rCtx=cvRouteCanvas.getContext('2d');
-    // Read raw physical pixels (bypass any context transform)
-    rCtx.setTransform(1,0,0,1,0,0);
-    const src=rCtx.getImageData(0,0,rw,rh);
+  cvStrokes.forEach(s=>{
+    s.pts=s.pts.map(pt=>({x:cw-pt.x,y:pt.y}));
+    if(s.attachOrigin) s.attachOrigin={x:cw-s.attachOrigin.x,y:s.attachOrigin.y};
+  });
+  if(cvLegacyCanvas){
+    const rw=cvLegacyCanvas.width, rh=cvLegacyCanvas.height;
+    const lCtx=cvLegacyCanvas.getContext('2d');
+    const src=lCtx.getImageData(0,0,rw,rh);
     const dst=new Uint8ClampedArray(src.data.length);
-    // Mirror each pixel horizontally: column x goes to column (rw-1-x)
     for(let y=0;y<rh;y++){
       for(let x=0;x<rw;x++){
         const s=(y*rw+x)*4, d=(y*rw+(rw-1-x))*4;
@@ -1876,8 +1936,7 @@ function flipCanvas(){
         dst[d+2]=src.data[s+2]; dst[d+3]=src.data[s+3];
       }
     }
-    rCtx.putImageData(new ImageData(dst,rw,rh),0,0);
-    rCtx.setTransform(dpr,0,0,dpr,0,0);
+    lCtx.putImageData(new ImageData(dst,rw,rh),0,0);
   }
   redrawAll();
 }
@@ -1888,6 +1947,7 @@ function clearCanvas(){
   cvSelectedSymbol=null;
   cvSelectedPlayer=null; hidePlayerDeleteBtn();
   document.querySelectorAll('.pbtn').forEach(b=>b.classList.remove('selected'));
+  cvStrokes=[]; cvCurrentStroke=null; cvLegacyCanvas=null; cvRouteUndoStack=[];
   if(cvRouteCanvas){
     const rCtx=cvRouteCanvas.getContext('2d');
     rCtx.clearRect(0,0,cvRouteCanvas.width,cvRouteCanvas.height);
@@ -1907,16 +1967,7 @@ function saveCanvas(){
   thumb.width=thumbW; thumb.height=thumbH||180;
   thumb.getContext('2d').drawImage(canvas, 0, 0, canvas.width, canvas.height, 0, 0, thumbW, thumb.height);
   const thumbnailData=thumb.toDataURL('image/jpeg',0.7);
-  // Save routes at 1× resolution (not device DPR) to keep localStorage size small
-  let routesData=null;
-  if(cvRouteCanvas){
-    const dpr=window.devicePixelRatio||1;
-    const rw=cvRouteCanvas.width/dpr, rh=cvRouteCanvas.height/dpr;
-    const flat=document.createElement('canvas');
-    flat.width=rw; flat.height=rh;
-    flat.getContext('2d').drawImage(cvRouteCanvas,0,0,cvRouteCanvas.width,cvRouteCanvas.height,0,0,rw,rh);
-    routesData=flat.toDataURL('image/png');
-  }
+  const strokesData=cvStrokes.map(s=>({...s,pts:s.pts.map(pt=>({...pt}))}));
   const playersData=JSON.parse(JSON.stringify(cvPlayers));
   const presetData=window._cvPresetType||null;
   const sf=getScriptFields();
@@ -1925,7 +1976,8 @@ function saveCanvas(){
     const t=DB.templates.find(t=>t.id===cvEditingId);
     if(t){
       t.cvPlayers=playersData;
-      t.cvRoutes=routesData;
+      t.cvStrokes=strokesData;
+      t.cvRoutes=null;
       t.cvPresetType=presetData;
       t.cvHashPos=cvHashPos;
       t.thumbnail=thumbnailData;
@@ -1936,7 +1988,7 @@ function saveCanvas(){
     renderLibrary();
     showToast('Saved');
   } else {
-    window._pendingSave={ cvPlayers:playersData, cvRoutes:routesData, cvPresetType:presetData, cvHashPos:cvHashPos, thumbnail:thumbnailData, sf };
+    window._pendingSave={ cvPlayers:playersData, cvStrokes:strokesData, cvRoutes:null, cvPresetType:presetData, cvHashPos:cvHashPos, thumbnail:thumbnailData, sf };
     document.getElementById('tmplNameIn').value='';
     document.getElementById('tmplNotesIn').value='';
     document.getElementById('tmplNameIn').classList.remove('err');
@@ -1958,21 +2010,12 @@ function resizeCanvas(){
   const dpr=window.devicePixelRatio||1;
   const cw=Math.min(window.innerWidth,640);
   const ch=Math.max(200, wrap?.clientHeight||window.innerHeight-104);
-  let routeSnap=null;
-  if(cvRouteCanvas&&cvRouteCanvas.width>0){
-    routeSnap=document.createElement('canvas');
-    routeSnap.width=cvRouteCanvas.width; routeSnap.height=cvRouteCanvas.height;
-    routeSnap.getContext('2d').drawImage(cvRouteCanvas,0,0);
-  }
   canvas.width=cw*dpr; canvas.height=ch*dpr;
   canvas.style.width=cw+'px'; canvas.style.height=ch+'px';
   cvCtx=canvas.getContext('2d');
   cvCtx.scale(dpr,dpr);
   if(cvRouteCanvas){
     cvRouteCanvas.width=cw*dpr; cvRouteCanvas.height=ch*dpr;
-    const rCtx=cvRouteCanvas.getContext('2d');
-    rCtx.scale(dpr,dpr);
-    if(routeSnap) rCtx.drawImage(routeSnap,0,0,cw,ch);
   }
   redrawAll();
 }
@@ -1994,13 +2037,8 @@ function setDrawWidth(w,btn){
   btn.classList.add('active');
 }
 function undoRoute(){
-  if(!cvRouteCanvas||cvRouteUndoStack.length===0) return;
-  const snap=cvRouteUndoStack.pop();
-  const rCtx=cvRouteCanvas.getContext('2d');
-  const dpr=window.devicePixelRatio||1;
-  const cw=cvRouteCanvas.width/dpr, ch=cvRouteCanvas.height/dpr;
-  rCtx.clearRect(0,0,cvRouteCanvas.width,cvRouteCanvas.height);
-  rCtx.drawImage(snap,0,0,cw,ch);
+  if(cvRouteUndoStack.length===0) return;
+  cvStrokes=cvStrokes.slice(0,cvRouteUndoStack.pop());
   redrawAll();
 }
 
@@ -2059,24 +2097,14 @@ function cvStart(e){
     return;
   }
   if(!cvRouteCanvas) return;
-  cvDrawing=true; cvLX=p.x; cvLY=p.y;
-  // snapshot before stroke for undo
-  const snap=document.createElement('canvas');
-  snap.width=cvRouteCanvas.width; snap.height=cvRouteCanvas.height;
-  snap.getContext('2d').drawImage(cvRouteCanvas,0,0);
-  cvRouteUndoStack.push(snap);
+  cvDrawing=true;
+  cvRouteUndoStack.push(cvStrokes.length);
   if(cvRouteUndoStack.length>30) cvRouteUndoStack.shift();
-  const rCtx=cvRouteCanvas.getContext('2d');
-  if(cvTool==='erase'){
-    rCtx.save();
-    rCtx.globalCompositeOperation='destination-out';
-    rCtx.beginPath(); rCtx.arc(p.x,p.y,cvWidth*2.5,0,Math.PI*2);
-    rCtx.fillStyle='rgba(0,0,0,1)'; rCtx.fill();
-    rCtx.restore();
-  } else {
-    rCtx.beginPath(); rCtx.arc(p.x,p.y,cvWidth/2,0,Math.PI*2);
-    rCtx.fillStyle=cvColor; rCtx.fill();
-  }
+  const near=nearestPlayer(p.x,p.y,CV_R*2);
+  cvCurrentStroke={color:cvColor,width:cvWidth,tool:cvTool,
+    pts:[{x:p.x,y:p.y}],
+    attachedTo:near?near.id:null,
+    attachOrigin:near?{x:near.x,y:near.y}:null};
   redrawAll();
 }
 
@@ -2089,28 +2117,18 @@ function cvMove(e){
     if(cvSelectedPlayer===cvDragging) _posDeleteBtn(cvDragging);
     redrawAll(); return;
   }
-  if(!cvDrawing||!cvRouteCanvas) return;
-  const rCtx=cvRouteCanvas.getContext('2d');
-  rCtx.save();
-  rCtx.beginPath();
-  rCtx.moveTo(cvLX,cvLY);
-  rCtx.lineTo(p.x,p.y);
-  if(cvTool==='erase'){
-    rCtx.globalCompositeOperation='destination-out';
-    rCtx.strokeStyle='rgba(0,0,0,1)';
-    rCtx.lineWidth=cvWidth*4;
-  } else {
-    rCtx.globalCompositeOperation='source-over';
-    rCtx.strokeStyle=cvColor;
-    rCtx.lineWidth=cvWidth;
-  }
-  rCtx.lineCap='round'; rCtx.lineJoin='round';
-  rCtx.stroke(); rCtx.restore();
-  cvLX=p.x; cvLY=p.y;
+  if(!cvDrawing||!cvCurrentStroke) return;
+  cvCurrentStroke.pts.push({x:p.x,y:p.y});
   redrawAll();
 }
 
-function cvEnd(e){ cvDrawing=false; cvDragging=null; }
+function cvEnd(e){
+  if(cvDrawing&&cvCurrentStroke){
+    if(cvCurrentStroke.pts.length>=1) cvStrokes.push(cvCurrentStroke);
+    cvCurrentStroke=null;
+  }
+  cvDrawing=false; cvDragging=null;
+}
 
 (function attachCanvasEvents(){
   const c=document.getElementById('playCanvas');
