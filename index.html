@@ -1625,17 +1625,20 @@ function flipCanvas(){
   cvPlayers.forEach(p=>{ p.x=Math.round(cw-p.x); });
   if(cvRouteCanvas){
     const rw=cvRouteCanvas.width, rh=cvRouteCanvas.height;
-    const snap=document.createElement('canvas');
-    snap.width=rw; snap.height=rh;
-    snap.getContext('2d').drawImage(cvRouteCanvas,0,0);
     const rCtx=cvRouteCanvas.getContext('2d');
-    // Reset to physical-pixel space so the mirror is unambiguous
+    // Read raw physical pixels (bypass any context transform)
     rCtx.setTransform(1,0,0,1,0,0);
-    rCtx.clearRect(0,0,rw,rh);
-    rCtx.translate(rw,0);
-    rCtx.scale(-1,1);
-    rCtx.drawImage(snap,0,0);
-    // Restore DPR scale for all future drawing
+    const src=rCtx.getImageData(0,0,rw,rh);
+    const dst=new Uint8ClampedArray(src.data.length);
+    // Mirror each pixel horizontally: column x goes to column (rw-1-x)
+    for(let y=0;y<rh;y++){
+      for(let x=0;x<rw;x++){
+        const s=(y*rw+x)*4, d=(y*rw+(rw-1-x))*4;
+        dst[d]=src.data[s]; dst[d+1]=src.data[s+1];
+        dst[d+2]=src.data[s+2]; dst[d+3]=src.data[s+3];
+      }
+    }
+    rCtx.putImageData(new ImageData(dst,rw,rh),0,0);
     rCtx.setTransform(dpr,0,0,dpr,0,0);
   }
   redrawAll();
