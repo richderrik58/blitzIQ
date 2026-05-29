@@ -1382,7 +1382,18 @@ function updateHashBtns(){
   });
 }
 function setHash(pos,btn){
+  if(cvHashPos===pos) return;
+  const canvas=document.getElementById('playCanvas');
+  const dpr=window.devicePixelRatio||1;
+  const cw=canvas.width/dpr;
+  const oldHcx=hashCenterX(cw);
   cvHashPos=pos;
+  const newHcx=hashCenterX(cw);
+  const dx=newHcx-oldHcx;
+  if(dx!==0&&cvPlayers.length>0){
+    const pad=cw*0.04;
+    cvPlayers.forEach(p=>{p.x=Math.round(Math.max(pad,Math.min(cw-pad,p.x+dx)));});
+  }
   document.querySelectorAll('.hash-btn').forEach(b=>b.classList.remove('selected'));
   btn.classList.add('selected');
   redrawAll();
