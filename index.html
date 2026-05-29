@@ -1489,9 +1489,20 @@ function placePreset(name){
     }
   } else {
     const hcx=hashCenterX(cw);
+    const pad=cw*0.04;
+    const normalHalf=cw*0.46;
     preset.forEach(pd=>{
-      cvPlayers.push({id:++cvPid,type:pd.type,team:pd.team,
-        x:Math.round(hcx+(pd.xf-0.5)*cw),y:Math.round(los+pd.yd*ppy)});
+      const offset=(pd.xf-0.5)*cw;
+      const isBoundary=(cvHashPos==='left'&&offset<0)||(cvHashPos==='right'&&offset>0);
+      let x;
+      if(isBoundary){
+        const avail=cvHashPos==='left'?hcx-pad:cw-pad-hcx;
+        x=hcx+offset*Math.min(1,avail/normalHalf);
+      } else {
+        x=hcx+offset;
+      }
+      x=Math.round(Math.max(pad,Math.min(cw-pad,x)));
+      cvPlayers.push({id:++cvPid,type:pd.type,team:pd.team,x,y:Math.round(los+pd.yd*ppy)});
     });
   }
   redrawAll();
