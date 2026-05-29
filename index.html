@@ -1862,8 +1862,6 @@ function openCanvas(onReady){
     cvRouteCanvas=document.createElement('canvas');
     cvRouteCanvas.width=cw*dpr; cvRouteCanvas.height=ch*dpr;
     cvRouteUndoStack=[];
-    cvStrokes=(t?.cvStrokes||[]).map(s=>({...s,pts:s.pts.map(pt=>({...pt}))}));
-    cvCurrentStroke=null; cvLegacyCanvas=null;
     const rCtx=cvRouteCanvas.getContext('2d');
     rCtx.scale(dpr,dpr);
 
@@ -1874,6 +1872,8 @@ function openCanvas(onReady){
     cvHashPos = t?.cvHashPos||'mid';
     updateHashBtns();
     loadScriptFields(t?.sf||null);
+    cvStrokes=(t?.cvStrokes||[]).map(s=>({...s,pts:s.pts.map(pt=>({...pt}))}));
+    cvCurrentStroke=null; cvLegacyCanvas=null;
 
     if(t?.cvStrokes&&t.cvStrokes.length>0){
       redrawAll();
