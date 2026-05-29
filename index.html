@@ -189,6 +189,8 @@
     .tmpl-card{background:var(--navy2);border:1px solid rgba(255,255,255,.06);border-radius:14px;margin-bottom:14px;cursor:pointer;position:relative;overflow:hidden;transition:border-color .15s,transform .1s}
     .tmpl-card:active{transform:scale(.985);border-color:var(--gold)}
     .tmpl-info{padding:14px 18px}
+    .custom-preset-wrap{display:inline-flex;align-items:center;gap:2px}
+    .custom-preset-del{background:rgba(239,68,68,.15);border:1px solid rgba(239,68,68,.3);border-radius:50%;width:16px;height:16px;color:var(--red);font-size:9px;cursor:pointer;display:inline-flex;align-items:center;justify-content:center;flex-shrink:0;margin-left:-6px;line-height:1;font-family:inherit;padding:0}
   </style>
 </head>
 <body>
@@ -268,6 +270,8 @@
           <button class="pbtn-preset" onclick="placePreset('spread')">Spread</button>
           <button class="pbtn-preset" onclick="placePreset('i-form')">I-Form</button>
           <button class="pbtn-preset" onclick="placePreset('empty')">Empty</button>
+          <span id="customOffPresets"></span>
+          <button class="pbtn-preset" style="background:rgba(240,165,0,.1);border-color:rgba(240,165,0,.4);color:var(--gold)" onclick="openSaveFormationModal()" title="Save current offense as a reusable preset">+ Save</button>
         </div>
       </div>
       <div class="player-panel-row">
@@ -356,6 +360,34 @@
   </div>
 </div>
 
+<div class="modal-ov" id="mSaveFormation">
+  <div class="modal-sheet">
+    <div class="modal-handle"></div>
+    <div class="modal-hdr">
+      <span class="modal-title">Save Offensive Formation</span>
+      <button class="modal-x" onclick="closeModal('mSaveFormation')">&#10005;</button>
+    </div>
+    <div class="modal-body">
+      <div class="fld">
+        <label class="fld-lbl">Formation Name *</label>
+        <input class="fld-in" id="formationNameIn" placeholder="e.g. Gun Trips Right" type="text">
+        <div class="chips">
+          <button class="chip" onclick="fillFld('formationNameIn','Pistol')">Pistol</button>
+          <button class="chip" onclick="fillFld('formationNameIn','Wing T')">Wing T</button>
+          <button class="chip" onclick="fillFld('formationNameIn','Single Back')">Single Back</button>
+          <button class="chip" onclick="fillFld('formationNameIn','Ace')">Ace</button>
+          <button class="chip" onclick="fillFld('formationNameIn','Bunch')">Bunch</button>
+          <button class="chip" onclick="fillFld('formationNameIn','Diamond')">Diamond</button>
+        </div>
+      </div>
+    </div>
+    <div class="modal-foot">
+      <button class="btn-cancel" onclick="closeModal('mSaveFormation')">Cancel</button>
+      <button class="btn-save" onclick="confirmSaveFormation()">Save Formation</button>
+    </div>
+  </div>
+</div>
+
 <!-- TOAST -->
 <div class="toast" id="toastEl"></div>
 
@@ -368,8 +400,9 @@ const SKEY = 'blitziq_templates_v1';
 let DB = { templates: [] };
 
 function loadDB() {
-  try { const r = localStorage.getItem(SKEY); if (r) { DB = JSON.parse(r); return; } } catch(e) {}
-  DB = { templates: [] };
+  try { const r = localStorage.getItem(SKEY); if (r) DB = JSON.parse(r); } catch(e) {}
+  if(!DB.templates) DB.templates=[];
+  if(!DB.customPresets) DB.customPresets=[];
   saveDB();
 }
 function saveDB() { localStorage.setItem(SKEY, JSON.stringify(DB)); }
@@ -890,7 +923,8 @@ function placePreset(name){
   const dpr=window.devicePixelRatio||1;
   const cw=canvas.width/dpr, ch=canvas.height/dpr;
   const los=ch*0.62;
-  const preset=CV_PRESETS[name];
+  const custom=(DB.customPresets||[]).find(cp=>cp.id===name);
+  const preset=custom?custom.players:CV_PRESETS[name];
   if(!preset) return;
   const team=preset[0].team;
   cvPlayers=cvPlayers.filter(p=>p.team!==team);
@@ -1525,9 +1559,63 @@ function showToast(msg, ms=2200){
   setTimeout(()=>el.classList.remove('show'), ms);
 }
 
+// ── CUSTOM FORMATION PRESETS ──────────────────────────────────────────────────
+function renderCustomPresets(){
+  const el=document.getElementById('customOffPresets');
+  if(!el) return;
+  el.innerHTML='';
+  (DB.customPresets||[]).forEach(cp=>{
+    const wrap=document.createElement('span');
+    wrap.className='custom-preset-wrap';
+    const btn=document.createElement('button');
+    btn.className='pbtn-preset';
+    btn.style.cssText='background:rgba(240,165,0,.12);border-color:rgba(240,165,0,.5);color:var(--gold)';
+    btn.textContent=cp.name;
+    btn.onclick=()=>placePreset(cp.id);
+    const del=document.createElement('button');
+    del.className='custom-preset-del';
+    del.innerHTML='&#10005;';
+    del.title='Delete this formation';
+    del.onclick=(e)=>{ e.stopPropagation(); deleteCustomPreset(cp.id); };
+    wrap.appendChild(btn);
+    wrap.appendChild(del);
+    el.appendChild(wrap);
+  });
+}
+function openSaveFormationModal(){
+  const offPlayers=cvPlayers.filter(p=>p.team==='off');
+  if(offPlayers.length===0){ showToast('Place some offensive players first'); return; }
+  const inp=document.getElementById('formationNameIn');
+  inp.value=''; inp.classList.remove('err');
+  openModal('mSaveFormation');
+}
+function confirmSaveFormation(){
+  const inp=document.getElementById('formationNameIn');
+  const name=inp.value.trim();
+  if(!name){ inp.classList.add('err'); return; }
+  const canvas=document.getElementById('playCanvas');
+  const dpr=window.devicePixelRatio||1;
+  const cw=canvas.width/dpr, ch=canvas.height/dpr;
+  const los=ch*0.62;
+  const players=cvPlayers
+    .filter(p=>p.team==='off')
+    .map(p=>({type:p.type,team:p.team,xf:Math.round((p.x/cw)*1000)/1000,yd:Math.round(p.y-los)}));
+  DB.customPresets.push({id:uid(),name,players});
+  saveDB();
+  renderCustomPresets();
+  closeModal('mSaveFormation');
+  showToast('Formation saved');
+}
+function deleteCustomPreset(id){
+  DB.customPresets=(DB.customPresets||[]).filter(cp=>cp.id!==id);
+  saveDB();
+  renderCustomPresets();
+}
+
 // ── INIT ───────────────────────────────────────────────────────────────────────
 loadDB();
 renderLibrary();
+renderCustomPresets();
 </script>
 </body>
 </html>
