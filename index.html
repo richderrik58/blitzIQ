@@ -489,7 +489,7 @@ function drawField(ctx,w,h){
   for(let i=0;i<=6;i++){
     ctx.beginPath();ctx.moveTo(0,i*spacing);ctx.lineTo(w,i*spacing);ctx.stroke();
   }
-  ctx.strokeStyle='rgba(255,255,255,0.06)';
+  ctx.strokeStyle='rgba(255,255,255,0.20)';
   [0.1,0.3,0.5,0.7,0.9].forEach(x=>{
     ctx.beginPath();ctx.moveTo(w*x,0);ctx.lineTo(w*x,h);ctx.stroke();
   });
