@@ -1621,19 +1621,22 @@ function flipCanvas(){
   if(!cvCtx) return;
   const canvas=document.getElementById('playCanvas');
   const dpr=window.devicePixelRatio||1;
-  const cw=canvas.width/dpr, ch=canvas.height/dpr;
+  const cw=canvas.width/dpr;
   cvPlayers.forEach(p=>{ p.x=Math.round(cw-p.x); });
   if(cvRouteCanvas){
+    const rw=cvRouteCanvas.width, rh=cvRouteCanvas.height;
     const snap=document.createElement('canvas');
-    snap.width=cvRouteCanvas.width; snap.height=cvRouteCanvas.height;
+    snap.width=rw; snap.height=rh;
     snap.getContext('2d').drawImage(cvRouteCanvas,0,0);
     const rCtx=cvRouteCanvas.getContext('2d');
-    rCtx.clearRect(0,0,cw,ch);
-    rCtx.save();
-    rCtx.translate(cw,0);
+    // Reset to physical-pixel space so the mirror is unambiguous
+    rCtx.setTransform(1,0,0,1,0,0);
+    rCtx.clearRect(0,0,rw,rh);
+    rCtx.translate(rw,0);
     rCtx.scale(-1,1);
-    rCtx.drawImage(snap,0,0,cw,ch);
-    rCtx.restore();
+    rCtx.drawImage(snap,0,0);
+    // Restore DPR scale for all future drawing
+    rCtx.setTransform(dpr,0,0,dpr,0,0);
   }
   redrawAll();
 }
