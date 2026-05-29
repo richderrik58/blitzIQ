@@ -1619,7 +1619,7 @@ function flipCanvas(){
     const rCtx=cvRouteCanvas.getContext('2d');
     rCtx.clearRect(0,0,cvRouteCanvas.width,cvRouteCanvas.height);
     rCtx.save();
-    rCtx.translate(cvRouteCanvas.width,0);
+    rCtx.translate(cw,0);
     rCtx.scale(-1,1);
     rCtx.drawImage(snap,0,0);
     rCtx.restore();
