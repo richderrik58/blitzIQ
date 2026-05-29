@@ -549,7 +549,6 @@ function redrawAll(){
   if(window._cvDefCall) drawCoverageZones(cvCtx,cw,ch,los,window._cvDefCall.coverage);
   if(cvRouteCanvas) cvCtx.drawImage(cvRouteCanvas,0,0,cw,ch);
   cvPlayers.forEach(p=>drawPlayerSymbol(cvCtx,p));
-  drawGapLabels(cvCtx,cw,los);
   if(window._cvDefCall){
     drawRushArrows(cvCtx, identifyRushers(window._cvDefCall.blitz||''));
   }
@@ -764,13 +763,6 @@ function drawPlayerSymbol(ctx,p){
     ctx.fillStyle='#ffffff';
     ctx.font='bold 8px -apple-system,Helvetica,sans-serif';
     ctx.fillText(p.type,p.x,p.y+0.5);
-
-    const gap=window._cvGapMap?.get(p.id);
-    if(gap){
-      ctx.fillStyle='rgba(240,165,0,0.9)';
-      ctx.font='bold 7px -apple-system,sans-serif';
-      ctx.fillText(gap,p.x,p.y-r-5);
-    }
   }
   ctx.restore();
 }
