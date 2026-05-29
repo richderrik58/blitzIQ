@@ -258,7 +258,7 @@
       <div class="canvas-hdr-sub" id="canvasSubTitle">New Template</div>
     </div>
     <div class="canvas-btns">
-      <button class="cbtn-clear" onclick="flipCanvas()" title="Mirror play left/right">&#8596; Flip</button>
+      <button class="cbtn-clear" id="flipBtn" onclick="flipCanvas()" title="Mirror play left/right" style="display:none">&#8596; Flip</button>
       <button class="cbtn-clear" onclick="clearCanvas()">Clear</button>
       <button class="cbtn-save" onclick="saveCanvas()">Save</button>
       <button class="cbtn-close" onclick="printPlayCard()" title="Print play card">&#128438;</button>
@@ -1570,6 +1570,7 @@ function openCanvas(onReady){
     rCtx.scale(dpr,dpr);
 
     const t = cvEditingId ? DB.templates.find(t=>t.id===cvEditingId) : null;
+    document.getElementById('flipBtn').style.display = t ? '' : 'none';
     cvPlayers = (t?.cvPlayers||[]).map(p=>({...p}));
     window._cvPresetType = t?.cvPresetType||null;
 
