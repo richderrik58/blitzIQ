@@ -9,7 +9,11 @@ git add -A
 if git commit -q -m "$MSG"; then
   echo "committed: $MSG"
 else
-  echo "Nothing new to deploy."
+  echo "No new edits to commit — pushing any unpushed commits."
+fi
+# Always push: covers both fresh edits and commits made outside this script
+if git diff --quiet origin/narrow-build narrow-build 2>/dev/null; then
+  echo "Already up to date with the live site. Nothing to deploy."
   exit 0
 fi
 if git push -q origin narrow-build; then
