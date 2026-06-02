@@ -901,6 +901,8 @@ function confirmSaveTemplate() {
     cvHashPos: pending.cvHashPos || 'mid',
     thumbnail: pending.thumbnail || null,
     sf: pending.sf || {},
+    cvCw: pending.cvCw || null,
+    cvCh: pending.cvCh || null,
     createdAt: Date.now(),
   };
   DB.templates.unshift(t);
@@ -1888,6 +1890,39 @@ function toggleAssignPanel(){
 }
 
 // ── OPEN / CLOSE / CLEAR / SAVE ───────────────────────────────────────────────
+// A saved play opened on a different-size canvas than it was made on needs its
+// players & routes rescaled so they land back on the LOS. New saves carry their
+// canvas size (cvCw/cvCh); older plays infer it from the O-line (which sits on the
+// LOS) and the center's hash alignment. Coordinates scale linearly with the canvas,
+// so the LOS, yard-spacing, and every y all stay in sync.
+function rescaleLoadedPlay(t,cw,ch){
+  if(!t) return;
+  let sw=t.cvCw, sh=t.cvCh;
+  if(!sw||!sh){
+    const off=(t.cvPlayers||[]).filter(p=>p.team==='off');
+    if(!sh){
+      const line=off.filter(p=>p.type==='OL'||p.type==='C');
+      if(line.length){
+        const ys=line.map(p=>p.y).sort((a,b)=>a-b);
+        const medY=ys[Math.floor(ys.length/2)];
+        sh=(medY/1.05)/0.62;            // OL sit ~1yd behind LOS; LOS = ch*0.62
+      }
+    }
+    if(!sw){
+      const c=off.find(p=>p.type==='C');
+      const f=t.cvHashPos==='left'?0.333:t.cvHashPos==='right'?0.667:0.5;
+      if(c) sw=c.x/f;                    // center sits on the hash landmark
+    }
+  }
+  const sx=sw?cw/sw:1, sy=sh?ch/sh:1;
+  if(Math.abs(sx-1)<0.005&&Math.abs(sy-1)<0.005) return;
+  cvPlayers.forEach(p=>{p.x=Math.round(p.x*sx);p.y=Math.round(p.y*sy);});
+  cvStrokes.forEach(s=>{
+    s.pts=s.pts.map(pt=>({...pt,x:pt.x*sx,y:pt.y*sy}));
+    if(s.attachOrigin) s.attachOrigin={x:s.attachOrigin.x*sx,y:s.attachOrigin.y*sy};
+  });
+}
+
 function openCanvas(onReady){
   const canvas=document.getElementById('playCanvas');
   const dpr=window.devicePixelRatio||1;
@@ -1917,6 +1952,7 @@ function openCanvas(onReady){
     updateHashBtns();
     loadScriptFields(t?.sf||null);
     cvStrokes=(t?.cvStrokes||[]).map(s=>({...s,pts:s.pts.map(pt=>({...pt}))}));
+    rescaleLoadedPlay(t,cw,ch);
     cvCurrentStroke=null; cvLegacyCanvas=null;
 
     if(t?.cvStrokes&&t.cvStrokes.length>0){
@@ -2004,6 +2040,8 @@ function saveCanvas(){
   if(!cvCtx) return;
   redrawAll();
   const canvas=document.getElementById('playCanvas');
+  const _dpr=window.devicePixelRatio||1;
+  const cvCw=canvas.width/_dpr, cvCh=canvas.height/_dpr;
 
   // Build thumbnail
   const thumbW=320, thumbH=Math.round(canvas.height/(window.devicePixelRatio||1)/(canvas.width/(window.devicePixelRatio||1))*thumbW);
@@ -2026,13 +2064,14 @@ function saveCanvas(){
       t.cvHashPos=cvHashPos;
       t.thumbnail=thumbnailData;
       t.sf=sf;
+      t.cvCw=cvCw; t.cvCh=cvCh;
       saveDB();
     }
     closeCanvas();
     renderLibrary();
     showToast('Saved');
   } else {
-    window._pendingSave={ cvPlayers:playersData, cvStrokes:strokesData, cvRoutes:null, cvPresetType:presetData, cvHashPos:cvHashPos, thumbnail:thumbnailData, sf };
+    window._pendingSave={ cvPlayers:playersData, cvStrokes:strokesData, cvRoutes:null, cvPresetType:presetData, cvHashPos:cvHashPos, thumbnail:thumbnailData, sf, cvCw, cvCh };
     document.getElementById('tmplNameIn').value='';
     document.getElementById('tmplNotesIn').value='';
     document.getElementById('tmplNameIn').classList.remove('err');
@@ -2052,8 +2091,18 @@ function resizeCanvas(){
   const canvas=document.getElementById('playCanvas');
   const wrap=document.querySelector('.canvas-wrap');
   const dpr=window.devicePixelRatio||1;
+  const oldCw=canvas.width/dpr, oldCh=canvas.height/dpr;
   const cw=Math.min(window.innerWidth,640);
   const ch=Math.max(200, wrap?.clientHeight||window.innerHeight-104);
+  // Keep the play anchored to the LOS when the canvas changes size
+  if(oldCw>0&&oldCh>0&&(Math.abs(cw-oldCw)>0.5||Math.abs(ch-oldCh)>0.5)){
+    const sx=cw/oldCw, sy=ch/oldCh;
+    cvPlayers.forEach(p=>{p.x=Math.round(p.x*sx);p.y=Math.round(p.y*sy);});
+    cvStrokes.forEach(s=>{
+      s.pts=s.pts.map(pt=>({...pt,x:pt.x*sx,y:pt.y*sy}));
+      if(s.attachOrigin) s.attachOrigin={x:s.attachOrigin.x*sx,y:s.attachOrigin.y*sy};
+    });
+  }
   canvas.width=cw*dpr; canvas.height=ch*dpr;
   canvas.style.width=cw+'px'; canvas.style.height=ch+'px';
   cvCtx=canvas.getContext('2d');
