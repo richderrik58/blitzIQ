@@ -1585,7 +1585,8 @@ function alignCornersToWRs(cw){
   if(!offWRs.length) return;
   const leftWR=offWRs.reduce((a,b)=>b.x<a.x?b:a);
   const rightWR=offWRs.reduce((a,b)=>b.x>a.x?b:a);
-  const nudge=Math.round(cw*0.025);
+  const r=(typeof CV_R==='number'&&CV_R)?CV_R:10;
+  const nudge=Math.round(r*1.3);   // just off the receiver's inside shoulder
   const sortedCBs=cvPlayers.filter(p=>p.team==='def'&&p.type==='CB').sort((a,b)=>a.x-b.x);
   if(sortedCBs.length>=2){
     sortedCBs[0].x=Math.round(leftWR.x+nudge);
