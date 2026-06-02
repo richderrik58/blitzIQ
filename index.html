@@ -1375,7 +1375,7 @@ const CV_PRESETS = {
     {type:'OL', team:'off', xf:0.532,yd:1},
     {type:'OL', team:'off', xf:0.564,yd:1},
     {type:'QB', team:'off', xf:0.50, yd:5},
-    {type:'RB', team:'off', xf:0.62, yd:5},
+    {type:'RB', team:'off', xf:0.548, yd:5},
     {type:'WR', team:'off', xf:0.72, yd:2},
     {type:'WR', team:'off', xf:0.80, yd:2},
     {type:'WR', team:'off', xf:0.87, yd:1},
@@ -1391,7 +1391,7 @@ const CV_PRESETS = {
     {type:'WR', team:'off', xf:0.74, yd:2},
     {type:'WR', team:'off', xf:0.87, yd:1},
     {type:'QB', team:'off', xf:0.50, yd:5},
-    {type:'RB', team:'off', xf:0.62, yd:5},
+    {type:'RB', team:'off', xf:0.548, yd:5},
   ],
   'i-form':[
     {type:'WR', team:'off', xf:0.13, yd:1},
@@ -1455,12 +1455,30 @@ function setHash(pos,btn){
   const dpr=window.devicePixelRatio||1;
   const cw=canvas.width/dpr;
   const oldHcx=hashCenterX(cw);
+  const aOld=getOLAnchors();
+  const oldCx=aOld?aOld.cx:oldHcx;
   cvHashPos=pos;
   const newHcx=hashCenterX(cw);
   const dx=newHcx-oldHcx;
   if(dx!==0){
     const pad=cw*0.04;
-    cvPlayers.forEach(p=>{p.x=Math.round(Math.max(pad,Math.min(cw-pad,p.x+dx)));});
+    const clamp=x=>Math.round(Math.max(pad,Math.min(cw-pad,x)));
+    // Remember which side of the formation each WR was on before the shift
+    const wrs=cvPlayers.filter(p=>p.team==='off'&&p.type==='WR');
+    wrs.forEach(w=>{w._side=w.x>=oldCx?'R':'L';});
+    // In-box & skill players ride with the ball to the new hash
+    cvPlayers.forEach(p=>{
+      if(p.team==='off'&&p.type==='WR') return;
+      p.x=clamp(p.x+dx);
+    });
+    // Receivers: re-space to the new hash so they stay on the field with sane splits
+    if(pos==='mid'){
+      wrs.forEach(w=>{w.x=clamp(w.x+dx);});
+    } else {
+      spaceWRsForHash(cw,newHcx,pad,wrs,pos);
+    }
+    wrs.forEach(w=>{delete w._side;});
+    // Unattached routes shift rigidly; attached routes follow their player automatically
     cvStrokes.forEach(s=>{
       if(!s.attachedTo){
         s.pts=s.pts.map(pt=>({x:Math.max(pad,Math.min(cw-pad,pt.x+dx)),y:pt.y}));
@@ -1474,6 +1492,32 @@ function setHash(pos,btn){
   document.querySelectorAll('.hash-btn').forEach(b=>b.classList.remove('selected'));
   btn.classList.add('selected');
   redrawAll();
+}
+
+// Spread WRs to number-relative landmarks for the current hash so they stay on the
+// field with realistic splits: the widest receiver on each side sits at the numbers,
+// and any extra receivers step inward toward the ball. Field = wide side (away from
+// the ball), boundary = short side (the ball's hash side).
+function spaceWRsForHash(cw,hcx,pad,wrs,pos){
+  const fieldRight=(pos==='left');               // ball on left hash → wide side is the right
+  const fieldNum =fieldRight?cw*0.87:cw*0.13;    // wide-side numbers
+  const boundNum =fieldRight?cw*0.13:cw*0.87;    // short-side numbers
+  const fieldDir =fieldRight?1:-1;               // inward direction from the field sideline
+  const boundDir =fieldRight?-1:1;               // inward direction from the boundary sideline
+  const fieldKey =fieldRight?'R':'L';
+  const fieldWRs =wrs.filter(w=>w._side===fieldKey);
+  const boundWRs =wrs.filter(w=>w._side!==fieldKey);
+  const place=(list,numX,innerX,dir)=>{
+    if(!list.length) return;
+    list.sort((a,b)=>dir>0?b.x-a.x:a.x-b.x);     // widest (nearest its sideline) first
+    const n=list.length;
+    list.forEach((w,i)=>{
+      const t=n===1?0:i/(n-1);
+      w.x=Math.round(Math.max(pad,Math.min(cw-pad,numX+(innerX-numX)*t)));
+    });
+  };
+  place(fieldWRs,fieldNum,hcx+fieldDir*cw*0.12,fieldDir);
+  place(boundWRs,boundNum,hcx+boundDir*cw*0.10,boundDir);
 }
 
 function getOLAnchors(){
