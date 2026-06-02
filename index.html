@@ -341,7 +341,9 @@
         <div class="preset-row">
           <span class="preset-lbl">BALL</span>
           <button class="pbtn-preset hash-btn" data-hash="left" onclick="setHash('left',this)">&#8592; L Hash</button>
+          <button class="pbtn-preset hash-btn" data-hash="mid-left" onclick="setHash('mid-left',this)">Mid-L</button>
           <button class="pbtn-preset hash-btn selected" data-hash="mid" onclick="setHash('mid',this)">Mid</button>
+          <button class="pbtn-preset hash-btn" data-hash="mid-right" onclick="setHash('mid-right',this)">Mid-R</button>
           <button class="pbtn-preset hash-btn" data-hash="right" onclick="setHash('right',this)">R Hash &#8594;</button>
         </div>
       </div>
@@ -1425,7 +1427,9 @@ const CV_PRESETS = {
 
 function hashCenterX(cw){
   if(cvHashPos==='left') return cw*0.333;
+  if(cvHashPos==='mid-left') return cw*0.4165;   // midpoint between left hash and mid
   if(cvHashPos==='right') return cw*0.667;
+  if(cvHashPos==='mid-right') return cw*0.5835;   // midpoint between mid and right hash
   return cw*0.5;
 }
 function updateHashBtns(){
@@ -1501,7 +1505,7 @@ function setHash(pos,btn){
 // extra receivers step inward toward the ball. Side and order come from each WR's
 // stable base fraction (fx0), not its current x, so repeated toggles stay consistent.
 function spaceWRsForHash(cw,hcx,pad,wrs,pos){
-  const fieldRight=(pos==='left');               // ball on left hash → wide side is the right
+  const fieldRight=hcx<cw*0.5;                    // ball left of center → wide (field) side is the right
   const fieldNum =fieldRight?cw*0.87:cw*0.13;    // wide-side numbers
   const boundNum =fieldRight?cw*0.13:cw*0.87;    // short-side numbers
   const fieldDir =fieldRight?1:-1;               // inward direction from the field sideline
@@ -1638,7 +1642,7 @@ function placePreset(name){
           x:Math.round(cw*pd.xf),y:Math.round(los+pd.yd*ppy)});
       });
     } else {
-      const isLeft=cvHashPos==='left';
+      const isLeft=hashCenterX(cw)<cw*0.5;   // ball left of center → wide side is the right
       // HS field: numbers at ~7 yds from each sideline (7/53.33 ≈ 0.131)
       const farNum =isLeft?cw*0.87:cw*0.13; // numbers on wide side
       const nearNum=isLeft?cw*0.13:cw*0.87; // numbers on short side
