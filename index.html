@@ -1457,29 +1457,27 @@ function setHash(pos,btn){
   const dpr=window.devicePixelRatio||1;
   const cw=canvas.width/dpr;
   const oldHcx=hashCenterX(cw);
-  const aOld=getOLAnchors();
-  const oldCx=aOld?aOld.cx:oldHcx;
   cvHashPos=pos;
   const newHcx=hashCenterX(cw);
   const dx=newHcx-oldHcx;
   if(dx!==0){
     const pad=cw*0.04;
     const clamp=x=>Math.round(Math.max(pad,Math.min(cw-pad,x)));
-    // Remember which side of the formation each WR was on before the shift
     const wrs=cvPlayers.filter(p=>p.team==='off'&&p.type==='WR');
-    wrs.forEach(w=>{w._side=w.x>=oldCx?'R':'L';});
-    // In-box & skill players ride with the ball to the new hash
+    // Each WR carries a stable base (mid-formation) fraction. Every hash — including
+    // back to Mid — is derived from it, so nothing drifts cumulatively across toggles.
+    wrs.forEach(w=>{ if(typeof w.fx0!=='number') w.fx0=Math.max(0,Math.min(1,0.5+(w.x-oldHcx)/cw)); });
+    // In-box & skill players (and defense) ride with the ball to the new hash
     cvPlayers.forEach(p=>{
       if(p.team==='off'&&p.type==='WR') return;
       p.x=clamp(p.x+dx);
     });
-    // Receivers: re-space to the new hash so they stay on the field with sane splits
+    // Receivers: derive their spot for the new hash from the base fraction
     if(pos==='mid'){
-      wrs.forEach(w=>{w.x=clamp(w.x+dx);});
+      wrs.forEach(w=>{ w.x=clamp(cw*w.fx0); });   // exact original mid spacing
     } else {
       spaceWRsForHash(cw,newHcx,pad,wrs,pos);
     }
-    wrs.forEach(w=>{delete w._side;});
     // Unattached routes shift rigidly; attached routes follow their player automatically
     cvStrokes.forEach(s=>{
       if(!s.attachedTo){
@@ -1496,10 +1494,10 @@ function setHash(pos,btn){
   redrawAll();
 }
 
-// Spread WRs to number-relative landmarks for the current hash so they stay on the
+// Spread WRs to number-relative landmarks for a hash (left/right) so they stay on the
 // field with realistic splits: the widest receiver on each side sits at the numbers,
-// and any extra receivers step inward toward the ball. Field = wide side (away from
-// the ball), boundary = short side (the ball's hash side).
+// extra receivers step inward toward the ball. Side and order come from each WR's
+// stable base fraction (fx0), not its current x, so repeated toggles stay consistent.
 function spaceWRsForHash(cw,hcx,pad,wrs,pos){
   const fieldRight=(pos==='left');               // ball on left hash → wide side is the right
   const fieldNum =fieldRight?cw*0.87:cw*0.13;    // wide-side numbers
@@ -1507,19 +1505,20 @@ function spaceWRsForHash(cw,hcx,pad,wrs,pos){
   const fieldDir =fieldRight?1:-1;               // inward direction from the field sideline
   const boundDir =fieldRight?-1:1;               // inward direction from the boundary sideline
   const fieldKey =fieldRight?'R':'L';
-  const fieldWRs =wrs.filter(w=>w._side===fieldKey);
-  const boundWRs =wrs.filter(w=>w._side!==fieldKey);
-  const place=(list,numX,innerX,dir)=>{
+  const sideOf =w=>(w.fx0>=0.5?'R':'L');
+  const fieldWRs =wrs.filter(w=>sideOf(w)===fieldKey);
+  const boundWRs =wrs.filter(w=>sideOf(w)!==fieldKey);
+  const place=(list,numX,innerX)=>{
     if(!list.length) return;
-    list.sort((a,b)=>dir>0?b.x-a.x:a.x-b.x);     // widest (nearest its sideline) first
+    list.sort((a,b)=>Math.abs(b.fx0-0.5)-Math.abs(a.fx0-0.5)); // widest (farthest from center) first
     const n=list.length;
     list.forEach((w,i)=>{
       const t=n===1?0:i/(n-1);
       w.x=Math.round(Math.max(pad,Math.min(cw-pad,numX+(innerX-numX)*t)));
     });
   };
-  place(fieldWRs,fieldNum,hcx+fieldDir*cw*0.12,fieldDir);
-  place(boundWRs,boundNum,hcx+boundDir*cw*0.10,boundDir);
+  place(fieldWRs,fieldNum,hcx+fieldDir*cw*0.12);
+  place(boundWRs,boundNum,hcx+boundDir*cw*0.10);
 }
 
 function getOLAnchors(){
@@ -1626,7 +1625,7 @@ function placePreset(name){
     const pad=cw*0.04;
     if(cvHashPos==='mid'){
       preset.forEach(pd=>{
-        cvPlayers.push({id:++cvPid,type:pd.type,team:pd.team,
+        cvPlayers.push({id:++cvPid,type:pd.type,team:pd.team,fx0:pd.xf,
           x:Math.round(cw*pd.xf),y:Math.round(los+pd.yd*ppy)});
       });
     } else {
@@ -1653,7 +1652,7 @@ function placePreset(name){
         } else {
           x=Math.round(Math.max(pad,Math.min(cw-pad,hcx+(pd.xf-0.5)*cw)));
         }
-        cvPlayers.push({id:++cvPid,type:pd.type,team:pd.team,x,y:Math.round(los+pd.yd*ppy)});
+        cvPlayers.push({id:++cvPid,type:pd.type,team:pd.team,fx0:pd.xf,x,y:Math.round(los+pd.yd*ppy)});
       });
     }
   }
@@ -1999,7 +1998,7 @@ function flipCanvas(){
   const canvas=document.getElementById('playCanvas');
   const dpr=window.devicePixelRatio||1;
   const cw=canvas.width/dpr;
-  cvPlayers.forEach(p=>{ p.x=Math.round(cw-p.x); });
+  cvPlayers.forEach(p=>{ p.x=Math.round(cw-p.x); if(typeof p.fx0==='number') p.fx0=1-p.fx0; });
   cvStrokes.forEach(s=>{
     s.pts=s.pts.map(pt=>({x:cw-pt.x,y:pt.y}));
     if(s.attachOrigin) s.attachOrigin={x:cw-s.attachOrigin.x,y:s.attachOrigin.y};
