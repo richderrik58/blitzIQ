@@ -1478,6 +1478,8 @@ function setHash(pos,btn){
     } else {
       spaceWRsForHash(cw,newHcx,pad,wrs,pos);
     }
+    // Defense tracks the offense: re-shade the corners onto the receivers' new spots
+    alignCornersToWRs(cw);
     // Unattached routes shift rigidly; attached routes follow their player automatically
     cvStrokes.forEach(s=>{
       if(!s.attachedTo){
@@ -1576,6 +1578,23 @@ function defXFromOL(presetName,pdIndex,anchors,strength){
   return x!==null?Math.round(x):null;
 }
 
+// Put each corner on the inside shade of the outermost receiver on its side, so
+// corners track the WRs at any hash. Called on defense placement and on hash changes.
+function alignCornersToWRs(cw){
+  const offWRs=cvPlayers.filter(p=>p.team==='off'&&p.type==='WR');
+  if(!offWRs.length) return;
+  const leftWR=offWRs.reduce((a,b)=>b.x<a.x?b:a);
+  const rightWR=offWRs.reduce((a,b)=>b.x>a.x?b:a);
+  const nudge=Math.round(cw*0.025);
+  const sortedCBs=cvPlayers.filter(p=>p.team==='def'&&p.type==='CB').sort((a,b)=>a.x-b.x);
+  if(sortedCBs.length>=2){
+    sortedCBs[0].x=Math.round(leftWR.x+nudge);
+    sortedCBs[sortedCBs.length-1].x=Math.round(rightWR.x-nudge);
+  } else if(sortedCBs.length===1){
+    sortedCBs[0].x=Math.round(cw/2)<sortedCBs[0].x?Math.round(rightWR.x-nudge):Math.round(leftWR.x+nudge);
+  }
+}
+
 function placePreset(name){
   if(!cvCtx) return;
   const canvas=document.getElementById('playCanvas');
@@ -1605,21 +1624,7 @@ function placePreset(name){
     if(ssP) ssP.x=Math.round(cw*(strength==='right'?0.70:0.30));
     if(fsP) fsP.x=Math.round(cw*0.50);
     if(!anchors) adjustDefenseToStrength(strength,cw);
-    // Align CBs just inside the outermost offensive WRs
-    const offWRs=cvPlayers.filter(p=>p.team==='off'&&p.type==='WR');
-    if(offWRs.length>=1){
-      const leftWR=offWRs.reduce((a,b)=>b.x<a.x?b:a);
-      const rightWR=offWRs.reduce((a,b)=>b.x>a.x?b:a);
-      const nudge=Math.round(cw*0.025);
-      const defCBs=defNew.filter(p=>p.type==='CB');
-      const sortedCBs=[...defCBs].sort((a,b)=>a.x-b.x);
-      if(sortedCBs.length>=2){
-        sortedCBs[0].x=leftWR.x+nudge;
-        sortedCBs[sortedCBs.length-1].x=rightWR.x-nudge;
-      } else if(sortedCBs.length===1){
-        sortedCBs[0].x=Math.round(cw/2)<sortedCBs[0].x?rightWR.x-nudge:leftWR.x+nudge;
-      }
-    }
+    alignCornersToWRs(cw);
   } else {
     const hcx=hashCenterX(cw);
     const pad=cw*0.04;
