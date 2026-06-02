@@ -379,7 +379,8 @@
         <button class="clr-btn" style="background:#60a5fa" onclick="setDrawColor('#60a5fa',this)" title="Blue"></button>
         <button class="clr-btn" style="background:#22c55e" onclick="setDrawColor('#22c55e',this)" title="Green"></button>
         <div class="tool-sep"></div>
-        <button class="ctool-btn active" onclick="setDrawTool('pen',this)">&#9998; Draw</button>
+        <button class="ctool-btn active" onclick="setDrawTool('pen',this)">&#9998; Route</button>
+        <button class="ctool-btn" onclick="setDrawTool('motion',this)">&#8674; Motion</button>
         <button class="ctool-btn" onclick="setDrawTool('erase',this)">&#9633; Erase</button>
         <button class="ctool-btn" onclick="undoRoute()" title="Undo last stroke">&#8617; Undo</button>
         <div class="tool-sep"></div>
@@ -1018,6 +1019,30 @@ function drawField(ctx,w,h){
   ctx.beginPath();ctx.arc(bx,los,5,0,Math.PI*2);ctx.stroke();
 }
 
+// Draw a filled arrowhead at the end of a stroke, aimed along its final heading.
+// Steps back ~headLen along the path so freehand jitter doesn't skew the direction.
+function drawStrokeArrowhead(ctx,pts,color,width){
+  const end=pts[pts.length-1];
+  const headLen=Math.max(12,width*3.5);
+  let bx=pts[0].x, by=pts[0].y, acc=0;
+  for(let i=pts.length-1;i>0;i--){
+    acc+=Math.hypot(pts[i].x-pts[i-1].x, pts[i].y-pts[i-1].y);
+    if(acc>=headLen){ bx=pts[i-1].x; by=pts[i-1].y; break; }
+  }
+  if(acc<5) return;                       // too short to point anywhere
+  const ang=Math.atan2(end.y-by, end.x-bx), spread=Math.PI/7;
+  ctx.save();
+  ctx.setLineDash([]);
+  ctx.fillStyle=color;
+  ctx.beginPath();
+  ctx.moveTo(end.x,end.y);
+  ctx.lineTo(end.x-headLen*Math.cos(ang-spread), end.y-headLen*Math.sin(ang-spread));
+  ctx.lineTo(end.x-headLen*Math.cos(ang+spread), end.y-headLen*Math.sin(ang+spread));
+  ctx.closePath();
+  ctx.fill();
+  ctx.restore();
+}
+
 function renderStrokes(){
   if(!cvRouteCanvas) return;
   const dpr=window.devicePixelRatio||1;
@@ -1046,9 +1071,12 @@ function renderStrokes(){
         rCtx.beginPath();rCtx.arc(pts[0].x,pts[0].y,s.width/2,0,Math.PI*2);
         rCtx.fillStyle=s.color;rCtx.fill();
       } else {
+        if(s.tool==='motion') rCtx.setLineDash([s.width*3,s.width*2.4]);  // dashed pre-snap motion
         rCtx.beginPath();rCtx.moveTo(pts[0].x,pts[0].y);
         pts.slice(1).forEach(pt=>rCtx.lineTo(pt.x,pt.y));
         rCtx.stroke();
+        rCtx.setLineDash([]);
+        drawStrokeArrowhead(rCtx,pts,s.color,s.width);   // routes & motions get a head
       }
     }
     rCtx.restore();
