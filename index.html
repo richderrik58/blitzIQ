@@ -300,6 +300,7 @@
       <button class="cbtn-clear" onclick="clearCanvas()">Clear</button>
       <button class="cbtn-save" onclick="saveCanvas()">Save</button>
       <button class="cbtn-close" onclick="printPlayCard()" title="Print play card">&#128438;</button>
+      <button class="cbtn-save" onclick="downloadPlayCard()" title="Save play as image (PNG)" style="background:rgba(96,165,250,.15);border:1.5px solid rgba(96,165,250,.45);color:var(--blue)">&#11015; Image</button>
       <button class="cbtn-save" onclick="sharePlayCard()" style="background:rgba(240,165,0,.18);border:1.5px solid rgba(240,165,0,.5);color:var(--gold)">&#11014; Share</button>
       <button class="cbtn-close" onclick="closeCanvas()">&#10005;</button>
     </div>
@@ -2362,6 +2363,43 @@ function sharePlayCard(){
   } else {
     navigator.clipboard.writeText(text).then(()=>showToast('Copied to clipboard'));
   }
+}
+
+// Export the play diagram as a PNG image (with a BlitzIQ + play-name header strip).
+// On phones with file sharing this opens the share sheet (save to Photos / text it);
+// otherwise it downloads the .png file.
+function downloadPlayCard(){
+  redrawAll();
+  const canvas=document.getElementById('playCanvas');
+  const t=cvEditingId?DB.templates.find(t=>t.id===cvEditingId):null;
+  const name=t?.name||'Play Diagram';
+  const dpr=window.devicePixelRatio||1;
+  const headH=Math.round(52*dpr), pad=Math.round(16*dpr);
+  const out=document.createElement('canvas');
+  out.width=canvas.width;
+  out.height=canvas.height+headH;
+  const o=out.getContext('2d');
+  o.fillStyle='#0a1628'; o.fillRect(0,0,out.width,headH);
+  o.textBaseline='middle';
+  o.fillStyle='#f0a500'; o.font=`800 ${Math.round(21*dpr)}px -apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif`;
+  o.textAlign='left'; o.fillText('BlitzIQ', pad, headH/2);
+  o.fillStyle='#ffffff'; o.font=`700 ${Math.round(17*dpr)}px -apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif`;
+  o.textAlign='right'; o.fillText(name, out.width-pad, headH/2);
+  o.drawImage(canvas,0,headH);
+  const fname=(name.replace(/[^a-z0-9]+/gi,'_').replace(/^_+|_+$/g,'')||'play')+'.png';
+  out.toBlob(blob=>{
+    if(!blob){ showToast('Could not create image'); return; }
+    const file=new File([blob],fname,{type:'image/png'});
+    if(navigator.canShare&&navigator.canShare({files:[file]})){
+      navigator.share({files:[file],title:'BlitzIQ — '+name}).catch(()=>{});
+    } else {
+      const url=URL.createObjectURL(blob);
+      const a=document.createElement('a'); a.href=url; a.download=fname;
+      document.body.appendChild(a); a.click(); a.remove();
+      setTimeout(()=>URL.revokeObjectURL(url),1500);
+      showToast('Saved as image');
+    }
+  },'image/png');
 }
 
 // ── TOAST ──────────────────────────────────────────────────────────────────────
