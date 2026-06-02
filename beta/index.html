@@ -1,0 +1,2617 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0">
+  <title>BlitzIQ — Play Diagram Library</title>
+  <style>
+    :root {
+      --navy:#0a1628; --navy2:#112240; --navy3:#1a3256; --navyc:#0f1e35;
+      --gold:#f0a500; --goldd:#c88a00; --white:#ffffff;
+      --gray:#7a8fa8; --grayl:#afc2d4;
+      --green:#22c55e; --blue:#60a5fa; --amber:#f59e0b; --red:#ef4444;
+    }
+    *{margin:0;padding:0;box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+    body{background:var(--navy);color:var(--white);font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;min-height:100vh;max-width:640px;margin:0 auto}
+
+    /* HEADER */
+    .hdr{background:var(--navy2);border-bottom:2px solid var(--gold);padding:14px 18px;display:flex;align-items:center;gap:10px;position:sticky;top:0;z-index:200}
+    .logo{font-size:26px;font-weight:900;letter-spacing:3px;color:var(--gold);line-height:1}
+    .logo span{color:var(--white)}
+    .hdr-sub{font-size:10px;letter-spacing:1.5px;text-transform:uppercase;color:var(--gray);margin-top:2px}
+    .hdr-txt{flex:1}
+
+    /* SCREENS */
+    .screen{display:none;padding:16px}
+    .screen.active{display:block;animation:slideIn .18s ease}
+    @keyframes slideIn{from{opacity:0;transform:translateX(12px)}to{opacity:1;transform:translateX(0)}}
+
+    /* TYPE */
+    .sc-title{font-size:22px;font-weight:800;margin-bottom:3px;margin-top:4px}
+    .sc-sub{font-size:13px;color:var(--gray);margin-bottom:16px}
+    .sec-lbl{font-size:10px;letter-spacing:2px;text-transform:uppercase;color:var(--gray);margin:4px 0 12px}
+
+    /* CARDS */
+    .card{background:var(--navy2);border:1px solid rgba(255,255,255,.06);border-radius:14px;padding:18px;margin-bottom:14px;cursor:pointer;position:relative;transition:border-color .15s,transform .1s}
+    .card:active{transform:scale(.985);border-color:var(--gold)}
+    .card-name-sm{font-size:18px;font-weight:800;margin-bottom:12px;padding-right:64px}
+    .card-note{font-size:13px;color:var(--grayl);line-height:1.55;font-style:italic;margin-top:12px;padding-top:12px;border-top:1px solid rgba(255,255,255,.06)}
+    .card-meta{font-size:12px;color:var(--gray);margin-top:4px}
+
+    /* DELETE / EDIT BTN */
+    .del-btn{position:absolute;top:14px;right:14px;width:30px;height:30px;background:rgba(239,68,68,.1);border:1px solid rgba(239,68,68,.25);border-radius:7px;color:var(--red);font-size:13px;cursor:pointer;display:flex;align-items:center;justify-content:center;z-index:10}
+    .del-btn:active{background:rgba(239,68,68,.3)}
+    .edit-btn{position:absolute;top:14px;right:50px;width:30px;height:30px;background:rgba(240,165,0,.1);border:1px solid rgba(240,165,0,.25);border-radius:7px;color:var(--gold);font-size:13px;cursor:pointer;display:flex;align-items:center;justify-content:center;z-index:10}
+    .edit-btn:active{background:rgba(240,165,0,.3)}
+
+    /* ACTION ROW */
+    .action-row{display:flex;gap:10px;margin-bottom:20px}
+    .act-pri{flex:1;padding:15px 10px;background:var(--gold);border:none;border-radius:12px;color:var(--navy);font-size:15px;font-weight:800;cursor:pointer;font-family:inherit}
+    .act-pri:active{background:var(--goldd)}
+    .act-sec{flex:1;padding:15px 10px;background:rgba(240,165,0,.1);border:1.5px solid rgba(240,165,0,.4);border-radius:12px;color:var(--gold);font-size:15px;font-weight:700;cursor:pointer;font-family:inherit}
+    .act-sec:active{background:rgba(240,165,0,.2)}
+
+    /* EMPTY */
+    .empty{text-align:center;padding:44px 24px;color:var(--gray)}
+    .empty-icon{font-size:44px;margin-bottom:12px}
+    .empty-txt{font-size:14px;line-height:1.6}
+
+    /* MODAL */
+    .modal-ov{position:fixed;inset:0;background:rgba(0,0,0,.75);z-index:500;display:flex;align-items:flex-end;opacity:0;pointer-events:none;transition:opacity .2s}
+    .modal-ov.open{opacity:1;pointer-events:all}
+    .modal-sheet{width:100%;max-width:640px;margin:0 auto;background:var(--navy2);border-radius:20px 20px 0 0;border-top:2px solid var(--gold);max-height:92vh;overflow-y:auto;transform:translateY(100%);transition:transform .25s ease;-webkit-overflow-scrolling:touch}
+    .modal-ov.open .modal-sheet{transform:translateY(0)}
+    .modal-handle{width:40px;height:4px;background:rgba(255,255,255,.2);border-radius:2px;margin:12px auto 0}
+    .modal-hdr{display:flex;justify-content:space-between;align-items:center;padding:16px 20px 12px;border-bottom:1px solid rgba(255,255,255,.07)}
+    .modal-title{font-size:18px;font-weight:800}
+    .modal-x{width:34px;height:34px;border-radius:50%;background:rgba(255,255,255,.08);border:none;color:var(--grayl);font-size:18px;cursor:pointer;display:flex;align-items:center;justify-content:center}
+    .modal-body{padding:16px 20px}
+    .modal-foot{padding:12px 20px 28px;display:flex;gap:10px;border-top:1px solid rgba(255,255,255,.07)}
+
+    /* FIELDS */
+    .fld{margin-bottom:18px}
+    .fld-lbl{display:block;font-size:10px;letter-spacing:2px;text-transform:uppercase;color:var(--gray);font-weight:700;margin-bottom:8px}
+    .fld-in{width:100%;background:var(--navy);border:1.5px solid rgba(255,255,255,.12);border-radius:10px;padding:14px 16px;color:var(--white);font-size:16px;outline:none;transition:border-color .15s;-webkit-appearance:none;font-family:inherit}
+    .fld-in:focus{border-color:var(--gold)}
+    .fld-in.err{border-color:var(--red)}
+    .fld-ta{width:100%;background:var(--navy);border:1.5px solid rgba(255,255,255,.12);border-radius:10px;padding:14px 16px;color:var(--white);font-size:15px;outline:none;resize:none;height:86px;line-height:1.5;font-family:inherit;transition:border-color .15s}
+    .fld-ta:focus{border-color:var(--gold)}
+
+    /* CHIPS */
+    .chips{display:flex;flex-wrap:wrap;gap:6px;margin-top:8px}
+    .chip{padding:7px 12px;background:var(--navy3);border:1px solid rgba(255,255,255,.1);border-radius:20px;color:var(--grayl);font-size:12px;font-weight:600;cursor:pointer;font-family:inherit}
+    .chip:active{background:rgba(240,165,0,.2);border-color:var(--gold);color:var(--gold)}
+
+    /* BUTTONS */
+    .btn-cancel{flex:1;padding:16px;background:rgba(255,255,255,.06);border:1px solid rgba(255,255,255,.12);border-radius:12px;color:var(--grayl);font-size:16px;font-weight:700;cursor:pointer;font-family:inherit}
+    .btn-save{flex:2;padding:16px;background:var(--gold);border:none;border-radius:12px;color:var(--navy);font-size:16px;font-weight:800;cursor:pointer;font-family:inherit}
+    .btn-save:active{background:var(--goldd)}
+
+    /* LOADING */
+    .load-ov{position:fixed;inset:0;background:rgba(10,22,40,.88);z-index:800;display:flex;align-items:center;justify-content:center;flex-direction:column;gap:16px;opacity:0;pointer-events:none;transition:opacity .2s}
+    .load-ov.open{opacity:1;pointer-events:all}
+    .spinner{width:44px;height:44px;border:3px solid rgba(240,165,0,.2);border-top-color:var(--gold);border-radius:50%;animation:spin .8s linear infinite}
+    @keyframes spin{to{transform:rotate(360deg)}}
+    .load-txt{font-size:15px;color:var(--grayl);font-weight:600}
+
+    /* PLAY CANVAS */
+    .canvas-ov{position:fixed;inset:0;background:var(--navy);z-index:900;display:flex;flex-direction:column;opacity:0;pointer-events:none;transition:opacity .18s;overflow:hidden}
+    .canvas-ov.open{opacity:1;pointer-events:all}
+    .canvas-hdr{background:var(--navy2);border-bottom:2px solid var(--gold);padding:5px 12px;height:44px;display:flex;align-items:center;justify-content:space-between;flex-shrink:0;gap:8px}
+    @media (orientation:landscape) and (max-height:540px){.canvas-hdr{padding:3px 10px;height:40px}}
+    .toast{position:fixed;bottom:90px;left:50%;transform:translateX(-50%);background:rgba(34,197,94,.92);color:#fff;font-size:12px;font-weight:700;padding:8px 18px;border-radius:20px;z-index:9999;pointer-events:none;opacity:0;transition:opacity .2s}
+    .toast.show{opacity:1}
+    /* ── PRINT ── */
+    #printPage{display:none}
+    @media print{
+      body>*:not(#printPage){display:none!important}
+      #printPage{display:block!important;margin:0;padding:0}
+      @page{margin:.45in}
+    }
+    .pp-h{font-family:Arial,Helvetica,sans-serif;color:#111;font-size:10pt;line-height:1.4}
+    .pp-logo{font-size:22pt;font-weight:900;letter-spacing:3px;color:#111}
+    .pp-logo span{color:#666}
+    .pp-form-name{font-size:17pt;font-weight:900}
+    .pp-divider{border:none;border-top:2.5px solid #111;margin:8px 0}
+    .pp-lbl{font-size:7pt;letter-spacing:1.5px;text-transform:uppercase;color:#777;font-weight:700;margin-bottom:3px}
+    .pp-blitz{font-size:10pt;font-weight:700;margin-bottom:10px}
+    .pp-gap-tbl{width:100%;border-collapse:collapse;font-size:8pt;margin-bottom:8px}
+    .pp-gap-tbl td{padding:2px 5px 2px 0;vertical-align:top}
+    .pp-gap-val{font-weight:800;color:#111;white-space:nowrap}
+    .pp-gap-note{color:#666}
+    .pp-reason{font-size:8.5pt;line-height:1.55;color:#333;margin-bottom:8px}
+    .pp-notes-box{border:1px solid #bbb;border-radius:3px;height:55px;margin-top:4px}
+    .pp-footer{font-size:7pt;color:#aaa;text-align:center;margin-top:10px;border-top:1px solid #ddd;padding-top:6px}
+    .canvas-hdr-title{font-size:15px;font-weight:800;color:var(--white)}
+    .canvas-hdr-sub{font-size:10px;color:var(--gray);letter-spacing:.5px;margin-top:1px}
+    .canvas-btns{display:flex;gap:8px;flex-shrink:0}
+    .cbtn-clear{padding:7px 12px;background:rgba(239,68,68,.14);border:1px solid rgba(239,68,68,.3);border-radius:8px;color:var(--red);font-size:12px;font-weight:700;cursor:pointer;font-family:inherit}
+    .cbtn-save{padding:7px 16px;background:var(--gold);border:none;border-radius:8px;color:var(--navy);font-size:12px;font-weight:800;cursor:pointer;font-family:inherit}
+    .cbtn-save:active{background:var(--goldd)}
+    .cbtn-close{padding:7px 12px;background:rgba(255,255,255,.07);border:1px solid rgba(255,255,255,.12);border-radius:8px;color:var(--grayl);font-size:12px;font-weight:700;cursor:pointer;font-family:inherit}
+    .canvas-toolbar{background:var(--navyc);border-top:1px solid rgba(255,255,255,.1);padding:6px 12px;min-height:50px;display:flex;flex-direction:column;gap:6px;flex-shrink:0}
+    .toolbar-body{transition:max-height .25s ease,opacity .25s ease;overflow-y:auto;max-height:140px;opacity:1}
+    .toolbar-body.collapsed{max-height:0;opacity:0}
+    .collapse-btn{background:rgba(255,255,255,.07);border:1px solid rgba(255,255,255,.12);border-radius:7px;color:var(--grayl);font-size:13px;cursor:pointer;width:34px;height:34px;display:flex;align-items:center;justify-content:center;flex-shrink:0}
+    .cv-def-call{background:rgba(240,165,0,.1);border-top:1px solid rgba(240,165,0,.2);padding:8px 14px;flex-shrink:0;display:none}
+    .cv-def-call.show{display:block}
+    .cv-def-cov{font-size:15px;font-weight:900;color:var(--gold);line-height:1.1}
+    .cv-def-blitz{font-size:12px;font-weight:700;color:var(--white);margin-top:2px}
+    .mode-row{display:flex;gap:8px}
+    .mode-btn{flex:1;padding:8px;border-radius:8px;border:1.5px solid rgba(255,255,255,.12);background:rgba(255,255,255,.05);color:var(--grayl);font-size:12px;font-weight:700;cursor:pointer;font-family:inherit;text-align:center;transition:all .15s}
+    .mode-btn.active{background:rgba(240,165,0,.18);border-color:var(--gold);color:var(--gold)}
+    .player-panel{display:flex;flex-direction:column;gap:5px}
+    .player-panel-row{display:flex;align-items:center;gap:5px;flex-wrap:wrap}
+    .player-panel-lbl{font-size:9px;letter-spacing:1.5px;text-transform:uppercase;color:var(--gray);font-weight:700;width:32px;flex-shrink:0}
+    .pbtn{width:38px;height:38px;border-radius:50%;border:2px solid rgba(255,255,255,.5);color:var(--white);font-size:9px;font-weight:800;cursor:pointer;font-family:inherit;display:flex;align-items:center;justify-content:center;transition:all .12s;flex-shrink:0;background:transparent;line-height:1}
+    .pbtn.off{background:rgba(34,197,94,.85);color:#ffffff;border-color:rgba(34,197,94,.9)}
+    .cv-del-player{position:absolute;z-index:950;background:var(--red);border:none;border-radius:8px;color:#fff;font-size:12px;font-weight:800;padding:6px 14px;cursor:pointer;pointer-events:all;font-family:inherit;box-shadow:0 2px 10px rgba(0,0,0,.5);transform:translateX(-50%);white-space:nowrap}
+    .pbtn.center{border-radius:5px}
+    .pbtn.selected{box-shadow:0 0 0 3px #f0a500;transform:scale(1.1)}
+    .pbtn:active{transform:scale(.95)}
+    .preset-section{display:flex;flex-direction:column;gap:5px;padding-bottom:6px;border-bottom:1px solid rgba(255,255,255,.08);margin-bottom:4px}
+    .preset-row{display:flex;align-items:center;gap:5px;flex-wrap:wrap}
+    .preset-lbl{font-size:9px;letter-spacing:1.5px;text-transform:uppercase;color:var(--gray);font-weight:700;width:28px;flex-shrink:0}
+    .pbtn-preset{padding:6px 11px;background:rgba(255,255,255,.06);border:1.5px solid rgba(255,255,255,.2);border-radius:20px;color:var(--grayl);font-size:11px;font-weight:700;cursor:pointer;font-family:inherit;white-space:nowrap;transition:all .12s;line-height:1}
+    .pbtn-preset:active{background:rgba(240,165,0,.22);border-color:var(--gold);color:var(--gold);transform:scale(.95)}
+    .pbtn-preset.selected{background:rgba(240,165,0,.22);border-color:var(--gold);color:var(--gold)}
+    .draw-row{display:flex;align-items:center;gap:6px;flex-wrap:wrap}
+    .clr-btn{width:26px;height:26px;border-radius:50%;border:2.5px solid transparent;cursor:pointer;flex-shrink:0;transition:border-color .12s,transform .12s}
+    .clr-btn.active{border-color:var(--white);transform:scale(1.15)}
+    .tool-sep{width:1px;height:22px;background:rgba(255,255,255,.1);flex-shrink:0}
+    .ctool-btn{padding:5px 10px;background:rgba(255,255,255,.07);border:1px solid rgba(255,255,255,.13);border-radius:7px;color:var(--grayl);font-size:11px;font-weight:700;cursor:pointer;font-family:inherit;transition:all .12s}
+    .ctool-btn.active{background:rgba(240,165,0,.18);border-color:var(--gold);color:var(--gold)}
+    .cw-btn{padding:4px 9px;background:rgba(255,255,255,.05);border:1px solid rgba(255,255,255,.1);border-radius:6px;color:var(--gray);font-size:13px;cursor:pointer;font-family:inherit;line-height:1;transition:all .12s}
+    .cw-btn.active{border-color:var(--gold);color:var(--gold)}
+    .canvas-wrap{flex:1;position:relative;overflow:hidden}
+    #playCanvas{display:block;width:100%;height:100%;touch-action:none;cursor:crosshair}
+    .cv-assign{background:var(--navyc);border-top:1px solid rgba(255,255,255,.06);flex-shrink:0;display:none}
+    .cv-assign.show{display:block}
+    .cv-assign-hdr{padding:5px 12px;display:flex;align-items:center;justify-content:space-between;cursor:pointer;user-select:none}
+    .cv-assign-hdr:active{background:rgba(255,255,255,.03)}
+    #cvAssignBody{padding:4px 12px 6px;max-height:110px;overflow-y:auto;-webkit-overflow-scrolling:touch}
+    #cvAssignBody.collapsed{display:none}
+    .ca-row{display:flex;align-items:flex-start;gap:6px;flex-wrap:wrap;margin-bottom:5px}
+    .ca-hdr{font-size:9px;letter-spacing:1.5px;text-transform:uppercase;font-weight:800;flex-shrink:0;padding-top:2px}
+    .ca-hdr.rush{color:var(--red)}.ca-hdr.cov{color:var(--blue)}.ca-hdr.warn{color:var(--amber)}
+    .ca-badge{font-size:10px;font-weight:700;padding:2px 7px;border-radius:10px}
+    .ca-badge.rush{background:rgba(239,68,68,.2);color:var(--red);border:1px solid rgba(239,68,68,.35)}
+    .ca-badge.cov{background:rgba(96,165,250,.12);color:var(--blue);border:1px solid rgba(96,165,250,.3)}
+    .ca-badge.man{background:rgba(245,158,11,.12);color:var(--amber);border:1px solid rgba(245,158,11,.3)}
+    .ca-badge.high{background:rgba(240,165,0,.15);color:var(--gold);border:1px solid rgba(240,165,0,.4)}
+    .ca-warn-box{font-size:11px;font-weight:700;padding:5px 10px;border-radius:7px;margin-top:3px;line-height:1.4}
+    .ca-warn-thin{background:rgba(245,158,11,.12);color:var(--amber);border:1px solid rgba(245,158,11,.3)}
+    .ca-warn-crit{background:rgba(239,68,68,.15);color:var(--red);border:1px solid rgba(239,68,68,.4)}
+    .ca-warn-c0{background:rgba(239,68,68,.2);color:var(--red);border:1px solid rgba(239,68,68,.5);font-size:12px}
+    .ca-warn-info{background:rgba(240,165,0,.1);color:var(--gold);border:1px solid rgba(240,165,0,.3)}
+    .ca-conflict{background:rgba(239,68,68,.18);color:var(--red);border:1px solid var(--red);border-radius:8px;padding:6px 10px;font-size:11px;font-weight:700;margin-top:4px}
+    .ca-warn-gap{background:rgba(239,68,68,.12);color:var(--red);border:1px solid rgba(239,68,68,.4)}
+    .play-thumb{width:100%;display:block;border-radius:8px 8px 0 0}
+    .tmpl-card{background:var(--navy2);border:1px solid rgba(255,255,255,.06);border-radius:14px;margin-bottom:14px;cursor:pointer;position:relative;overflow:hidden;transition:border-color .15s,transform .1s}
+    .tmpl-card:active{transform:scale(.985);border-color:var(--gold)}
+    .tmpl-info{padding:14px 18px}
+    .custom-preset-wrap{display:inline-flex;align-items:center;gap:2px}
+    .custom-preset-del{background:rgba(239,68,68,.15);border:1px solid rgba(239,68,68,.3);border-radius:50%;width:16px;height:16px;color:var(--red);font-size:9px;cursor:pointer;display:inline-flex;align-items:center;justify-content:center;flex-shrink:0;margin-left:-6px;line-height:1;font-family:inherit;padding:0}
+    .tmpl-card.selected{border-color:var(--gold);box-shadow:0 0 0 2px rgba(240,165,0,.35)}
+    .card-select-cb{position:absolute;top:10px;right:10px;width:22px;height:22px;border-radius:50%;border:2px solid rgba(255,255,255,.35);background:rgba(0,0,0,.4);display:flex;align-items:center;justify-content:center;font-size:13px;color:var(--gold);z-index:2}
+    .tmpl-card.selected .card-select-cb{background:var(--gold);border-color:var(--gold);color:var(--navy)}
+    .playlist-card{background:var(--navy2);border:1px solid rgba(255,255,255,.06);border-radius:14px;margin-bottom:14px;padding:14px 18px;cursor:pointer;position:relative;transition:border-color .15s,transform .1s}
+    .playlist-card:active{transform:scale(.985);border-color:var(--gold)}
+    .playlist-name{font-size:18px;font-weight:800;margin-bottom:4px;padding-right:80px}
+    .playlist-meta{font-size:12px;color:var(--gray);font-weight:600}
+    .playlist-actions{position:absolute;top:14px;right:14px;display:flex;gap:6px}
+    .pl-play-row{display:flex;gap:10px;align-items:center;padding:8px 0;border-bottom:1px solid rgba(255,255,255,.06)}
+    .pl-play-row:last-child{border-bottom:none}
+    .pl-play-thumb{width:80px;height:50px;object-fit:cover;border-radius:6px;flex-shrink:0;background:var(--navy2)}
+    .pl-play-info{flex:1;min-width:0}
+    .pl-play-name{font-size:14px;font-weight:700;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+    .pl-play-note{font-size:11px;color:var(--gray);margin-top:2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+    .lib-tab-bar{display:flex;gap:0;border-bottom:1px solid rgba(255,255,255,.1);margin-bottom:14px}
+    .lib-tab{flex:1;padding:10px 4px;text-align:center;font-size:12px;font-weight:800;letter-spacing:.5px;text-transform:uppercase;color:var(--gray);background:none;border:none;border-bottom:2px solid transparent;cursor:pointer;font-family:inherit;transition:color .15s,border-color .15s}
+    .lib-tab.active{color:var(--gold);border-bottom-color:var(--gold)}
+    .select-bar{background:rgba(240,165,0,.08);border:1px solid rgba(240,165,0,.25);border-radius:10px;padding:10px 14px;margin-bottom:10px}
+
+    /* Script panel in canvas */
+    .cv-script{background:rgba(255,255,255,.025);border-top:1px solid rgba(255,255,255,.07)}
+    .cv-script-hdr{display:flex;align-items:center;padding:7px 14px;cursor:pointer}
+    .cv-script-body{padding:0 14px 10px;display:grid;grid-template-columns:1fr 1fr;gap:8px}
+    .cv-script-body.collapsed{display:none}
+    .sf-grp{display:flex;flex-direction:column;gap:3px}
+    .sf-lbl{font-size:9px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;color:var(--gray)}
+    .sf-in{background:rgba(255,255,255,.06);border:1px solid rgba(255,255,255,.1);border-radius:6px;color:var(--white);font-size:12px;padding:5px 8px;font-family:inherit;width:100%;box-sizing:border-box}
+    .sf-in:focus{outline:none;border-color:rgba(240,165,0,.5)}
+    .sf-in::placeholder{color:rgba(255,255,255,.2)}
+    .sf-chips{display:flex;flex-wrap:wrap;gap:3px;margin-top:3px}
+    .sf-chip{background:rgba(255,255,255,.06);border:1px solid rgba(255,255,255,.1);border-radius:4px;color:var(--gray);font-size:9px;font-weight:700;padding:2px 5px;cursor:pointer;font-family:inherit}
+    .sf-chip:active{background:rgba(240,165,0,.18);color:var(--gold)}
+    /* Script editor overlay */
+    .script-ov{position:fixed;inset:0;background:var(--navy);z-index:200;display:flex;flex-direction:column;transform:translateY(100%);transition:transform .25s cubic-bezier(.4,0,.2,1);overflow:hidden}
+    .script-ov.open{transform:none}
+    .script-ov-hdr{background:var(--navy2);border-bottom:2px solid var(--gold);padding:0 12px;height:50px;display:flex;align-items:center;gap:8px;flex-shrink:0}
+    .script-name-in{background:none;border:none;color:var(--white);font-size:16px;font-weight:800;font-family:inherit;flex:1;min-width:0;outline:none}
+    .script-name-in::placeholder{color:rgba(255,255,255,.3)}
+    .script-ov-body{flex:1;overflow-y:auto;padding:10px 14px}
+    .script-ov-foot{background:var(--navy2);border-top:1px solid rgba(255,255,255,.08);padding:10px 14px;flex-shrink:0}
+    .script-entry{background:var(--navy2);border:1px solid rgba(255,255,255,.08);border-radius:12px;margin-bottom:10px;overflow:hidden}
+    .se-head{display:flex;align-items:center;gap:8px;padding:10px 12px 6px}
+    .se-num{color:var(--gold);font-size:22px;font-weight:900;min-width:28px;flex-shrink:0}
+    .se-thumb{width:70px;height:44px;object-fit:cover;border-radius:5px;flex-shrink:0;background:rgba(255,255,255,.04)}
+    .se-name{flex:1;font-size:13px;font-weight:700;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+    .se-btns{display:flex;gap:3px;flex-shrink:0}
+    .se-btn{background:rgba(255,255,255,.07);border:1px solid rgba(255,255,255,.1);border-radius:6px;color:var(--gray);font-size:11px;font-weight:700;padding:3px 7px;cursor:pointer;font-family:inherit}
+    .se-btn:active{background:rgba(240,165,0,.15);color:var(--gold)}
+    .se-fields{display:grid;grid-template-columns:1fr 1fr;gap:6px;padding:0 12px 10px}
+    .script-card{background:var(--navy2);border:1px solid rgba(255,255,255,.06);border-radius:14px;margin-bottom:12px;padding:14px 18px;cursor:pointer;position:relative;transition:border-color .15s}
+    .script-card:active{border-color:var(--gold)}
+    .script-card-name{font-size:17px;font-weight:800;margin-bottom:3px;padding-right:80px}
+    .script-card-meta{font-size:12px;color:var(--gray);font-weight:600}
+  </style>
+</head>
+<body>
+
+<!-- HEADER -->
+<div class="hdr">
+  <div class="hdr-txt">
+    <div style="display:flex;align-items:center;gap:8px">
+      <div class="logo">BLITZ<span>IQ</span></div>
+      <span style="background:var(--gold);color:var(--navy);font-size:9px;font-weight:900;letter-spacing:1.5px;padding:2px 7px;border-radius:10px;text-transform:uppercase">Beta</span>
+    </div>
+    <div class="hdr-sub">Play Diagram Library</div>
+  </div>
+  <button onclick="openFeedback()" style="margin-left:auto;background:rgba(255,255,255,0.08);border:1px solid rgba(255,255,255,0.2);color:var(--grayl);border-radius:8px;padding:6px 12px;font-size:11px;font-weight:700;cursor:pointer;font-family:inherit;letter-spacing:.5px">&#128172; Feedback</button>
+</div>
+
+<!-- SCREEN 1 — TEMPLATE LIBRARY -->
+<div class="screen active" id="screen1">
+  <p class="sc-title">Play Library</p>
+  <p class="sc-sub">Draw, save, and reuse formations, plays, and motions</p>
+  <div class="action-row" style="gap:8px;flex-wrap:wrap">
+    <button class="act-pri" onclick="openNewTemplate()">+ New Play</button>
+    <button class="act-sec" id="selectModeBtn" onclick="toggleSelectMode()">&#9776; Select</button>
+    <button class="act-sec" id="playlistTabBtn" onclick="showPlaylists()">&#9654; Playlists</button>
+    <button class="act-sec" id="scriptsTabBtn" onclick="showScripts()">&#128203; Scripts</button>
+  </div>
+  <div id="selectBar" style="display:none;align-items:center;gap:8px;padding:8px 0;flex-wrap:wrap">
+    <span id="selectCount" style="color:var(--gold);font-size:13px;font-weight:700">0 selected</span>
+    <button class="act-pri" style="font-size:12px;padding:7px 14px" onclick="createPlaylistFromSelected()">+ New Playlist</button>
+    <button class="act-sec" style="font-size:12px;padding:7px 14px" onclick="addToExistingPlaylist()">Add to Playlist</button>
+    <button class="act-sec" style="font-size:12px;padding:7px 14px;margin-left:auto" onclick="cancelSelectMode()">Cancel</button>
+  </div>
+  <div id="templateList"></div>
+  <div id="playlistList" style="display:none"></div>
+  <div id="scriptList" style="display:none"></div>
+</div>
+
+<!-- LOADING -->
+<div class="load-ov" id="loadOv">
+  <div class="spinner"></div>
+  <div class="load-txt" id="loadTxt">Loading…</div>
+</div>
+
+<!-- PLAY CANVAS OVERLAY -->
+<div class="canvas-ov" id="canvasOv">
+  <div class="canvas-hdr">
+    <div>
+      <div class="canvas-hdr-title">&#9999; Draw Play</div>
+      <div class="canvas-hdr-sub" id="canvasSubTitle">New Template</div>
+    </div>
+    <div class="canvas-btns">
+      <button class="cbtn-clear" id="flipBtn" onclick="flipCanvas()" title="Mirror play left/right" style="display:none">&#8596; Flip</button>
+      <button class="cbtn-clear" onclick="clearCanvas()">Clear</button>
+      <button class="cbtn-save" onclick="saveCanvas()">Save</button>
+      <button class="cbtn-close" onclick="printPlayCard()" title="Print play card">&#128438;</button>
+      <button class="cbtn-save" onclick="sharePlayCard()" style="background:rgba(240,165,0,.18);border:1.5px solid rgba(240,165,0,.5);color:var(--gold)">&#11014; Share</button>
+      <button class="cbtn-close" onclick="closeCanvas()">&#10005;</button>
+    </div>
+  </div>
+
+  <div class="cv-def-call" id="cvDefCall">
+    <div class="cv-def-cov" id="cvDefCov"></div>
+    <div class="cv-def-blitz" id="cvDefBlitz"></div>
+  </div>
+
+  <div class="canvas-wrap">
+    <canvas id="playCanvas"></canvas>
+  </div>
+  <div class="canvas-toolbar">
+    <div class="mode-row">
+      <button class="mode-btn active" id="modePlaceBtn" onclick="setCanvasMode('place',this)">&#127952; Place Players</button>
+      <button class="mode-btn" id="modeDrawBtn" onclick="setCanvasMode('draw',this)">&#9998; Draw Routes</button>
+      <button class="collapse-btn" id="toolCollapseBtn" onclick="toggleCanvasTools()" title="Show/hide tools">&#8963;</button>
+    </div>
+    <div class="toolbar-body collapsed" id="toolbarBody">
+    <div id="placePanel">
+      <div class="preset-section">
+        <div class="preset-row">
+          <span class="preset-lbl">DEF</span>
+          <button class="pbtn-preset" onclick="placePreset('4-3')">4-3</button>
+          <button class="pbtn-preset" onclick="placePreset('3-4')">3-4</button>
+          <button class="pbtn-preset" onclick="placePreset('3-3-5')">3-3-5 Stack</button>
+        </div>
+        <div class="preset-row">
+          <span class="preset-lbl">OFF</span>
+          <button class="pbtn-preset" onclick="placePreset('pro-set')">Pro Set</button>
+          <button class="pbtn-preset" onclick="placePreset('trips')">Trips</button>
+          <button class="pbtn-preset" onclick="placePreset('spread')">Spread</button>
+          <button class="pbtn-preset" onclick="placePreset('i-form')">I-Form</button>
+          <button class="pbtn-preset" onclick="placePreset('empty')">Empty</button>
+          <span id="customOffPresets"></span>
+          <button class="pbtn-preset" style="background:rgba(240,165,0,.1);border-color:rgba(240,165,0,.4);color:var(--gold)" onclick="openSaveFormationModal()" title="Save current offense as a reusable preset">+ Save</button>
+        </div>
+        <div class="preset-row">
+          <span class="preset-lbl">BALL</span>
+          <button class="pbtn-preset hash-btn" data-hash="left" onclick="setHash('left',this)">&#8592; L Hash</button>
+          <button class="pbtn-preset hash-btn selected" data-hash="mid" onclick="setHash('mid',this)">Mid</button>
+          <button class="pbtn-preset hash-btn" data-hash="right" onclick="setHash('right',this)">R Hash &#8594;</button>
+        </div>
+      </div>
+      <div class="player-panel-row">
+        <span class="player-panel-lbl">OFF</span>
+        <button class="pbtn off" onclick="selectSymbol('QB','off',this)">QB</button>
+        <button class="pbtn off" onclick="selectSymbol('RB','off',this)">RB</button>
+        <button class="pbtn off" onclick="selectSymbol('FB','off',this)">FB</button>
+        <button class="pbtn off" onclick="selectSymbol('WR','off',this)">WR</button>
+        <button class="pbtn off" onclick="selectSymbol('TE','off',this)">TE</button>
+        <button class="pbtn off" onclick="selectSymbol('OL','off',this)">OL</button>
+        <button class="pbtn off center" onclick="selectSymbol('C','off',this)">C</button>
+      </div>
+      <div class="player-panel-row">
+        <span class="player-panel-lbl">DEF</span>
+        <button class="pbtn" onclick="selectSymbol('DE','def',this)">DE</button>
+        <button class="pbtn" onclick="selectSymbol('DT','def',this)">DT</button>
+        <button class="pbtn" onclick="selectSymbol('NT','def',this)">NT</button>
+        <button class="pbtn" onclick="selectSymbol('LB','def',this)">LB</button>
+        <button class="pbtn" onclick="selectSymbol('MLB','def',this)">MLB</button>
+        <button class="pbtn" onclick="selectSymbol('CB','def',this)">CB</button>
+        <button class="pbtn" onclick="selectSymbol('SS','def',this)">SS</button>
+        <button class="pbtn" onclick="selectSymbol('FS','def',this)">FS</button>
+        <button class="pbtn" onclick="selectSymbol('NB','def',this)">NB</button>
+      </div>
+      <div style="font-size:10px;color:var(--gray);padding:2px 0">Tap symbol → tap field to place &nbsp;·&nbsp; Tap placed player to select &nbsp;·&nbsp; Drag to move</div>
+    </div>
+    <div id="drawPanel" style="display:none">
+      <div class="draw-row">
+        <button class="clr-btn active" style="background:#ffffff" onclick="setDrawColor('#ffffff',this)" title="White"></button>
+        <button class="clr-btn" style="background:#f0a500" onclick="setDrawColor('#f0a500',this)" title="Gold"></button>
+        <button class="clr-btn" style="background:#ef4444" onclick="setDrawColor('#ef4444',this)" title="Red"></button>
+        <button class="clr-btn" style="background:#60a5fa" onclick="setDrawColor('#60a5fa',this)" title="Blue"></button>
+        <button class="clr-btn" style="background:#22c55e" onclick="setDrawColor('#22c55e',this)" title="Green"></button>
+        <div class="tool-sep"></div>
+        <button class="ctool-btn active" onclick="setDrawTool('pen',this)">&#9998; Draw</button>
+        <button class="ctool-btn" onclick="setDrawTool('erase',this)">&#9633; Erase</button>
+        <button class="ctool-btn" onclick="undoRoute()" title="Undo last stroke">&#8617; Undo</button>
+        <div class="tool-sep"></div>
+        <button class="cw-btn active" onclick="setDrawWidth(3,this)">&#11835;</button>
+        <button class="cw-btn" onclick="setDrawWidth(6,this)">&#9135;</button>
+        <button class="cw-btn" onclick="setDrawWidth(12,this)">&#9644;</button>
+      </div>
+    </div>
+    </div>
+  </div>
+  <div class="cv-assign" id="cvAssignPanel">
+    <div class="cv-assign-hdr" onclick="toggleAssignPanel()">
+      <span style="font-size:9px;letter-spacing:1.5px;text-transform:uppercase;font-weight:800;color:var(--gray)">Rush / Coverage</span>
+      <span id="assignToggleBtn" style="font-size:11px;color:var(--gray)">&#9660;</span>
+    </div>
+    <div id="cvAssignBody"></div>
+  </div>
+  <!-- SCRIPT NOTES PANEL -->
+  <div class="cv-script" id="cvScriptPanel">
+    <div class="cv-script-hdr" onclick="toggleScriptPanel()">
+      <span style="font-size:9px;letter-spacing:1.5px;text-transform:uppercase;font-weight:800;color:var(--gray);flex:1">&#128203; Script Notes</span>
+      <span id="scriptPanelToggleBtn" style="font-size:11px;color:var(--gray)">&#9660;</span>
+    </div>
+    <div class="cv-script-body collapsed" id="cvScriptBody">
+      <div class="sf-grp">
+        <label class="sf-lbl">Personnel</label>
+        <input class="sf-in" id="sf_personnel" placeholder="e.g. 11">
+        <div class="sf-chips">
+          <button class="sf-chip" onclick="sfChip('sf_personnel','11')">11</button>
+          <button class="sf-chip" onclick="sfChip('sf_personnel','12')">12</button>
+          <button class="sf-chip" onclick="sfChip('sf_personnel','21')">21</button>
+          <button class="sf-chip" onclick="sfChip('sf_personnel','22')">22</button>
+          <button class="sf-chip" onclick="sfChip('sf_personnel','10')">10</button>
+        </div>
+      </div>
+      <div class="sf-grp">
+        <label class="sf-lbl">Down &amp; Distance</label>
+        <input class="sf-in" id="sf_downDist" placeholder="e.g. 3rd&amp;Long">
+        <div class="sf-chips">
+          <button class="sf-chip" onclick="sfChip('sf_downDist','1st&10')">1st&amp;10</button>
+          <button class="sf-chip" onclick="sfChip('sf_downDist','2nd&Med')">2nd&amp;Med</button>
+          <button class="sf-chip" onclick="sfChip('sf_downDist','3rd&Long')">3rd&amp;Long</button>
+          <button class="sf-chip" onclick="sfChip('sf_downDist','3rd&Short')">3rd&amp;Short</button>
+          <button class="sf-chip" onclick="sfChip('sf_downDist','4th&Goal')">4th&amp;Goal</button>
+        </div>
+      </div>
+      <div class="sf-grp">
+        <label class="sf-lbl">Situation</label>
+        <input class="sf-in" id="sf_situation" placeholder="e.g. Red Zone">
+        <div class="sf-chips">
+          <button class="sf-chip" onclick="sfChip('sf_situation','Red Zone')">Red Zone</button>
+          <button class="sf-chip" onclick="sfChip('sf_situation','2-Min')">2-Min</button>
+          <button class="sf-chip" onclick="sfChip('sf_situation','Backed Up')">Backed Up</button>
+          <button class="sf-chip" onclick="sfChip('sf_situation','3rd Down')">3rd Down</button>
+          <button class="sf-chip" onclick="sfChip('sf_situation','Opening')">Opening</button>
+        </div>
+      </div>
+      <div class="sf-grp">
+        <label class="sf-lbl">Defensive Call</label>
+        <input class="sf-in" id="sf_defCall" placeholder="e.g. Cover 2">
+      </div>
+      <div class="sf-grp" style="grid-column:1/-1">
+        <label class="sf-lbl">Notes</label>
+        <textarea class="sf-in" id="sf_notes" rows="2" placeholder="Additional notes…" style="resize:none;height:48px"></textarea>
+      </div>
+    </div>
+  </div>
+  <button class="cv-del-player" id="cvDeletePlayerBtn" style="display:none" onclick="deleteSelectedPlayer()">&#10005; Delete</button>
+</div>
+
+<!-- MODAL: SAVE TEMPLATE -->
+<div class="modal-ov" id="mSaveTemplate">
+  <div class="modal-sheet">
+    <div class="modal-handle"></div>
+    <div class="modal-hdr">
+      <span class="modal-title">Name This Template</span>
+      <button class="modal-x" onclick="closeModal('mSaveTemplate')">&#10005;</button>
+    </div>
+    <div class="modal-body">
+      <div class="fld">
+        <label class="fld-lbl">Template Name *</label>
+        <input class="fld-in" id="tmplNameIn" placeholder="e.g. Trips Right vs Cover 3" type="text">
+        <div class="chips">
+          <button class="chip" onclick="fillFld('tmplNameIn','Trips Right')">Trips Right</button>
+          <button class="chip" onclick="fillFld('tmplNameIn','Trips Left')">Trips Left</button>
+          <button class="chip" onclick="fillFld('tmplNameIn','Gun Spread')">Gun Spread</button>
+          <button class="chip" onclick="fillFld('tmplNameIn','Pro Set')">Pro Set</button>
+          <button class="chip" onclick="fillFld('tmplNameIn','Empty Backfield')">Empty</button>
+          <button class="chip" onclick="fillFld('tmplNameIn','I-Form')">I-Form</button>
+        </div>
+      </div>
+      <div class="fld">
+        <label class="fld-lbl">Notes (optional)</label>
+        <textarea class="fld-ta" id="tmplNotesIn" placeholder="e.g. Use Cover 3 vs any trips formation. Watch for bubble screen."></textarea>
+      </div>
+    </div>
+    <div class="modal-foot">
+      <button class="btn-cancel" onclick="closeModal('mSaveTemplate')">Cancel</button>
+      <button class="btn-save" onclick="confirmSaveTemplate()">Save Template</button>
+    </div>
+  </div>
+</div>
+
+<div class="modal-ov" id="mSaveFormation">
+  <div class="modal-sheet">
+    <div class="modal-handle"></div>
+    <div class="modal-hdr">
+      <span class="modal-title">Save Offensive Formation</span>
+      <button class="modal-x" onclick="closeModal('mSaveFormation')">&#10005;</button>
+    </div>
+    <div class="modal-body">
+      <div class="fld">
+        <label class="fld-lbl">Formation Name *</label>
+        <input class="fld-in" id="formationNameIn" placeholder="e.g. Gun Trips Right" type="text">
+        <div class="chips">
+          <button class="chip" onclick="fillFld('formationNameIn','Pistol')">Pistol</button>
+          <button class="chip" onclick="fillFld('formationNameIn','Wing T')">Wing T</button>
+          <button class="chip" onclick="fillFld('formationNameIn','Single Back')">Single Back</button>
+          <button class="chip" onclick="fillFld('formationNameIn','Ace')">Ace</button>
+          <button class="chip" onclick="fillFld('formationNameIn','Bunch')">Bunch</button>
+          <button class="chip" onclick="fillFld('formationNameIn','Diamond')">Diamond</button>
+        </div>
+      </div>
+    </div>
+    <div class="modal-foot">
+      <button class="btn-cancel" onclick="closeModal('mSaveFormation')">Cancel</button>
+      <button class="btn-save" onclick="confirmSaveFormation()">Save Formation</button>
+    </div>
+  </div>
+</div>
+
+<!-- MODAL: NAME PLAYLIST -->
+<div class="modal-ov" id="mNamePlaylist">
+  <div class="modal-sheet">
+    <div class="modal-handle"></div>
+    <div class="modal-hdr">
+      <span class="modal-title" id="mNamePlaylistTitle">New Playlist</span>
+      <button class="modal-x" onclick="closeModal('mNamePlaylist')">&#10005;</button>
+    </div>
+    <div class="modal-body">
+      <div class="fld">
+        <label class="fld-lbl">Playlist Name *</label>
+        <input class="fld-in" id="playlistNameIn" placeholder="e.g. 3rd Down Defense" type="text">
+        <div class="chips">
+          <button class="chip" onclick="fillFld('playlistNameIn','Red Zone')">Red Zone</button>
+          <button class="chip" onclick="fillFld('playlistNameIn','3rd Down')">3rd Down</button>
+          <button class="chip" onclick="fillFld('playlistNameIn','2-Minute')">2-Minute</button>
+          <button class="chip" onclick="fillFld('playlistNameIn','Goal Line')">Goal Line</button>
+          <button class="chip" onclick="fillFld('playlistNameIn','Opening Script')">Opening Script</button>
+        </div>
+      </div>
+    </div>
+    <div class="modal-foot">
+      <button class="btn-cancel" onclick="closeModal('mNamePlaylist')">Cancel</button>
+      <button class="btn-save" onclick="confirmCreatePlaylist()">Save Playlist</button>
+    </div>
+  </div>
+</div>
+
+<!-- MODAL: VIEW PLAYLIST -->
+<div class="modal-ov" id="mViewPlaylist">
+  <div class="modal-sheet" style="max-height:90vh;overflow:hidden;display:flex;flex-direction:column">
+    <div class="modal-handle"></div>
+    <div class="modal-hdr" style="flex-shrink:0">
+      <span class="modal-title" id="mViewPlaylistTitle">Playlist</span>
+      <button class="modal-x" onclick="closeModal('mViewPlaylist')">&#10005;</button>
+    </div>
+    <div class="modal-body" id="mViewPlaylistBody" style="overflow-y:auto;flex:1;padding-top:4px"></div>
+    <div class="modal-foot" style="flex-shrink:0;gap:8px;flex-wrap:wrap">
+      <button class="btn-cancel" onclick="closeModal('mViewPlaylist')">Close</button>
+      <button class="btn-save" onclick="printPlaylist()" style="background:rgba(255,255,255,0.1);border-color:rgba(255,255,255,0.3);color:#fff">&#128438; Print</button>
+      <button class="btn-save" onclick="printCallSheet(_viewPlaylistId)" style="background:rgba(96,165,250,.15);border-color:rgba(96,165,250,.4);color:var(--blue)">&#128203; Call Sheet</button>
+    </div>
+  </div>
+</div>
+
+<!-- MODAL: ADD TO EXISTING PLAYLIST -->
+<div class="modal-ov" id="mAddToPlaylist">
+  <div class="modal-sheet">
+    <div class="modal-handle"></div>
+    <div class="modal-hdr">
+      <span class="modal-title">Add to Playlist</span>
+      <button class="modal-x" onclick="closeModal('mAddToPlaylist')">&#10005;</button>
+    </div>
+    <div class="modal-body" id="mAddToPlaylistBody"></div>
+    <div class="modal-foot">
+      <button class="btn-cancel" onclick="closeModal('mAddToPlaylist')">Cancel</button>
+    </div>
+  </div>
+</div>
+
+<!-- SCRIPT EDITOR OVERLAY -->
+<div class="script-ov" id="scriptEditorOv">
+  <div class="script-ov-hdr">
+    <input class="script-name-in" id="scriptNameIn" placeholder="Script name…">
+    <button onclick="saveAndCloseScriptEditor()" style="background:var(--gold);border:none;border-radius:8px;color:var(--navy);font-size:12px;font-weight:800;padding:6px 14px;cursor:pointer;font-family:inherit;flex-shrink:0">Save</button>
+    <button onclick="printCurrentScript()" style="background:rgba(255,255,255,.07);border:1px solid rgba(255,255,255,.12);border-radius:8px;color:var(--grayl);font-size:14px;padding:6px 10px;cursor:pointer;font-family:inherit;flex-shrink:0" title="Print script">&#128438;</button>
+    <button onclick="closeScriptEditor()" style="background:rgba(255,255,255,.07);border:1px solid rgba(255,255,255,.12);border-radius:8px;color:var(--grayl);font-size:14px;padding:6px 10px;cursor:pointer;font-family:inherit;flex-shrink:0">&#10005;</button>
+  </div>
+  <div class="script-ov-body" id="scriptEditorBody">
+    <div class="empty" style="padding:30px 0"><div class="empty-icon">&#128203;</div><div class="empty-txt">No plays yet.<br>Tap <strong>+ Add Play</strong> below.</div></div>
+  </div>
+  <div class="script-ov-foot">
+    <button onclick="openPlayPicker()" style="width:100%;padding:14px;background:var(--gold);border:none;border-radius:12px;color:var(--navy);font-size:15px;font-weight:800;cursor:pointer;font-family:inherit">+ Add Play</button>
+  </div>
+</div>
+
+<!-- MODAL: PLAY PICKER -->
+<div class="modal-ov" id="mPlayPicker">
+  <div class="modal-sheet">
+    <div class="modal-handle"></div>
+    <div class="modal-hdr">
+      <span class="modal-title">Choose a Play</span>
+      <button class="modal-x" onclick="closeModal('mPlayPicker')">&#10005;</button>
+    </div>
+    <div class="modal-body" id="mPlayPickerBody" style="padding-top:4px"></div>
+    <div class="modal-foot">
+      <button class="btn-cancel" onclick="closeModal('mPlayPicker')">Cancel</button>
+    </div>
+  </div>
+</div>
+
+<!-- TOAST -->
+<div class="toast" id="toastEl"></div>
+
+<!-- PRINT PAGE -->
+<div id="printPage"></div>
+
+<script>
+// ── STORAGE ───────────────────────────────────────────────────────────────────
+const SKEY = 'blitziq_templates_v1';
+let DB = { templates: [] };
+
+function loadDB() {
+  try { const r = localStorage.getItem(SKEY); if (r) DB = JSON.parse(r); } catch(e) {}
+  if(!DB.templates) DB.templates=[];
+  if(!DB.customPresets) DB.customPresets=[];
+  if(!DB.playlists) DB.playlists=[];
+  if(!DB.scripts) DB.scripts=[];
+  // Migrate: ensure all IDs are strings (numeric IDs from older saves would break strict equality)
+  DB.templates.forEach(t=>{ if(typeof t.id!=='string') t.id=String(t.id); });
+  DB.customPresets.forEach(cp=>{ if(typeof cp.id!=='string') cp.id=String(cp.id); });
+  DB.playlists.forEach(pl=>{ if(typeof pl.id!=='string') pl.id=String(pl.id); });
+  DB.scripts.forEach(sc=>{ if(typeof sc.id!=='string') sc.id=String(sc.id); });
+  saveDB();
+}
+function saveDB() {
+  const json = JSON.stringify(DB);
+  try {
+    localStorage.setItem(SKEY, json);
+  } catch(e) {
+    // Quota exceeded — retry without route image data to save at least player positions
+    const compact = {...DB, templates: DB.templates.map(t=>({...t,cvRoutes:null,cvStrokes:[]}))};
+    try { localStorage.setItem(SKEY, JSON.stringify(compact)); } catch(e2) {}
+    showToast('Storage full — routes not saved, player positions kept');
+  }
+}
+function uid() { return String(Date.now() * 1000 + Math.floor(Math.random() * 999)); }
+function fillFld(id,val){ document.getElementById(id).value=val; }
+function openModal(id) { document.getElementById(id).classList.add('open'); document.body.style.overflow='hidden'; }
+function closeModal(id){ document.getElementById(id).classList.remove('open'); document.body.style.overflow=''; }
+function openFeedback(){ window.open('https://forms.gle/Ty5E7rFWvYERbEJ98','_blank'); }
+function showLoad(msg){ document.getElementById('loadTxt').textContent=msg||'Loading…'; document.getElementById('loadOv').classList.add('open'); }
+function hideLoad(){ document.getElementById('loadOv').classList.remove('open'); }
+
+// ── TEMPLATE LIBRARY ─────────────────────────────────────────────────────────
+let cvEditingId = null;
+let _selectMode = false;
+let _selectedIds = new Set();
+let _libTab = 'plays'; // 'plays' | 'playlists'
+let _viewPlaylistId = null;
+
+function renderLibrary() {
+  const el = document.getElementById('templateList');
+  if (!DB.templates.length) {
+    el.innerHTML = `<div class="empty">
+      <div class="empty-icon">&#9999;</div>
+      <div class="empty-txt">No plays yet.<br>Tap <strong>+ New Play</strong> to draw your first play.</div>
+    </div>`;
+    return;
+  }
+  el.innerHTML = DB.templates.map(t => {
+    const date = t.createdAt ? new Date(t.createdAt).toLocaleDateString('en-US',{month:'short',day:'numeric',year:'numeric'}) : '';
+    const sel = _selectedIds.has(t.id);
+    const cardClick = _selectMode ? `toggleSelectPlay('${t.id}')` : `openTemplate('${t.id}')`;
+    return `<div class="tmpl-card${sel?' selected':''}" id="card-${t.id}" onclick="${cardClick}">
+      ${_selectMode ? `<div class="card-select-cb">${sel?'&#10003;':''}</div>` : ''}
+      ${t.thumbnail ? `<img src="${t.thumbnail}" class="play-thumb" alt="${esc(t.name)}">` : ''}
+      <div class="tmpl-info">
+        <div class="card-name-sm">${esc(t.name)}</div>
+        ${!_selectMode ? `<button class="del-btn" onclick="deleteTemplate('${t.id}',event)" title="Delete">&#10005;</button>
+        <button class="edit-btn" onclick="renameTemplate('${t.id}',event)" title="Rename">&#9998;</button>` : ''}
+        ${t.notes ? `<div class="card-note">${esc(t.notes)}</div>` : ''}
+        ${date ? `<div class="card-meta">${date}</div>` : ''}
+      </div>
+    </div>`;
+  }).join('');
+}
+
+function toggleSelectMode(){
+  _selectMode=true; _selectedIds.clear();
+  document.getElementById('selectBar').style.display='flex';
+  document.getElementById('selectModeBtn').style.display='none';
+  updateSelectCount();
+  renderLibrary();
+}
+function cancelSelectMode(){
+  _selectMode=false; _selectedIds.clear();
+  document.getElementById('selectBar').style.display='none';
+  document.getElementById('selectModeBtn').style.display='';
+  document.getElementById('playlistTabBtn').textContent='&#9654; Playlists';
+  document.getElementById('playlistTabBtn').onclick=showPlaylists;
+  document.getElementById('scriptsTabBtn').textContent='&#128203; Scripts';
+  document.getElementById('scriptsTabBtn').onclick=showScripts;
+  renderLibrary();
+}
+function toggleSelectPlay(id){
+  if(_selectedIds.has(id)) _selectedIds.delete(id); else _selectedIds.add(id);
+  updateSelectCount();
+  renderLibrary();
+}
+function updateSelectCount(){
+  document.getElementById('selectCount').textContent=`${_selectedIds.size} selected`;
+}
+
+function showPlays(){
+  _libTab='plays';
+  document.getElementById('templateList').style.display='';
+  document.getElementById('playlistList').style.display='none';
+  document.getElementById('scriptList').style.display='none';
+  document.getElementById('selectModeBtn').style.display=_selectMode?'none':'';
+  document.getElementById('playlistTabBtn').textContent='&#9654; Playlists';
+  document.getElementById('playlistTabBtn').onclick=showPlaylists;
+  document.getElementById('scriptsTabBtn').textContent='&#128203; Scripts';
+  document.getElementById('scriptsTabBtn').onclick=showScripts;
+  renderLibrary();
+}
+function showPlaylists(){
+  _libTab='playlists';
+  cancelSelectMode();
+  document.getElementById('templateList').style.display='none';
+  document.getElementById('playlistList').style.display='';
+  document.getElementById('scriptList').style.display='none';
+  document.getElementById('selectModeBtn').style.display='none';
+  document.getElementById('playlistTabBtn').textContent='&#8592; All Plays';
+  document.getElementById('playlistTabBtn').onclick=showPlays;
+  document.getElementById('scriptsTabBtn').textContent='&#128203; Scripts';
+  document.getElementById('scriptsTabBtn').onclick=showScripts;
+  renderPlaylists();
+}
+
+function renderPlaylists(){
+  const el=document.getElementById('playlistList');
+  if(!DB.playlists.length){
+    el.innerHTML=`<div class="empty"><div class="empty-icon">&#9654;</div><div class="empty-txt">No playlists yet.<br>Select plays and tap <strong>+ New Playlist</strong>.</div></div>`;
+    return;
+  }
+  el.innerHTML=DB.playlists.map(pl=>{
+    const count=pl.playIds.length;
+    const date=pl.createdAt?new Date(pl.createdAt).toLocaleDateString('en-US',{month:'short',day:'numeric',year:'numeric'}):'';
+    return `<div class="playlist-card" onclick="viewPlaylist('${pl.id}')">
+      <div class="playlist-name">${esc(pl.name)}</div>
+      <div class="playlist-meta">${count} play${count===1?'':'s'}${date?' &nbsp;·&nbsp; '+date:''}</div>
+      <div class="playlist-actions">
+        <button class="edit-btn" onclick="renamePlaylist('${pl.id}',event)" title="Rename">&#9998;</button>
+        <button class="del-btn" onclick="deletePlaylist('${pl.id}',event)" title="Delete">&#10005;</button>
+      </div>
+    </div>`;
+  }).join('');
+}
+
+function createPlaylistFromSelected(){
+  if(_selectedIds.size===0){ showToast('Select at least one play'); return; }
+  document.getElementById('playlistNameIn').value='';
+  document.getElementById('playlistNameIn').classList.remove('err');
+  document.getElementById('mNamePlaylistTitle').textContent='New Playlist';
+  window._pendingPlaylistIds=[..._selectedIds];
+  window._pendingPlaylistMode='create';
+  openModal('mNamePlaylist');
+}
+function addToExistingPlaylist(){
+  if(_selectedIds.size===0){ showToast('Select at least one play'); return; }
+  if(!DB.playlists.length){ showToast('No playlists yet — create one first'); return; }
+  const body=document.getElementById('mAddToPlaylistBody');
+  body.innerHTML=`<div style="padding:4px 0">`+DB.playlists.map(pl=>`
+    <div onclick="doAddToPlaylist('${pl.id}')" style="padding:14px 18px;border-bottom:1px solid rgba(255,255,255,.06);cursor:pointer;font-size:15px;font-weight:700">
+      ${esc(pl.name)} <span style="color:var(--gray);font-size:12px;font-weight:600">${pl.playIds.length} plays</span>
+    </div>`).join('')+`</div>`;
+  openModal('mAddToPlaylist');
+}
+function doAddToPlaylist(plId){
+  const pl=DB.playlists.find(p=>p.id===plId);
+  if(!pl) return;
+  let added=0;
+  _selectedIds.forEach(id=>{ if(!pl.playIds.includes(id)){ pl.playIds.push(id); added++; } });
+  saveDB(); closeModal('mAddToPlaylist');
+  cancelSelectMode();
+  showToast(`${added} play${added===1?'':'s'} added to "${pl.name}"`);
+}
+function confirmCreatePlaylist(){
+  const inp=document.getElementById('playlistNameIn');
+  const name=inp.value.trim();
+  if(!name){ inp.classList.add('err'); return; }
+  const ids=window._pendingPlaylistIds||[];
+  const pl={id:uid(),name,playIds:[...ids],createdAt:Date.now()};
+  DB.playlists.unshift(pl);
+  saveDB();
+  closeModal('mNamePlaylist');
+  cancelSelectMode();
+  showToast(`Playlist "${name}" created`);
+}
+function renamePlaylist(id,e){
+  e.stopPropagation();
+  const pl=DB.playlists.find(p=>p.id===id);
+  if(!pl) return;
+  const name=prompt('Rename playlist:',pl.name);
+  if(name&&name.trim()){ pl.name=name.trim(); saveDB(); renderPlaylists(); }
+}
+function deletePlaylist(id,e){
+  e.stopPropagation();
+  if(!confirm('Delete this playlist? Plays are not deleted.')) return;
+  DB.playlists=DB.playlists.filter(p=>p.id!==id);
+  saveDB(); renderPlaylists();
+}
+function viewPlaylist(id){
+  const pl=DB.playlists.find(p=>p.id===id);
+  if(!pl) return;
+  _viewPlaylistId=id;
+  document.getElementById('mViewPlaylistTitle').textContent=pl.name;
+  const plays=pl.playIds.map(pid=>DB.templates.find(t=>t.id===pid)).filter(Boolean);
+  const body=document.getElementById('mViewPlaylistBody');
+  if(!plays.length){
+    body.innerHTML=`<div style="padding:20px;color:var(--gray);text-align:center">No plays in this playlist</div>`;
+  } else {
+    body.innerHTML=plays.map((t,i)=>`
+      <div class="pl-play-row">
+        <span style="color:var(--gold);font-size:13px;font-weight:800;width:20px;flex-shrink:0">${i+1}</span>
+        ${t.thumbnail?`<img src="${t.thumbnail}" class="pl-play-thumb">`:`<div class="pl-play-thumb"></div>`}
+        <div class="pl-play-info">
+          <div class="pl-play-name">${esc(t.name)}</div>
+          ${t.notes?`<div class="pl-play-note">${esc(t.notes)}</div>`:''}
+        </div>
+        <button onclick="openPlayFromPlaylist('${t.id}')" style="background:rgba(240,165,0,.12);border:1px solid rgba(240,165,0,.4);color:var(--gold);border-radius:8px;padding:5px 10px;font-size:11px;font-weight:700;cursor:pointer;font-family:inherit;flex-shrink:0">Edit</button>
+      </div>`).join('');
+  }
+  openModal('mViewPlaylist');
+}
+function openPlayFromPlaylist(id){
+  closeModal('mViewPlaylist');
+  openTemplate(id);
+}
+function printPlaylist(){
+  const pl=DB.playlists.find(p=>p.id===_viewPlaylistId);
+  if(!pl) return;
+  const plays=pl.playIds.map(pid=>DB.templates.find(t=>t.id===pid)).filter(Boolean);
+  const pages=plays.map((t,i)=>`
+    <div style="page-break-after:always">
+      <div class="pp-h">
+        <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:4px">
+          <div><div class="pp-logo">BLITZ<span>IQ</span></div></div>
+          <div style="text-align:right"><div class="pp-form-name">${esc(pl.name)} — ${i+1} of ${plays.length}</div></div>
+        </div>
+        <hr class="pp-divider">
+        <div style="text-align:center;margin-bottom:8px"><div class="pp-form-name">${esc(t.name)}</div></div>
+        ${t.thumbnail?`<img src="${t.thumbnail}" style="width:100%;max-width:500px;display:block;margin:0 auto;border:1.5px solid #ccc;border-radius:4px">`:''}
+        ${t.notes?`<div class="pp-reason" style="margin-top:10px">${esc(t.notes)}</div>`:''}
+        <div class="pp-footer">BlitzIQ &nbsp;·&nbsp; ${esc(pl.name)} &nbsp;·&nbsp; richderrik58.github.io/blitzIQ</div>
+      </div>
+    </div>`).join('');
+  document.getElementById('printPage').innerHTML=`<style>@page{size:letter;margin:.45in}</style>${pages}`;
+  window.print();
+  setTimeout(()=>{ document.getElementById('printPage').innerHTML=''; }, 800);
+}
+
+function openNewTemplate() {
+  cvEditingId = null;
+  document.getElementById('canvasSubTitle').textContent = 'New Template';
+  window._cvFormName = '';
+  openCanvas();
+}
+
+function openTemplate(id) {
+  cvEditingId = id;
+  const t = DB.templates.find(t => t.id === id);
+  document.getElementById('canvasSubTitle').textContent = t ? t.name : 'Edit Template';
+  window._cvFormName = t ? t.name : '';
+  openCanvas();
+}
+
+function deleteTemplate(id, e) {
+  e.stopPropagation();
+  if (!confirm('Delete this template? This cannot be undone.')) return;
+  DB.templates = DB.templates.filter(t => t.id !== id);
+  saveDB();
+  renderLibrary();
+}
+
+function renameTemplate(id, e) {
+  e.stopPropagation();
+  const t = DB.templates.find(t => t.id === id);
+  if (!t) return;
+  const name = prompt('Rename template:', t.name);
+  if (name && name.trim()) { t.name = name.trim(); saveDB(); renderLibrary(); }
+}
+
+function confirmSaveTemplate() {
+  const nameIn = document.getElementById('tmplNameIn');
+  const name = nameIn.value.trim();
+  if (!name) { nameIn.classList.add('err'); nameIn.focus(); return; }
+  nameIn.classList.remove('err');
+  const notes = document.getElementById('tmplNotesIn').value.trim();
+  const pending = window._pendingSave || {};
+  const t = {
+    id: uid(),
+    name,
+    notes,
+    cvPlayers: pending.cvPlayers || [],
+    cvStrokes: pending.cvStrokes || [],
+    cvRoutes: pending.cvRoutes || null,
+    cvPresetType: pending.cvPresetType || null,
+    cvHashPos: pending.cvHashPos || 'mid',
+    thumbnail: pending.thumbnail || null,
+    sf: pending.sf || {},
+    createdAt: Date.now(),
+  };
+  DB.templates.unshift(t);
+  saveDB();
+  closeModal('mSaveTemplate');
+  closeCanvas();
+  renderLibrary();
+  showToast('Template saved');
+  window._pendingSave = null;
+}
+
+// ── ESCAPE HTML ───────────────────────────────────────────────────────────────
+function esc(s){return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');}
+
+// ── CANVAS STATE ──────────────────────────────────────────────────────────────
+let cvCtx=null, cvDrawing=false, cvColor='#ef4444', cvWidth=3, cvTool='pen', cvLX=0, cvLY=0;
+let cvMode='place';
+let cvPlayers=[];
+let cvHashPos='mid';
+let cvSelectedSymbol=null;
+let cvSelectedPlayer=null;
+let cvDragging=null;
+let cvDragOffX=0, cvDragOffY=0;
+let cvRouteCanvas=null;
+let cvRouteUndoStack=[];
+let cvStrokes=[];
+let cvCurrentStroke=null;
+let cvLegacyCanvas=null;
+let cvPid=0;
+let CV_R=10;
+
+// ── FIELD DRAWING ─────────────────────────────────────────────────────────────
+function drawField(ctx,w,h){
+  ctx.fillStyle='#15391f';
+  ctx.fillRect(0,0,w,h);
+
+  const los=h*0.62;
+  const ppy=los/20; // pixels per yard (20 yards above LOS fills the defense zone)
+
+  // Yard lines at 5-yard intervals (defense side: 5–20, offense side: 5)
+  ctx.strokeStyle='rgba(255,255,255,0.30)';
+  ctx.lineWidth=1;
+  for(let yd=5;yd<=20;yd+=5){
+    const y=los-yd*ppy;
+    ctx.beginPath();ctx.moveTo(0,y);ctx.lineTo(w,y);ctx.stroke();
+  }
+  const y5off=los+5*ppy;
+  if(y5off<h){ ctx.beginPath();ctx.moveTo(0,y5off);ctx.lineTo(w,y5off);ctx.stroke(); }
+
+  // Vertical field stripes
+  ctx.strokeStyle='rgba(255,255,255,0.20)';
+  [0.1,0.3,0.5,0.7,0.9].forEach(x=>{
+    ctx.beginPath();ctx.moveTo(w*x,0);ctx.lineTo(w*x,h);ctx.stroke();
+  });
+
+  // High school hashes (1/3 from each sideline)
+  const hL=w*0.333, hR=w*0.667;
+  ctx.strokeStyle='rgba(255,255,255,0.15)';
+  ctx.lineWidth=1;
+  ctx.setLineDash([4,6]);
+  ctx.beginPath();ctx.moveTo(hL,0);ctx.lineTo(hL,h);ctx.stroke();
+  ctx.beginPath();ctx.moveTo(hR,0);ctx.lineTo(hR,h);ctx.stroke();
+  ctx.setLineDash([]);
+  // Perpendicular hash ticks at each yard line
+  ctx.strokeStyle='rgba(255,255,255,0.70)';
+  ctx.lineWidth=1.5;
+  for(let yd=5;yd<=20;yd+=5){
+    const y=los-yd*ppy;
+    ctx.beginPath();ctx.moveTo(hL,y-9);ctx.lineTo(hL,y+9);ctx.stroke();
+    ctx.beginPath();ctx.moveTo(hR,y-9);ctx.lineTo(hR,y+9);ctx.stroke();
+  }
+  if(y5off<h){
+    ctx.beginPath();ctx.moveTo(hL,y5off-9);ctx.lineTo(hL,y5off+9);ctx.stroke();
+    ctx.beginPath();ctx.moveTo(hR,y5off-9);ctx.lineTo(hR,y5off+9);ctx.stroke();
+  }
+
+  // Yard number labels on both sidelines
+  ctx.font='bold 11px sans-serif';
+  ctx.textBaseline='middle';
+  for(let yd=5;yd<=20;yd+=5){
+    const y=los-yd*ppy;
+    ctx.fillStyle='rgba(255,255,255,0.45)';
+    ctx.textAlign='left';  ctx.fillText(yd,5,y);
+    ctx.textAlign='right'; ctx.fillText(yd,w-5,y);
+  }
+  ctx.textBaseline='alphabetic'; ctx.textAlign='left';
+
+  // LOS (dashed gold, no label)
+  ctx.strokeStyle='rgba(240,165,0,0.55)';
+  ctx.lineWidth=1;
+  ctx.setLineDash([10,5]);
+  ctx.beginPath();ctx.moveTo(0,los);ctx.lineTo(w,los);ctx.stroke();
+  ctx.setLineDash([]);
+
+  // Zone tints
+  ctx.fillStyle='rgba(255,255,255,0.04)';
+  ctx.fillRect(0,0,w,los);
+  ctx.fillStyle='rgba(240,165,0,0.07)';
+  ctx.fillRect(0,los,w,h-los);
+
+  // Ball marker at current hash position on LOS
+  const bx=hashCenterX(w);
+  ctx.save();
+  ctx.shadowColor='rgba(240,165,0,0.6)';
+  ctx.shadowBlur=6;
+  ctx.fillStyle='#f0a500';
+  ctx.beginPath();ctx.arc(bx,los,5,0,Math.PI*2);ctx.fill();
+  ctx.restore();
+  ctx.strokeStyle='rgba(255,255,255,0.9)';
+  ctx.lineWidth=1.5;
+  ctx.beginPath();ctx.arc(bx,los,5,0,Math.PI*2);ctx.stroke();
+}
+
+function renderStrokes(){
+  if(!cvRouteCanvas) return;
+  const dpr=window.devicePixelRatio||1;
+  const cw=cvRouteCanvas.width/dpr, ch=cvRouteCanvas.height/dpr;
+  const rCtx=cvRouteCanvas.getContext('2d');
+  rCtx.setTransform(dpr,0,0,dpr,0,0);
+  rCtx.clearRect(0,0,cw,ch);
+  if(cvLegacyCanvas) rCtx.drawImage(cvLegacyCanvas,0,0,cvLegacyCanvas.width,cvLegacyCanvas.height,0,0,cw,ch);
+  const all=cvCurrentStroke?[...cvStrokes,cvCurrentStroke]:cvStrokes;
+  all.forEach(s=>{
+    if(!s.pts.length) return;
+    let pts=s.pts;
+    if(s.attachedTo){
+      const pl=cvPlayers.find(p=>p.id===s.attachedTo);
+      if(pl){const ox=pl.x-s.attachOrigin.x,oy=pl.y-s.attachOrigin.y;pts=pts.map(pt=>({x:pt.x+ox,y:pt.y+oy}));}
+    }
+    rCtx.save();
+    if(s.tool==='erase'){
+      rCtx.globalCompositeOperation='destination-out';
+      rCtx.fillStyle='rgba(0,0,0,1)';
+      pts.forEach(pt=>{rCtx.beginPath();rCtx.arc(pt.x,pt.y,s.width*2.5,0,Math.PI*2);rCtx.fill();});
+    } else {
+      rCtx.strokeStyle=s.color; rCtx.lineWidth=s.width;
+      rCtx.lineCap='round'; rCtx.lineJoin='round';
+      if(pts.length===1){
+        rCtx.beginPath();rCtx.arc(pts[0].x,pts[0].y,s.width/2,0,Math.PI*2);
+        rCtx.fillStyle=s.color;rCtx.fill();
+      } else {
+        rCtx.beginPath();rCtx.moveTo(pts[0].x,pts[0].y);
+        pts.slice(1).forEach(pt=>rCtx.lineTo(pt.x,pt.y));
+        rCtx.stroke();
+      }
+    }
+    rCtx.restore();
+  });
+}
+
+function redrawAll(){
+  if(!cvCtx) return;
+  const canvas=document.getElementById('playCanvas');
+  const dpr=window.devicePixelRatio||1;
+  const cw=canvas.width/dpr, ch=canvas.height/dpr;
+  const los=ch*0.62;
+  cvCtx.clearRect(0,0,cw,ch);
+  drawField(cvCtx,cw,ch);
+  if(window._cvDefCall) drawCoverageZones(cvCtx,cw,ch,los,window._cvDefCall.coverage);
+  renderStrokes();
+  if(cvRouteCanvas) cvCtx.drawImage(cvRouteCanvas,0,0,cw,ch);
+  cvPlayers.forEach(p=>drawPlayerSymbol(cvCtx,p));
+  if(window._cvDefCall){
+    drawRushArrows(cvCtx, identifyRushers(window._cvDefCall.blitz||''));
+  }
+}
+
+function drawCoverageZones(ctx,cw,ch,los,coverage){
+  if(!coverage) return;
+  const cov=coverage.toUpperCase();
+  const deepBase=Math.max(los-100,8);
+  const undBase=deepBase;
+  const undTop=los-8;
+  ctx.save();
+  ctx.textAlign='center';
+
+  const str=window._cvStrength||'right';
+  const sLabel=`Strong ${str==='right'?'Right':'Left'}`;
+  const wLabel=`Weak ${str==='right'?'Left':'Right'}`;
+
+  if(/COVER.?3|TRIPS.BRACKET/.test(cov)){
+    const thirds=str==='right'?[
+      {x1:0,       x2:cw*0.33, label:`Weak CB — ${wLabel} ⅓`},
+      {x1:cw*0.33, x2:cw*0.67, label:'FS — Middle ⅓'},
+      {x1:cw*0.67, x2:cw,      label:`Strong CB — ${sLabel} ⅓`},
+    ]:[
+      {x1:0,       x2:cw*0.33, label:`Strong CB — ${sLabel} ⅓`},
+      {x1:cw*0.33, x2:cw*0.67, label:'FS — Middle ⅓'},
+      {x1:cw*0.67, x2:cw,      label:`Weak CB — ${wLabel} ⅓`},
+    ];
+    thirds.forEach((z,i)=>{
+      ctx.fillStyle='rgba(96,165,250,0.10)';
+      ctx.fillRect(z.x1,8,z.x2-z.x1,deepBase-8);
+      if(i>0){
+        ctx.strokeStyle='rgba(96,165,250,0.25)';
+        ctx.lineWidth=1; ctx.setLineDash([5,4]);
+        ctx.beginPath(); ctx.moveTo(z.x1,8); ctx.lineTo(z.x1,deepBase); ctx.stroke();
+        ctx.setLineDash([]);
+      }
+      ctx.fillStyle='rgba(96,165,250,0.6)';
+      ctx.font='bold 10px -apple-system,sans-serif';
+      ctx.fillText(z.label,(z.x1+z.x2)/2, 22);
+    });
+    const blitz=(window._cvDefCall?.blitz||'').toUpperCase();
+    const weakBlitz=/WEAK|EDGE|BOUNDARY|WILL|OLB/.test(blitz)&&/BLITZ|PRESSURE|FIRE/.test(blitz);
+    const strongBlitz=/STRONG|SAM/.test(blitz)&&/BLITZ|PRESSURE|FIRE/.test(blitz);
+    const mlbBlitz=/MIKE|MLB|A.GAP|DOUBLE/.test(blitz)&&/BLITZ|PRESSURE|FIRE/.test(blitz);
+    let wFlat = weakBlitz   ? `${wLabel} Flat (NB/CB rotates)` : `${wLabel} Flat — Will LB`;
+    let wHook = (weakBlitz||mlbBlitz) ? 'MLB — Expand Hook' : 'Hook — Will LB';
+    let sHook = (strongBlitz||mlbBlitz) ? 'MLB — Expand Hook' : 'Hook — Sam LB';
+    let sFlat = strongBlitz ? `${sLabel} Flat (NB/CB rotates)` : `${sLabel} Flat — SS`;
+    const und=str==='right'?[
+      {x1:0,       x2:cw*0.22, label:wFlat,  alert:weakBlitz},
+      {x1:cw*0.22, x2:cw*0.48, label:wHook,  alert:weakBlitz||mlbBlitz},
+      {x1:cw*0.48, x2:cw*0.78, label:sHook,  alert:strongBlitz||mlbBlitz},
+      {x1:cw*0.78, x2:cw,      label:sFlat,  alert:strongBlitz},
+    ]:[
+      {x1:0,       x2:cw*0.22, label:sFlat,  alert:strongBlitz},
+      {x1:cw*0.22, x2:cw*0.48, label:sHook,  alert:strongBlitz||mlbBlitz},
+      {x1:cw*0.48, x2:cw*0.78, label:wHook,  alert:weakBlitz||mlbBlitz},
+      {x1:cw*0.78, x2:cw,      label:wFlat,  alert:weakBlitz},
+    ];
+    und.forEach(z=>{
+      ctx.fillStyle=z.alert?'rgba(245,158,11,0.12)':'rgba(34,197,94,0.09)';
+      ctx.fillRect(z.x1,undBase,z.x2-z.x1,undTop-undBase);
+      ctx.fillStyle=z.alert?'rgba(245,158,11,0.75)':'rgba(34,197,94,0.55)';
+      ctx.font=z.alert?'bold 8px -apple-system,sans-serif':'8px -apple-system,sans-serif';
+      const mid=(undBase+undTop)/2;
+      const parts=z.label.split(' — ');
+      if(parts.length>1){
+        ctx.fillText(parts[0],(z.x1+z.x2)/2,mid);
+        ctx.fillText(parts[1],(z.x1+z.x2)/2,mid+11);
+      } else {
+        ctx.fillText(z.label,(z.x1+z.x2)/2,mid+4);
+      }
+    });
+
+  } else if(/COVER.?4|QUARTER/.test(cov)){
+    const quarters=[
+      {x1:0,       x2:cw*0.25, label:'CB — Deep ¼'},
+      {x1:cw*0.25, x2:cw*0.50, label:'SS — Deep ¼'},
+      {x1:cw*0.50, x2:cw*0.75, label:'FS — Deep ¼'},
+      {x1:cw*0.75, x2:cw,      label:'CB — Deep ¼'},
+    ];
+    quarters.forEach((z,i)=>{
+      ctx.fillStyle='rgba(96,165,250,0.10)';
+      ctx.fillRect(z.x1,8,z.x2-z.x1,deepBase-8);
+      if(i>0){
+        ctx.strokeStyle='rgba(96,165,250,0.25)'; ctx.lineWidth=1; ctx.setLineDash([5,4]);
+        ctx.beginPath(); ctx.moveTo(z.x1,8); ctx.lineTo(z.x1,deepBase); ctx.stroke();
+        ctx.setLineDash([]);
+      }
+      ctx.fillStyle='rgba(96,165,250,0.6)';
+      ctx.font='bold 10px -apple-system,sans-serif';
+      ctx.fillText(z.label,(z.x1+z.x2)/2,22);
+    });
+
+  } else if(/COVER.?2/.test(cov)){
+    [[0,cw*0.5,'SS — Deep Half'],[cw*0.5,cw,'FS — Deep Half']].forEach((z,i)=>{
+      ctx.fillStyle='rgba(96,165,250,0.10)';
+      ctx.fillRect(z[0],8,z[1]-z[0],deepBase-8);
+      if(i>0){
+        ctx.strokeStyle='rgba(96,165,250,0.25)'; ctx.lineWidth=1; ctx.setLineDash([5,4]);
+        ctx.beginPath(); ctx.moveTo(z[0],8); ctx.lineTo(z[0],deepBase); ctx.stroke();
+        ctx.setLineDash([]);
+      }
+      ctx.fillStyle='rgba(96,165,250,0.6)';
+      ctx.font='bold 10px -apple-system,sans-serif';
+      ctx.fillText(z[2],(z[0]+z[1])/2,22);
+    });
+    [{x1:0,x2:cw*0.25,lbl:'FLAT'},{x1:cw*0.25,x2:cw*0.5,lbl:'HOOK'},{x1:cw*0.5,x2:cw*0.75,lbl:'HOOK'},{x1:cw*0.75,x2:cw,lbl:'FLAT'}].forEach(z=>{
+      ctx.fillStyle='rgba(34,197,94,0.09)';
+      ctx.fillRect(z.x1,undBase,z.x2-z.x1,undTop-undBase);
+      ctx.fillStyle='rgba(34,197,94,0.55)'; ctx.font='9px -apple-system,sans-serif';
+      ctx.fillText(z.lbl,(z.x1+z.x2)/2,(undBase+undTop)/2+4);
+    });
+
+  } else if(/COVER.?0|MAN|MAX/.test(cov)){
+    ctx.fillStyle='rgba(239,68,68,0.55)';
+    ctx.font='bold 11px -apple-system,sans-serif';
+    ctx.fillText('MAN COVERAGE — Every Defender Locked',cw/2,22);
+  }
+
+  ctx.restore();
+}
+
+function drawGapLabels(ctx,cw,los){
+  ctx.save();
+  ctx.textAlign='center'; ctx.textBaseline='middle';
+  ctx.font='bold 9px -apple-system,sans-serif';
+  const cx=cw/2;
+  [
+    {x:cx,          label:'A'}, {x:cx-cw*0.09,  label:'A'},
+    {x:cx+cw*0.145, label:'B'}, {x:cx-cw*0.145, label:'B'},
+    {x:cx+cw*0.225, label:'C'}, {x:cx-cw*0.225, label:'C'},
+    {x:cx+cw*0.31,  label:'D'}, {x:cx-cw*0.31,  label:'D'},
+  ].forEach(g=>{
+    ctx.fillStyle='rgba(240,165,0,0.5)';
+    ctx.fillText(g.label, g.x, los+11);
+  });
+
+  if(window._cvTeDetected){
+    ctx.textAlign='right'; ctx.textBaseline='top';
+    ctx.font='bold 9px -apple-system,sans-serif';
+    const txt='TE DETECTED — gaps adjusted';
+    const tw=ctx.measureText(txt).width;
+    ctx.fillStyle='rgba(240,165,0,0.18)';
+    ctx.beginPath();
+    if(ctx.roundRect) ctx.roundRect(cw-tw-20,4,tw+14,16,4);
+    else ctx.rect(cw-tw-20,4,tw+14,16);
+    ctx.fill();
+    ctx.strokeStyle='rgba(240,165,0,0.55)';
+    ctx.lineWidth=1;
+    ctx.stroke();
+    ctx.fillStyle='rgba(240,165,0,0.95)';
+    ctx.fillText(txt, cw-8, 6);
+  }
+
+  const gapWarns=getGapWarnings(window._cvGapMap||new Map());
+  if(gapWarns.length){
+    ctx.textAlign='left'; ctx.textBaseline='top';
+    ctx.font='bold 9px -apple-system,sans-serif';
+    gapWarns.forEach((w,i)=>{
+      const txt=`⚠ ${w}`;
+      const tw=ctx.measureText(txt).width;
+      ctx.fillStyle='rgba(239,68,68,0.2)';
+      ctx.fillRect(4, 4+i*14, tw+10, 13);
+      ctx.fillStyle='#ef4444';
+      ctx.fillText(txt, 8, 5+i*14);
+    });
+  }
+
+  ctx.restore();
+}
+
+function drawPlayerSymbol(ctx,p){
+  const r=p.team==='def'?CV_R-4:CV_R;
+  ctx.save();
+  ctx.font=`bold ${p.team==='def'?7:8}px -apple-system,Helvetica,sans-serif`;
+  ctx.textAlign='center'; ctx.textBaseline='middle';
+
+  if(cvSelectedPlayer===p||cvDragging===p){
+    ctx.beginPath();
+    ctx.arc(p.x,p.y,r+6,0,Math.PI*2);
+    ctx.strokeStyle='#f0a500';
+    ctx.lineWidth=2.5;
+    ctx.setLineDash(cvDragging===p?[5,3]:[]);
+    ctx.stroke();
+    ctx.setLineDash([]);
+  }
+
+  if(p.team==='off'){
+    ctx.beginPath();
+    if(p.type==='C'){
+      ctx.rect(p.x-r,p.y-r,r*2,r*2);
+    } else {
+      ctx.arc(p.x,p.y,r,0,Math.PI*2);
+    }
+    ctx.fillStyle='rgba(34,197,94,0.90)';
+    ctx.fill();
+    ctx.strokeStyle='rgba(0,0,0,0.4)';
+    ctx.lineWidth=1.5;
+    ctx.stroke();
+    ctx.fillStyle='#ffffff';
+    ctx.fillText(p.type,p.x,p.y+0.5);
+  } else {
+    ctx.beginPath();
+    ctx.arc(p.x,p.y,r,0,Math.PI*2);
+    ctx.fillStyle='rgba(0,10,28,0.92)';
+    ctx.fill();
+    ctx.strokeStyle='#ffffff';
+    ctx.lineWidth=1.5;
+    ctx.stroke();
+    ctx.fillStyle='#ffffff';
+    ctx.fillText(p.type,p.x,p.y+0.5);
+  }
+  ctx.restore();
+}
+
+function playerAt(x,y){
+  for(let i=cvPlayers.length-1;i>=0;i--){
+    const p=cvPlayers[i];
+    if((x-p.x)**2+(y-p.y)**2<=(CV_R+6)**2) return p;
+  }
+  return null;
+}
+function nearestPlayer(x,y,r){
+  let best=null,bestD=r*r;
+  cvPlayers.forEach(p=>{
+    const d=(p.x-x)*(p.x-x)+(p.y-y)*(p.y-y);
+    if(d<bestD){bestD=d;best=p;}
+  });
+  return best;
+}
+
+// ── MODE & SYMBOL SELECTION ────────────────────────────────────────────────────
+function setCanvasMode(mode,btn){
+  cvMode=mode;
+  document.querySelectorAll('.mode-btn').forEach(b=>b.classList.remove('active'));
+  btn.classList.add('active');
+  document.getElementById('placePanel').style.display=mode==='place'?'':'none';
+  document.getElementById('drawPanel').style.display=mode==='draw'?'':'none';
+  document.getElementById('playCanvas').style.cursor=mode==='draw'?(cvTool==='erase'?'cell':'crosshair'):'default';
+  if(mode==='draw'){ cvSelectedPlayer=null; hidePlayerDeleteBtn(); redrawAll(); }
+}
+
+function selectSymbol(type,team,btn){
+  cvSelectedSymbol={type,team};
+  document.querySelectorAll('.pbtn').forEach(b=>b.classList.remove('selected'));
+  btn.classList.add('selected');
+}
+
+// ── FORMATION PRESETS ─────────────────────────────────────────────────────────
+const CV_PRESETS = {
+  '4-3':[
+    {type:'DE',  team:'def', xf:0.33, yd:-1.5},
+    {type:'DT',  team:'def', xf:0.45, yd:-1.5},
+    {type:'DT',  team:'def', xf:0.59, yd:-1.5},
+    {type:'DE',  team:'def', xf:0.67, yd:-1.5},
+    {type:'LB',  team:'def', xf:0.45, yd:-4.5},
+    {type:'MLB', team:'def', xf:0.50, yd:-4.5},
+    {type:'LB',  team:'def', xf:0.59, yd:-4.5},
+    {type:'CB',  team:'def', xf:0.06, yd:-4.5},
+    {type:'SS',  team:'def', xf:0.70, yd:-8},
+    {type:'FS',  team:'def', xf:0.50, yd:-10},
+    {type:'CB',  team:'def', xf:0.94, yd:-4.5},
+  ],
+  '3-4':[
+    {type:'DE',  team:'def', xf:0.36, yd:-1.5},
+    {type:'NT',  team:'def', xf:0.50, yd:-1.5},
+    {type:'DE',  team:'def', xf:0.64, yd:-1.5},
+    {type:'LB',  team:'def', xf:0.32, yd:-3.5},
+    {type:'LB',  team:'def', xf:0.38, yd:-5},
+    {type:'LB',  team:'def', xf:0.62, yd:-5},
+    {type:'LB',  team:'def', xf:0.68, yd:-3.5},
+    {type:'CB',  team:'def', xf:0.06, yd:-5},
+    {type:'SS',  team:'def', xf:0.70, yd:-8},
+    {type:'FS',  team:'def', xf:0.50, yd:-10},
+    {type:'CB',  team:'def', xf:0.94, yd:-5},
+  ],
+  '3-3-5':[
+    {type:'DE',  team:'def', xf:0.38, yd:-1.5},
+    {type:'NT',  team:'def', xf:0.50, yd:-1.5},
+    {type:'DE',  team:'def', xf:0.62, yd:-1.5},
+    {type:'LB',  team:'def', xf:0.32, yd:-4},
+    {type:'MLB', team:'def', xf:0.50, yd:-5},
+    {type:'LB',  team:'def', xf:0.68, yd:-4},
+    {type:'CB',  team:'def', xf:0.06, yd:-5},
+    {type:'NB',  team:'def', xf:0.75, yd:-5},
+    {type:'SS',  team:'def', xf:0.70, yd:-8},
+    {type:'FS',  team:'def', xf:0.50, yd:-10},
+    {type:'CB',  team:'def', xf:0.94, yd:-5},
+  ],
+  'pro-set':[
+    {type:'WR', team:'off', xf:0.13, yd:1},
+    {type:'WR', team:'off', xf:0.26, yd:2},
+    {type:'OL', team:'off', xf:0.436,yd:1},
+    {type:'OL', team:'off', xf:0.468,yd:1},
+    {type:'C',  team:'off', xf:0.50, yd:1},
+    {type:'OL', team:'off', xf:0.532,yd:1},
+    {type:'OL', team:'off', xf:0.564,yd:1},
+    {type:'TE', team:'off', xf:0.596,yd:1},
+    {type:'WR', team:'off', xf:0.87, yd:2},
+    {type:'QB', team:'off', xf:0.50, yd:3.5},
+    {type:'RB', team:'off', xf:0.62, yd:10.5},
+  ],
+  'trips':[
+    {type:'WR', team:'off', xf:0.13, yd:1},
+    {type:'OL', team:'off', xf:0.436,yd:1},
+    {type:'OL', team:'off', xf:0.468,yd:1},
+    {type:'C',  team:'off', xf:0.50, yd:1},
+    {type:'OL', team:'off', xf:0.532,yd:1},
+    {type:'OL', team:'off', xf:0.564,yd:1},
+    {type:'QB', team:'off', xf:0.50, yd:5},
+    {type:'RB', team:'off', xf:0.62, yd:5},
+    {type:'WR', team:'off', xf:0.72, yd:2},
+    {type:'WR', team:'off', xf:0.80, yd:2},
+    {type:'WR', team:'off', xf:0.87, yd:1},
+  ],
+  'spread':[
+    {type:'WR', team:'off', xf:0.13, yd:1},
+    {type:'WR', team:'off', xf:0.26, yd:2},
+    {type:'OL', team:'off', xf:0.436,yd:1},
+    {type:'OL', team:'off', xf:0.468,yd:1},
+    {type:'C',  team:'off', xf:0.50, yd:1},
+    {type:'OL', team:'off', xf:0.532,yd:1},
+    {type:'OL', team:'off', xf:0.564,yd:1},
+    {type:'WR', team:'off', xf:0.74, yd:2},
+    {type:'WR', team:'off', xf:0.87, yd:1},
+    {type:'QB', team:'off', xf:0.50, yd:5},
+    {type:'RB', team:'off', xf:0.62, yd:5},
+  ],
+  'i-form':[
+    {type:'WR', team:'off', xf:0.13, yd:1},
+    {type:'OL', team:'off', xf:0.436,yd:1},
+    {type:'OL', team:'off', xf:0.468,yd:1},
+    {type:'C',  team:'off', xf:0.50, yd:1},
+    {type:'OL', team:'off', xf:0.532,yd:1},
+    {type:'OL', team:'off', xf:0.564,yd:1},
+    {type:'TE', team:'off', xf:0.596,yd:1},
+    {type:'WR', team:'off', xf:0.87, yd:2},
+    {type:'QB', team:'off', xf:0.50, yd:3.5},
+    {type:'FB', team:'off', xf:0.50, yd:5.5},
+    {type:'RB', team:'off', xf:0.50, yd:7.5},
+  ],
+  'empty':[
+    {type:'WR', team:'off', xf:0.13, yd:1},
+    {type:'WR', team:'off', xf:0.26, yd:2},
+    {type:'OL', team:'off', xf:0.436,yd:1},
+    {type:'OL', team:'off', xf:0.468,yd:1},
+    {type:'C',  team:'off', xf:0.50, yd:1},
+    {type:'OL', team:'off', xf:0.532,yd:1},
+    {type:'OL', team:'off', xf:0.564,yd:1},
+    {type:'WR', team:'off', xf:0.74, yd:2},
+    {type:'WR', team:'off', xf:0.82, yd:2},
+    {type:'WR', team:'off', xf:0.87, yd:1},
+    {type:'QB', team:'off', xf:0.50, yd:5},
+  ],
+};
+
+function hashCenterX(cw){
+  if(cvHashPos==='left') return cw*0.333;
+  if(cvHashPos==='right') return cw*0.667;
+  return cw*0.5;
+}
+function updateHashBtns(){
+  document.querySelectorAll('.hash-btn').forEach(b=>{
+    b.classList.toggle('selected', b.dataset.hash===cvHashPos);
+  });
+}
+function shiftRouteCanvas(c,dxPhys){
+  const w=c.width, h=c.height;
+  const ctx=c.getContext('2d');
+  ctx.setTransform(1,0,0,1,0,0);
+  const src=ctx.getImageData(0,0,w,h);
+  const dst=new Uint8ClampedArray(src.data.length);
+  for(let y=0;y<h;y++){
+    for(let x=0;x<w;x++){
+      const nx=x+dxPhys;
+      if(nx<0||nx>=w) continue;
+      const s=(y*w+x)*4, d=(y*w+nx)*4;
+      dst[d]=src.data[s]; dst[d+1]=src.data[s+1];
+      dst[d+2]=src.data[s+2]; dst[d+3]=src.data[s+3];
+    }
+  }
+  ctx.putImageData(new ImageData(dst,w,h),0,0);
+}
+
+function setHash(pos,btn){
+  if(cvHashPos===pos) return;
+  const canvas=document.getElementById('playCanvas');
+  const dpr=window.devicePixelRatio||1;
+  const cw=canvas.width/dpr;
+  const oldHcx=hashCenterX(cw);
+  cvHashPos=pos;
+  const newHcx=hashCenterX(cw);
+  const dx=newHcx-oldHcx;
+  if(dx!==0){
+    const pad=cw*0.04;
+    cvPlayers.forEach(p=>{p.x=Math.round(Math.max(pad,Math.min(cw-pad,p.x+dx)));});
+    cvStrokes.forEach(s=>{
+      if(!s.attachedTo){
+        s.pts=s.pts.map(pt=>({x:Math.max(pad,Math.min(cw-pad,pt.x+dx)),y:pt.y}));
+      }
+    });
+    if(cvLegacyCanvas){
+      const dxPhys=Math.round(dx*dpr);
+      shiftRouteCanvas(cvLegacyCanvas,dxPhys);
+    }
+  }
+  document.querySelectorAll('.hash-btn').forEach(b=>b.classList.remove('selected'));
+  btn.classList.add('selected');
+  redrawAll();
+}
+
+function getOLAnchors(){
+  const canvas=document.getElementById('playCanvas');
+  const dpr=window.devicePixelRatio||1;
+  const olAll=cvPlayers.filter(p=>p.team==='off'&&(p.type==='OL'||p.type==='C'));
+  if(olAll.length<3) return null;
+  const sorted=[...olAll].sort((a,b)=>a.x-b.x);
+  const center=sorted.find(p=>p.type==='C')||sorted[Math.floor(sorted.length/2)];
+  if(!center) return null;
+  const cx=center.x, losY=center.y;
+  const leftOL=sorted.filter(p=>p.x<cx-5).sort((a,b)=>b.x-a.x);
+  const rightOL=sorted.filter(p=>p.x>cx+5).sort((a,b)=>a.x-b.x);
+  const lgx=leftOL[0]?.x??(cx-32);
+  const ltx=leftOL[1]?.x??(cx-64);
+  const rgx=rightOL[0]?.x??(cx+32);
+  const rtx=rightOL[1]?.x??(cx+64);
+  const sp=Math.abs((rtx-ltx)/4);
+  const te=cvPlayers.find(p=>p.team==='off'&&p.type==='TE'&&Math.abs(p.y-losY)<40);
+  return{cx,lgx,ltx,rgx,rtx,tex:te?te.x:null,sp,losY};
+}
+
+function defXFromOL(presetName,pdIndex,anchors,strength){
+  const{cx,lgx,ltx,rgx,rtx,tex,sp}=anchors;
+  const isRight=strength!=='left';
+  const stx=isRight?rtx:ltx;   // strong tackle x
+  const wtx=isRight?ltx:rtx;   // weak tackle x
+  const sgx=isRight?rgx:lgx;   // strong guard x
+  const wgx=isRight?lgx:rgx;   // weak guard x
+  const ss=isRight?1:-1;        // +1 = strong is rightward, -1 = leftward
+  const sw=-ss;
+  const teX=(tex!==null&&((isRight&&tex>cx)||(!isRight&&tex<cx)))?tex:null;
+  const aGapS=(cx+sgx)/2;
+  const aGapW=(wgx+cx)/2;
+  const bGapS=(sgx+stx)/2;
+  const bGapW=(wgx+wtx)/2;
+  const cGapS=teX!==null?(stx+teX)/2:stx+ss*sp*0.8;
+  const cGapW=wtx+sw*sp*0.8;
+  const edgeS=teX!==null?teX+ss*sp*0.8:stx+ss*sp*1.5;
+  const edgeW=wtx+sw*sp*1.5;
+  let x=null;
+  if(presetName==='4-3'){
+    // [0]DE-weak [1]DT-1tech [2]DT-3tech [3]DE-strong [4]Will [5]MLB [6]Sam
+    const pos=[cGapW, cx+sw*sp*0.3, bGapS, cGapS, bGapW, cx, stx+ss*sp*0.4];
+    if(pdIndex<pos.length) x=pos[pdIndex];
+  } else if(presetName==='3-4'){
+    // [0]DE-weak [1]NT [2]DE-strong [3]OLB-weak [4]ILB-weak [5]ILB-strong [6]OLB-strong
+    const pos=[bGapW, cx, bGapS, edgeW, aGapW, aGapS, edgeS];
+    if(pdIndex<pos.length) x=pos[pdIndex];
+  } else if(presetName==='3-3-5'){
+    // [0]DE-weak [1]NT [2]DE-strong [3]LB-weak [4]MLB [5]LB-strong
+    const pos=[bGapW, cx, bGapS, cGapW, cx, cGapS];
+    if(pdIndex<pos.length) x=pos[pdIndex];
+  }
+  return x!==null?Math.round(x):null;
+}
+
+function placePreset(name){
+  if(!cvCtx) return;
+  const canvas=document.getElementById('playCanvas');
+  const dpr=window.devicePixelRatio||1;
+  const cw=canvas.width/dpr, ch=canvas.height/dpr;
+  const los=ch*0.62;
+  const ppy=los/20;
+  const custom=(DB.customPresets||[]).find(cp=>cp.id===name);
+  const preset=custom?custom.players:CV_PRESETS[name];
+  if(!preset) return;
+  const team=preset[0].team;
+  cvPlayers=cvPlayers.filter(p=>p.team!==team);
+  if(team==='def'){
+    const anchors=getOLAnchors();
+    const strength=getFormationStrength(cw);
+    preset.forEach((pd,i)=>{
+      const ox=anchors?defXFromOL(name,i,anchors,strength):null;
+      const x=ox!==null?ox:Math.round(cw*pd.xf);
+      cvPlayers.push({id:++cvPid,type:pd.type,team:pd.team,x,y:Math.round(los+pd.yd*ppy)});
+    });
+    window._cvPresetType=name;
+    window._cvStrength=strength;
+    // SS to strong side; when OL anchors used LBs are already correct so skip full adjust
+    const defNew=cvPlayers.filter(p=>p.team==='def');
+    const ssP=defNew.find(p=>p.type==='SS');
+    const fsP=defNew.find(p=>p.type==='FS');
+    if(ssP) ssP.x=Math.round(cw*(strength==='right'?0.70:0.30));
+    if(fsP) fsP.x=Math.round(cw*0.50);
+    if(!anchors) adjustDefenseToStrength(strength,cw);
+    // Align CBs just inside the outermost offensive WRs
+    const offWRs=cvPlayers.filter(p=>p.team==='off'&&p.type==='WR');
+    if(offWRs.length>=1){
+      const leftWR=offWRs.reduce((a,b)=>b.x<a.x?b:a);
+      const rightWR=offWRs.reduce((a,b)=>b.x>a.x?b:a);
+      const nudge=Math.round(cw*0.025);
+      const defCBs=defNew.filter(p=>p.type==='CB');
+      const sortedCBs=[...defCBs].sort((a,b)=>a.x-b.x);
+      if(sortedCBs.length>=2){
+        sortedCBs[0].x=leftWR.x+nudge;
+        sortedCBs[sortedCBs.length-1].x=rightWR.x-nudge;
+      } else if(sortedCBs.length===1){
+        sortedCBs[0].x=Math.round(cw/2)<sortedCBs[0].x?rightWR.x-nudge:leftWR.x+nudge;
+      }
+    }
+  } else {
+    const hcx=hashCenterX(cw);
+    const pad=cw*0.04;
+    if(cvHashPos==='mid'){
+      preset.forEach(pd=>{
+        cvPlayers.push({id:++cvPid,type:pd.type,team:pd.team,
+          x:Math.round(cw*pd.xf),y:Math.round(los+pd.yd*ppy)});
+      });
+    } else {
+      const isLeft=cvHashPos==='left';
+      // HS field: numbers at ~7 yds from each sideline (7/53.33 ≈ 0.131)
+      const farNum =isLeft?cw*0.87:cw*0.13; // numbers on wide side
+      const nearNum=isLeft?cw*0.13:cw*0.87; // numbers on short side
+      const nearOut=isLeft?cw*0.08:cw*0.92; // just outside near numbers (toward sideline)
+      // field-side WRs sorted outermost first; boundary-side sorted innermost (hash-side) first
+      const wrField=preset.filter(pd=>pd.type==='WR'&&(isLeft?pd.xf>=0.5:pd.xf<=0.5))
+        .sort((a,b)=>isLeft?b.xf-a.xf:a.xf-b.xf);
+      const wrBound=preset.filter(pd=>pd.type==='WR'&&(isLeft?pd.xf<0.5:pd.xf>0.5))
+        .sort((a,b)=>isLeft?b.xf-a.xf:a.xf-b.xf);
+      // field targets: WR1 near far numbers, WR2 splits gap to hash, WR3 splits again
+      const fieldT=[farNum,(farNum+hcx)/2,((farNum+hcx)/2+hcx)/2];
+      // boundary targets: WR1 at near numbers, WR2 just outside numbers
+      const boundT=[nearNum,nearOut];
+      preset.forEach(pd=>{
+        let x;
+        if(pd.type==='WR'){
+          const fi=wrField.indexOf(pd), bi=wrBound.indexOf(pd);
+          if(fi>=0) x=Math.round(fi<fieldT.length?fieldT[fi]:Math.max(pad,Math.min(cw-pad,hcx+(pd.xf-0.5)*cw)));
+          else      x=Math.round(bi<boundT.length?boundT[bi]:Math.max(pad,Math.min(cw-pad,hcx+(pd.xf-0.5)*cw)));
+        } else {
+          x=Math.round(Math.max(pad,Math.min(cw-pad,hcx+(pd.xf-0.5)*cw)));
+        }
+        cvPlayers.push({id:++cvPid,type:pd.type,team:pd.team,x,y:Math.round(los+pd.yd*ppy)});
+      });
+    }
+  }
+  redrawAll();
+}
+
+// ── FORMATION STRENGTH ────────────────────────────────────────────────────────
+function detectStrengthFromName(formName){
+  if(!formName) return null;
+  const n=formName.toUpperCase();
+  if(/ R(?:\s|$)|RT |RIGHT| STRONG R| TREY R| TRIPS R/.test(n)) return 'right';
+  if(/ L(?:\s|$)|LT |LEFT| STRONG L| TREY L| TRIPS L/.test(n)) return 'left';
+  if(/TREY|TRIPS/.test(n)){
+    if(/ R/.test(n)) return 'right';
+    if(/ L/.test(n)) return 'left';
+  }
+  return null;
+}
+
+function detectStrengthFromPlayers(cw){
+  const off=cvPlayers.filter(p=>p.team==='off');
+  const mid=cw/2;
+  const te=off.find(p=>p.type==='TE');
+  if(te) return te.x>=mid?'right':'left';
+  const rWR=off.filter(p=>p.type==='WR'&&p.x>=mid).length;
+  const lWR=off.filter(p=>p.type==='WR'&&p.x<mid).length;
+  if(rWR>lWR) return 'right';
+  if(lWR>rWR) return 'left';
+  const rb=off.find(p=>['RB','HB','FB'].includes(p.type));
+  if(rb) return rb.x>=mid?'right':'left';
+  return 'right';
+}
+
+function getFormationStrength(cw){
+  const fromName=detectStrengthFromName(window._cvFormName||'');
+  return fromName||detectStrengthFromPlayers(cw);
+}
+
+function adjustDefenseToStrength(strength, cw){
+  window._cvStrength=strength;
+  const def=cvPlayers.filter(p=>p.team==='def');
+  const ss=def.find(p=>p.type==='SS');
+  const fs=def.find(p=>p.type==='FS');
+  const lbs=def.filter(p=>['LB','MLB','OLB'].includes(p.type)).sort((a,b)=>a.x-b.x);
+  if(strength==='right'){
+    if(ss) ss.x=Math.round(cw*0.70);
+    if(fs) fs.x=Math.round(cw*0.50);
+  } else {
+    if(ss) ss.x=Math.round(cw*0.30);
+    if(fs) fs.x=Math.round(cw*0.50);
+    if(lbs.length>=2){
+      const will=lbs[0], sam=lbs[lbs.length-1];
+      if(will!==sam){ const tx=will.x; will.x=sam.x; sam.x=tx; }
+    }
+  }
+}
+
+// ── DEFENSIVE ASSIGNMENT ENGINE ───────────────────────────────────────────────
+function identifyRushers(blitz){
+  const b=(blitz||'').toUpperCase();
+  const def=cvPlayers.filter(p=>p.team==='def');
+  const DL=def.filter(p=>['DE','DT','NT'].includes(p.type));
+  const LBs=def.filter(p=>['LB','MLB','OLB'].includes(p.type)).sort((a,c)=>a.x-c.x);
+  const CBs=def.filter(p=>['CB','NB'].includes(p.type)).sort((a,c)=>a.x-c.x);
+  const rushers=new Set(DL.map(p=>p.id));
+  const isBlitz=/BLITZ|PRESSURE|FIRE|OVERLOAD|DOG/.test(b);
+  const isNoBlitz=/NO BLITZ|BASE\s*4/.test(b);
+  if(isNoBlitz) return rushers;
+  if(/MIKE|MLB|A.?GAP/.test(b)&&isBlitz){
+    const mlb=LBs.find(p=>p.type==='MLB')||LBs[Math.floor(LBs.length/2)];
+    if(mlb) rushers.add(mlb.id);
+  }
+  if(/WEAK|WILL|EDGE|BOUNDARY/.test(b)&&isBlitz){
+    const str=window._cvStrength||'right';
+    const weakLB=str==='right'?LBs[0]:LBs[LBs.length-1];
+    if(weakLB) rushers.add(weakLB.id);
+  }
+  if(/SAM|STRONG.SIDE/.test(b)&&isBlitz){
+    const str=window._cvStrength||'right';
+    const samLB=str==='right'?LBs[LBs.length-1]:LBs[0];
+    if(samLB) rushers.add(samLB.id);
+  }
+  if(/DOUBLE|DBL|5.MAN|OVERLOAD/.test(b)){
+    LBs.forEach(p=>rushers.add(p.id));
+  }
+  if(/CORNER/.test(b)&&isBlitz){
+    const str=window._cvStrength||'right';
+    const weakCB=str==='right'?CBs[0]:CBs[CBs.length-1];
+    if(weakCB) rushers.add(weakCB.id);
+  }
+  if(/FIRE.?ZONE/.test(b)){
+    const dropDT=DL.find(p=>p.type==='DT');
+    if(dropDT) rushers.delete(dropDT.id);
+    if(LBs[0]) rushers.add(LBs[0].id);
+  }
+  if(/COVER.?0|DOG/.test(b)&&isBlitz){
+    const mlb=LBs.find(p=>p.type==='MLB')||LBs[Math.floor(LBs.length/2)];
+    if(mlb) rushers.add(mlb.id);
+  }
+  return rushers;
+}
+
+function buildWarnings(rushCount, coverCount, coverage){
+  const cov=coverage.toUpperCase();
+  const warnings=[];
+  if(rushCount>=6) warnings.push({cls:'ca-warn-crit',msg:`🚨 ${rushCount} RUSHERS — only ${coverCount} in coverage. Extremely thin — one missed assignment = touchdown.`});
+  else if(rushCount>=5) warnings.push({cls:'ca-warn-thin',msg:`⚠ ${rushCount} rushers — ${coverCount} in coverage. Thin coverage. Make sure every receiver is accounted for.`});
+  if(/COVER.?0/.test(cov)) warnings.push({cls:'ca-warn-c0',msg:'🚨 COVER 0 — No safety help. Every defender is in man. Maximum risk. One missed tackle = score.'});
+  else if(/COVER.?1/.test(cov)&&rushCount>=5) warnings.push({cls:'ca-warn-info',msg:'FS is the only safety. If he misses his assignment the deep middle is open.'});
+  return warnings;
+}
+
+function drawRushArrows(ctx, rushers){
+  if(!rushers||!rushers.size) return;
+  const canvas=document.getElementById('playCanvas');
+  const cw=canvas.width/(window.devicePixelRatio||1);
+  cvPlayers.filter(p=>p.team==='def'&&rushers.has(p.id)).forEach(p=>{
+    ctx.save();
+    const isEdge=['DE','OLB'].includes(p.type);
+    const dx=isEdge?(p.x>cw/2?-14:14):0;
+    const arrowLen=24;
+    const sx=p.x, sy=p.y+CV_R+2;
+    const ex=p.x+dx, ey=sy+arrowLen;
+    ctx.strokeStyle='#ef4444'; ctx.fillStyle='#ef4444';
+    ctx.lineWidth=2.5; ctx.lineCap='round';
+    ctx.beginPath(); ctx.moveTo(sx,sy); ctx.lineTo(ex,ey); ctx.stroke();
+    const angle=Math.atan2(ey-sy,ex-sx);
+    const hl=9;
+    ctx.beginPath();
+    ctx.moveTo(ex,ey);
+    ctx.lineTo(ex-hl*Math.cos(angle-0.45),ey-hl*Math.sin(angle-0.45));
+    ctx.lineTo(ex-hl*Math.cos(angle+0.45),ey-hl*Math.sin(angle+0.45));
+    ctx.closePath(); ctx.fill();
+    ctx.font='bold 7px -apple-system,sans-serif';
+    ctx.textAlign='center'; ctx.textBaseline='bottom';
+    ctx.fillStyle='#ef4444';
+    ctx.fillText('RUSH',p.x,p.y-CV_R-3);
+    ctx.restore();
+  });
+}
+
+// ── TE DETECTION & GAP ASSIGNMENTS ───────────────────────────────────────────
+function detectTE(){
+  const n=(window._cvFormName||'').toUpperCase();
+  return /\bTE\b|\bWING\b|\bKING\b|\bPRO\b|\bI.?FORM\b|\bTIGHT/.test(n);
+}
+
+function computeGapAssignments(){
+  const preset=window._cvPresetType;
+  const gap=new Map();
+  if(!preset||!['4-3','3-4','3-3-5'].includes(preset)) return gap;
+  const str=window._cvStrength||'right';
+  const te=detectTE();
+  window._cvTeDetected=(te&&preset==='3-4');
+  const def=cvPlayers.filter(p=>p.team==='def');
+  const DEs=def.filter(p=>p.type==='DE').sort((a,b)=>a.x-b.x);
+  const DTs=def.filter(p=>p.type==='DT').sort((a,b)=>a.x-b.x);
+  const NTs=def.filter(p=>p.type==='NT');
+  const LBs=def.filter(p=>['LB','MLB','OLB'].includes(p.type)).sort((a,b)=>a.x-b.x);
+  const sDE=str==='right'?DEs[DEs.length-1]:DEs[0];
+  const wDE=str==='right'?DEs[0]:DEs[DEs.length-1];
+
+  if(preset==='4-3'){
+    if(sDE) gap.set(sDE.id,'C-cnt');
+    if(wDE&&wDE!==sDE) gap.set(wDE.id,'C-cnt');
+    const sDT=DTs.length>=2?(str==='right'?DTs[DTs.length-1]:DTs[0]):null;
+    const wDT=DTs.length>=2?(str==='right'?DTs[0]:DTs[DTs.length-1]):DTs[0];
+    if(sDT) gap.set(sDT.id,'B');
+    if(wDT&&wDT!==sDT) gap.set(wDT.id,'A');
+    const mlb=LBs.find(p=>p.type==='MLB')||LBs[Math.floor(LBs.length/2)];
+    if(mlb) gap.set(mlb.id,'A');
+    const rest=LBs.filter(p=>p!==mlb);
+    const sLB=rest.length?(str==='right'?rest[rest.length-1]:rest[0]):null;
+    const wLB=rest.length?(str==='right'?rest[0]:rest[rest.length-1]):null;
+    if(sLB) gap.set(sLB.id,'B-frc');
+    if(wLB&&wLB!==sLB) gap.set(wLB.id,'B-flt');
+
+  } else if(preset==='3-4'){
+    NTs.forEach(p=>gap.set(p.id,'A'));
+    if(sDE) gap.set(sDE.id,window._cvTeDetected?'C':'B');
+    if(wDE&&wDE!==sDE) gap.set(wDE.id,'B');
+    if(LBs.length>=4){
+      const sOLB=str==='right'?LBs[LBs.length-1]:LBs[0];
+      const wOLB=str==='right'?LBs[0]:LBs[LBs.length-1];
+      const mid=LBs.slice(1,LBs.length-1);
+      const sILB=mid.length?(str==='right'?mid[mid.length-1]:mid[0]):null;
+      const wILB=mid.length?(str==='right'?mid[0]:mid[mid.length-1]):null;
+      if(sOLB) gap.set(sOLB.id,window._cvTeDetected?'D-edge':'C-edge');
+      if(wOLB&&wOLB!==sOLB) gap.set(wOLB.id,'C-edge');
+      if(sILB) gap.set(sILB.id,'B-flow');
+      if(wILB&&wILB!==sILB) gap.set(wILB.id,'A');
+    } else if(LBs.length===3){
+      const sOLB=str==='right'?LBs[LBs.length-1]:LBs[0];
+      const wOLB=str==='right'?LBs[0]:LBs[LBs.length-1];
+      const midLB=LBs[1];
+      if(sOLB) gap.set(sOLB.id,window._cvTeDetected?'D-edge':'C-edge');
+      if(wOLB&&wOLB!==sOLB) gap.set(wOLB.id,'C-edge');
+      if(midLB&&midLB!==sOLB&&midLB!==wOLB) gap.set(midLB.id,'A');
+    }
+
+  } else if(preset==='3-3-5'){
+    NTs.forEach(p=>gap.set(p.id,'A/A'));
+    if(sDE) gap.set(sDE.id,'B-4i');
+    if(wDE&&wDE!==sDE) gap.set(wDE.id,'B-4i');
+    const mlb=LBs.find(p=>p.type==='MLB')||LBs[Math.floor(LBs.length/2)];
+    if(mlb) gap.set(mlb.id,'A-flow');
+    const rest=LBs.filter(p=>p!==mlb);
+    const sOLB=rest.length?(str==='right'?rest[rest.length-1]:rest[0]):null;
+    const wOLB=rest.length?(str==='right'?rest[0]:rest[rest.length-1]):null;
+    if(sOLB) gap.set(sOLB.id,'C-edge');
+    if(wOLB&&wOLB!==sOLB) gap.set(wOLB.id,'C-edge');
+  }
+
+  return gap;
+}
+
+function getGapWarnings(gapMap){
+  if(!window._cvPresetType||!['4-3','3-4','3-3-5'].includes(window._cvPresetType)) return [];
+  if(!gapMap||!gapMap.size) return [];
+  const labels=[...gapMap.values()];
+  const w=[];
+  if(!labels.some(l=>/^A/.test(l))) w.push('GAP A UNCOVERED');
+  if(!labels.some(l=>/^B/.test(l))) w.push('GAP B UNCOVERED');
+  if(!labels.some(l=>/^C/.test(l))) w.push('GAP C UNCOVERED');
+  if(window._cvTeDetected&&!labels.some(l=>/^D/.test(l))) w.push('D GAP (TE EDGE) UNCOVERED');
+  return w;
+}
+
+function toggleAssignPanel(){
+  const body=document.getElementById('cvAssignBody');
+  const btn=document.getElementById('assignToggleBtn');
+  const collapsed=body.classList.toggle('collapsed');
+  btn.innerHTML=collapsed?'&#9658;':'&#9660;';
+}
+
+// ── OPEN / CLOSE / CLEAR / SAVE ───────────────────────────────────────────────
+function openCanvas(onReady){
+  const canvas=document.getElementById('playCanvas');
+  const dpr=window.devicePixelRatio||1;
+  document.getElementById('canvasOv').classList.add('open');
+  document.body.style.overflow='hidden';
+  requestAnimationFrame(()=>{
+    const wrap=document.querySelector('.canvas-wrap');
+    const cw=Math.min(window.innerWidth,640);
+    const ch=Math.max(200, wrap?.clientHeight||window.innerHeight-104);
+    CV_R=10;
+    canvas.width=cw*dpr; canvas.height=ch*dpr;
+    canvas.style.width=cw+'px'; canvas.style.height=ch+'px';
+    cvCtx=canvas.getContext('2d');
+    cvCtx.scale(dpr,dpr);
+
+    cvRouteCanvas=document.createElement('canvas');
+    cvRouteCanvas.width=cw*dpr; cvRouteCanvas.height=ch*dpr;
+    cvRouteUndoStack=[];
+    const rCtx=cvRouteCanvas.getContext('2d');
+    rCtx.scale(dpr,dpr);
+
+    const t = cvEditingId ? DB.templates.find(t=>t.id===cvEditingId) : null;
+    document.getElementById('flipBtn').style.display = t ? '' : 'none';
+    cvPlayers = (t?.cvPlayers||[]).map(p=>({...p}));
+    window._cvPresetType = t?.cvPresetType||null;
+    cvHashPos = t?.cvHashPos||'mid';
+    updateHashBtns();
+    loadScriptFields(t?.sf||null);
+    cvStrokes=(t?.cvStrokes||[]).map(s=>({...s,pts:s.pts.map(pt=>({...pt}))}));
+    cvCurrentStroke=null; cvLegacyCanvas=null;
+
+    if(t?.cvStrokes&&t.cvStrokes.length>0){
+      redrawAll();
+    } else if(t?.cvRoutes){
+      const legCv=document.createElement('canvas');
+      legCv.width=cw*dpr; legCv.height=ch*dpr;
+      const img=new Image();
+      img.onload=()=>{legCv.getContext('2d').drawImage(img,0,0,legCv.width,legCv.height);cvLegacyCanvas=legCv;redrawAll();};
+      img.onerror=()=>redrawAll();
+      img.src=t.cvRoutes;
+    } else {
+      redrawAll();
+    }
+
+    setCanvasMode('place',document.getElementById('modePlaceBtn'));
+    if(onReady) onReady(cw,ch);
+  });
+}
+
+function closeCanvas(){
+  document.getElementById('canvasOv').classList.remove('open');
+  document.getElementById('cvDefCall').classList.remove('show');
+  document.getElementById('canvasSubTitle').textContent='New Template';
+  const ap=document.getElementById('cvAssignPanel');
+  ap.classList.remove('show');
+  const ab=document.getElementById('cvAssignBody');
+  if(ab){ ab.innerHTML=''; ab.classList.remove('collapsed'); }
+  const atb=document.getElementById('assignToggleBtn');
+  if(atb) atb.innerHTML='&#9660;';
+  cvSelectedPlayer=null; hidePlayerDeleteBtn();
+  window._cvDefCall=null; window._cvStrength=null;
+  window._cvFormName=null; window._cvPresetType=null;
+  window._cvTeDetected=false; window._cvGapMap=null;
+  cvEditingId=null;
+  cvStrokes=[]; cvCurrentStroke=null; cvLegacyCanvas=null;
+  cvHashPos='mid'; updateHashBtns();
+  loadScriptFields(null);
+  document.body.style.overflow='';
+}
+
+function flipCanvas(){
+  if(!cvCtx) return;
+  const canvas=document.getElementById('playCanvas');
+  const dpr=window.devicePixelRatio||1;
+  const cw=canvas.width/dpr;
+  cvPlayers.forEach(p=>{ p.x=Math.round(cw-p.x); });
+  cvStrokes.forEach(s=>{
+    s.pts=s.pts.map(pt=>({x:cw-pt.x,y:pt.y}));
+    if(s.attachOrigin) s.attachOrigin={x:cw-s.attachOrigin.x,y:s.attachOrigin.y};
+  });
+  if(cvLegacyCanvas){
+    const rw=cvLegacyCanvas.width, rh=cvLegacyCanvas.height;
+    const lCtx=cvLegacyCanvas.getContext('2d');
+    const src=lCtx.getImageData(0,0,rw,rh);
+    const dst=new Uint8ClampedArray(src.data.length);
+    for(let y=0;y<rh;y++){
+      for(let x=0;x<rw;x++){
+        const s=(y*rw+x)*4, d=(y*rw+(rw-1-x))*4;
+        dst[d]=src.data[s]; dst[d+1]=src.data[s+1];
+        dst[d+2]=src.data[s+2]; dst[d+3]=src.data[s+3];
+      }
+    }
+    lCtx.putImageData(new ImageData(dst,rw,rh),0,0);
+  }
+  redrawAll();
+}
+
+function clearCanvas(){
+  if(!cvCtx) return;
+  cvPlayers=[];
+  cvSelectedSymbol=null;
+  cvSelectedPlayer=null; hidePlayerDeleteBtn();
+  document.querySelectorAll('.pbtn').forEach(b=>b.classList.remove('selected'));
+  cvStrokes=[]; cvCurrentStroke=null; cvLegacyCanvas=null; cvRouteUndoStack=[];
+  if(cvRouteCanvas){
+    const rCtx=cvRouteCanvas.getContext('2d');
+    rCtx.clearRect(0,0,cvRouteCanvas.width,cvRouteCanvas.height);
+  }
+  window._cvPresetType=null; window._cvStrength=null; window._cvTeDetected=false;
+  redrawAll();
+}
+
+function saveCanvas(){
+  if(!cvCtx) return;
+  redrawAll();
+  const canvas=document.getElementById('playCanvas');
+
+  // Build thumbnail
+  const thumbW=320, thumbH=Math.round(canvas.height/(window.devicePixelRatio||1)/(canvas.width/(window.devicePixelRatio||1))*thumbW);
+  const thumb=document.createElement('canvas');
+  thumb.width=thumbW; thumb.height=thumbH||180;
+  thumb.getContext('2d').drawImage(canvas, 0, 0, canvas.width, canvas.height, 0, 0, thumbW, thumb.height);
+  const thumbnailData=thumb.toDataURL('image/jpeg',0.7);
+  const strokesData=cvStrokes.map(s=>({...s,pts:s.pts.map(pt=>({...pt}))}));
+  const playersData=JSON.parse(JSON.stringify(cvPlayers));
+  const presetData=window._cvPresetType||null;
+  const sf=getScriptFields();
+
+  if(cvEditingId){
+    const t=DB.templates.find(t=>t.id===cvEditingId);
+    if(t){
+      t.cvPlayers=playersData;
+      t.cvStrokes=strokesData;
+      t.cvRoutes=null;
+      t.cvPresetType=presetData;
+      t.cvHashPos=cvHashPos;
+      t.thumbnail=thumbnailData;
+      t.sf=sf;
+      saveDB();
+    }
+    closeCanvas();
+    renderLibrary();
+    showToast('Saved');
+  } else {
+    window._pendingSave={ cvPlayers:playersData, cvStrokes:strokesData, cvRoutes:null, cvPresetType:presetData, cvHashPos:cvHashPos, thumbnail:thumbnailData, sf };
+    document.getElementById('tmplNameIn').value='';
+    document.getElementById('tmplNotesIn').value='';
+    document.getElementById('tmplNameIn').classList.remove('err');
+    openModal('mSaveTemplate');
+  }
+}
+
+function toggleCanvasTools(){
+  const body=document.getElementById('toolbarBody');
+  const btn=document.getElementById('toolCollapseBtn');
+  const collapsed=body.classList.toggle('collapsed');
+  btn.innerHTML=collapsed?'&#8963;':'&#8964;';
+}
+
+function resizeCanvas(){
+  if(!cvCtx) return;
+  const canvas=document.getElementById('playCanvas');
+  const wrap=document.querySelector('.canvas-wrap');
+  const dpr=window.devicePixelRatio||1;
+  const cw=Math.min(window.innerWidth,640);
+  const ch=Math.max(200, wrap?.clientHeight||window.innerHeight-104);
+  canvas.width=cw*dpr; canvas.height=ch*dpr;
+  canvas.style.width=cw+'px'; canvas.style.height=ch+'px';
+  cvCtx=canvas.getContext('2d');
+  cvCtx.scale(dpr,dpr);
+  if(cvRouteCanvas){
+    cvRouteCanvas.width=cw*dpr; cvRouteCanvas.height=ch*dpr;
+  }
+  redrawAll();
+}
+
+function setDrawColor(c,btn){
+  cvColor=c;
+  document.querySelectorAll('.clr-btn').forEach(b=>b.classList.remove('active'));
+  btn.classList.add('active');
+}
+function setDrawTool(t,btn){
+  cvTool=t;
+  document.querySelectorAll('.ctool-btn').forEach(b=>b.classList.remove('active'));
+  btn.classList.add('active');
+  if(cvMode==='draw') document.getElementById('playCanvas').style.cursor=t==='erase'?'cell':'crosshair';
+}
+function setDrawWidth(w,btn){
+  cvWidth=w;
+  document.querySelectorAll('.cw-btn').forEach(b=>b.classList.remove('active'));
+  btn.classList.add('active');
+}
+function undoRoute(){
+  if(cvRouteUndoStack.length===0) return;
+  cvStrokes=cvStrokes.slice(0,cvRouteUndoStack.pop());
+  redrawAll();
+}
+
+// ── POINTER HANDLERS ──────────────────────────────────────────────────────────
+function cvGetPos(e){
+  const canvas=document.getElementById('playCanvas');
+  const rect=canvas.getBoundingClientRect();
+  const src=e.touches?e.touches[0]:e;
+  return{ x:src.clientX-rect.left, y:src.clientY-rect.top };
+}
+
+function showPlayerDeleteBtn(player){
+  const btn=document.getElementById('cvDeletePlayerBtn');
+  btn.style.display='block';
+  _posDeleteBtn(player);
+}
+function _posDeleteBtn(player){
+  const canvas=document.getElementById('playCanvas');
+  const rect=canvas.getBoundingClientRect();
+  const btn=document.getElementById('cvDeletePlayerBtn');
+  const bx=rect.left+player.x;
+  const by=rect.top+player.y-CV_R-38;
+  btn.style.left=Math.max(rect.left+40,Math.min(rect.right-40,bx))+'px';
+  btn.style.top=Math.max(rect.top+4,by)+'px';
+}
+function hidePlayerDeleteBtn(){
+  document.getElementById('cvDeletePlayerBtn').style.display='none';
+}
+function deleteSelectedPlayer(){
+  if(!cvSelectedPlayer) return;
+  cvPlayers=cvPlayers.filter(p=>p!==cvSelectedPlayer);
+  cvSelectedPlayer=null;
+  hidePlayerDeleteBtn();
+  redrawAll();
+}
+
+function cvStart(e){
+  e.preventDefault();
+  const p=cvGetPos(e);
+  if(cvMode==='place'){
+    const hit=playerAt(p.x,p.y);
+    if(hit){
+      cvSelectedPlayer=hit;
+      cvDragging=hit;
+      cvDragOffX=p.x-hit.x; cvDragOffY=p.y-hit.y;
+      showPlayerDeleteBtn(hit);
+      redrawAll();
+    } else {
+      cvSelectedPlayer=null;
+      hidePlayerDeleteBtn();
+      if(cvSelectedSymbol){
+        cvPlayers.push({id:++cvPid,...cvSelectedSymbol,x:p.x,y:p.y});
+      }
+      redrawAll();
+    }
+    return;
+  }
+  if(!cvRouteCanvas) return;
+  cvDrawing=true;
+  cvRouteUndoStack.push(cvStrokes.length);
+  if(cvRouteUndoStack.length>30) cvRouteUndoStack.shift();
+  const near=nearestPlayer(p.x,p.y,CV_R*2);
+  cvCurrentStroke={color:cvColor,width:cvWidth,tool:cvTool,
+    pts:[{x:p.x,y:p.y}],
+    attachedTo:near?near.id:null,
+    attachOrigin:near?{x:near.x,y:near.y}:null};
+  redrawAll();
+}
+
+function cvMove(e){
+  e.preventDefault();
+  const p=cvGetPos(e);
+  if(cvMode==='place'&&cvDragging){
+    cvDragging.x=p.x-cvDragOffX;
+    cvDragging.y=p.y-cvDragOffY;
+    if(cvSelectedPlayer===cvDragging) _posDeleteBtn(cvDragging);
+    redrawAll(); return;
+  }
+  if(!cvDrawing||!cvCurrentStroke) return;
+  cvCurrentStroke.pts.push({x:p.x,y:p.y});
+  redrawAll();
+}
+
+function cvEnd(e){
+  if(cvDrawing&&cvCurrentStroke){
+    if(cvCurrentStroke.pts.length>=1) cvStrokes.push(cvCurrentStroke);
+    cvCurrentStroke=null;
+  }
+  cvDrawing=false; cvDragging=null;
+}
+
+(function attachCanvasEvents(){
+  const c=document.getElementById('playCanvas');
+  if(!c){ console.error('playCanvas not found'); return; }
+  c.addEventListener('pointerdown',cvStart,{passive:false});
+  c.addEventListener('pointermove',cvMove,{passive:false});
+  c.addEventListener('pointerup',cvEnd);
+  c.addEventListener('pointercancel',cvEnd);
+  c.addEventListener('touchstart', e=>cvStart(e.touches[0]?{...e,clientX:e.touches[0].clientX,clientY:e.touches[0].clientY,preventDefault:()=>e.preventDefault()}:e),{passive:false});
+  c.addEventListener('touchmove',  e=>cvMove(e.touches[0]?{...e,clientX:e.touches[0].clientX,clientY:e.touches[0].clientY,preventDefault:()=>e.preventDefault()}:e),{passive:false});
+  c.addEventListener('touchend',   cvEnd);
+})();
+
+// ── PRINT ─────────────────────────────────────────────────────────────────────
+function _ppGapRows(preset, teAdj){
+  let rows=[];
+  if(preset==='4-3') rows=[
+    ['DE (strong)','C','5-tech contain'],['DT (3-tech)','B','strong side'],
+    ['DT (1-tech)','A','weak side'],['DE (weak)','C','5-tech contain'],
+    ['MLB','A',''],['Sam LB','B','force'],['Will LB','B/Flat',''],
+  ];
+  else if(preset==='3-4') rows=[
+    ['NT','A','strong A'],['DE (strong)',teAdj?'C':'B',teAdj?'TE bumped':''],
+    ['DE (weak)','B',''],['OLB (strong)',teAdj?'D':'C',teAdj?'TE bumped':'edge'],
+    ['ILB (strong)','B/Flow','hit-and-run'],['ILB (weak)','A','weak A'],
+    ['OLB (weak)','C','edge'],
+  ];
+  else rows=[
+    ['NT','A/A','both A gaps'],['DE (strong)','B','4i crash'],
+    ['DE (weak)','B','4i crash'],['MLB','A','flow'],
+    ['OLB (strong)','C','edge'],['OLB (weak)','C','edge'],
+  ];
+  return rows.map(([p,g,n])=>
+    `<tr><td>${esc(p)}</td><td class="pp-gap-val">${esc(g)}</td><td class="pp-gap-note">${esc(n)}</td></tr>`
+  ).join('');
+}
+
+function printPlayCard(){
+  const canvas=document.getElementById('playCanvas');
+  const img=canvas.toDataURL('image/png');
+  const t=cvEditingId?DB.templates.find(t=>t.id===cvEditingId):null;
+  const name=t?.name||'Play Diagram';
+  const preset=window._cvPresetType||null;
+  const nm=name.toUpperCase();
+  const teAdj=preset==='3-4'&&/\bTE\b|\bWING\b|\bKING\b|\bPRO\b|\bI.?FORM\b|\bTIGHT/.test(nm);
+  const presetLabel={'4-3':'4-3 BASE','3-4':'3-4 BASE','3-3-5':'3-3-5 STACK'}[preset]||(preset||'');
+
+  const sf=t?.sf||{};
+  const sfHasContent=sf.personnel||sf.downDist||sf.situation||sf.defCall||sf.notes;
+  const sfBlock=sfHasContent?`
+    <div style="margin-top:10px;border:1px solid #ccc;border-radius:4px;padding:8px 10px">
+      <div class="pp-lbl" style="margin-bottom:6px">Script Notes</div>
+      <table style="width:100%;border-collapse:collapse;font-size:8pt">
+        ${sf.personnel?`<tr><td style="padding:2px 8px 2px 0;color:#777;font-weight:700;font-size:7pt;text-transform:uppercase;width:90px">Personnel</td><td style="padding:2px 0;font-weight:800">${esc(sf.personnel)}</td></tr>`:''}
+        ${sf.downDist?`<tr><td style="padding:2px 8px 2px 0;color:#777;font-weight:700;font-size:7pt;text-transform:uppercase">Down &amp; Dist</td><td style="padding:2px 0;font-weight:800">${esc(sf.downDist)}</td></tr>`:''}
+        ${sf.situation?`<tr><td style="padding:2px 8px 2px 0;color:#777;font-weight:700;font-size:7pt;text-transform:uppercase">Situation</td><td style="padding:2px 0;font-weight:800">${esc(sf.situation)}</td></tr>`:''}
+        ${sf.defCall?`<tr><td style="padding:2px 8px 2px 0;color:#777;font-weight:700;font-size:7pt;text-transform:uppercase">Def Call</td><td style="padding:2px 0;font-weight:800">${esc(sf.defCall)}</td></tr>`:''}
+        ${sf.notes?`<tr><td colspan="2" style="padding:4px 0 0;color:#333;font-style:italic">${esc(sf.notes)}</td></tr>`:''}
+      </table>
+    </div>`:'';
+
+  document.getElementById('printPage').innerHTML=`
+    <style>@page{size:letter landscape;margin:.45in}</style>
+    <div class="pp-h">
+      <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:4px">
+        <div><div class="pp-logo">BLITZ<span>IQ</span></div></div>
+        <div style="text-align:right"><div class="pp-form-name">${esc(name)}</div></div>
+      </div>
+      <hr class="pp-divider">
+      <div style="display:grid;grid-template-columns:3fr 2fr;gap:20px;align-items:start">
+        <div>
+          <img src="${img}" style="width:100%;border:1.5px solid #ccc;border-radius:4px;display:block">
+          ${sfBlock}
+          <div style="margin-top:10px">
+            <div class="pp-lbl">Coach Notes</div>
+            <div class="pp-notes-box"></div>
+          </div>
+        </div>
+        <div>
+          ${preset?`<div class="pp-lbl">Gap Assignments — ${esc(presetLabel)}${teAdj?' (TE ADJ)':''}</div>
+          <table class="pp-gap-tbl">${_ppGapRows(preset,teAdj)}</table>`:''}
+          ${t?.notes?`<div class="pp-lbl" style="margin-top:8px">Template Notes</div>
+          <div class="pp-reason">${esc(t.notes)}</div>`:''}
+        </div>
+      </div>
+      <div class="pp-footer">BlitzIQ &nbsp;·&nbsp; Play Diagram Library &nbsp;·&nbsp; richderrik58.github.io/blitzIQ</div>
+    </div>`;
+  window.print();
+  setTimeout(()=>{ document.getElementById('printPage').innerHTML=''; }, 800);
+}
+
+function sharePlayCard(){
+  const t=cvEditingId?DB.templates.find(t=>t.id===cvEditingId):null;
+  const name=t?.name||'Play Diagram';
+  const text=`BlitzIQ — ${name}${t?.notes?'\n'+t.notes:''}`;
+  if(navigator.share){
+    navigator.share({title:'BlitzIQ — '+name, text}).catch(()=>{});
+  } else {
+    navigator.clipboard.writeText(text).then(()=>showToast('Copied to clipboard'));
+  }
+}
+
+// ── TOAST ──────────────────────────────────────────────────────────────────────
+function showToast(msg, ms=2200){
+  const el=document.getElementById('toastEl');
+  el.textContent=msg; el.classList.add('show');
+  setTimeout(()=>el.classList.remove('show'), ms);
+}
+
+// ── CUSTOM FORMATION PRESETS ──────────────────────────────────────────────────
+function renderCustomPresets(){
+  const el=document.getElementById('customOffPresets');
+  if(!el) return;
+  el.innerHTML='';
+  (DB.customPresets||[]).forEach(cp=>{
+    const wrap=document.createElement('span');
+    wrap.className='custom-preset-wrap';
+    const btn=document.createElement('button');
+    btn.className='pbtn-preset';
+    btn.style.cssText='background:rgba(240,165,0,.12);border-color:rgba(240,165,0,.5);color:var(--gold)';
+    btn.textContent=cp.name;
+    btn.onclick=()=>placePreset(cp.id);
+    const del=document.createElement('button');
+    del.className='custom-preset-del';
+    del.innerHTML='&#10005;';
+    del.title='Delete this formation';
+    del.onclick=(e)=>{ e.stopPropagation(); deleteCustomPreset(cp.id); };
+    wrap.appendChild(btn);
+    wrap.appendChild(del);
+    el.appendChild(wrap);
+  });
+}
+function openSaveFormationModal(){
+  const offPlayers=cvPlayers.filter(p=>p.team==='off');
+  if(offPlayers.length===0){ showToast('Place some offensive players first'); return; }
+  const inp=document.getElementById('formationNameIn');
+  inp.value=''; inp.classList.remove('err');
+  openModal('mSaveFormation');
+}
+function confirmSaveFormation(){
+  const inp=document.getElementById('formationNameIn');
+  const name=inp.value.trim();
+  if(!name){ inp.classList.add('err'); return; }
+  const canvas=document.getElementById('playCanvas');
+  const dpr=window.devicePixelRatio||1;
+  const cw=canvas.width/dpr, ch=canvas.height/dpr;
+  const los=ch*0.62;
+  const ppy=los/20;
+  const players=cvPlayers
+    .filter(p=>p.team==='off')
+    .map(p=>({type:p.type,team:p.team,xf:Math.round((p.x/cw)*1000)/1000,yd:Math.round(((p.y-los)/ppy)*10)/10}));
+  DB.customPresets.push({id:uid(),name,players});
+  saveDB();
+  renderCustomPresets();
+  closeModal('mSaveFormation');
+  showToast('Formation saved');
+}
+function deleteCustomPreset(id){
+  DB.customPresets=(DB.customPresets||[]).filter(cp=>cp.id!==id);
+  saveDB();
+  renderCustomPresets();
+}
+
+// ── SCRIPT PANEL (canvas) ─────────────────────────────────────────────────────
+function toggleScriptPanel(){
+  const body=document.getElementById('cvScriptBody');
+  const btn=document.getElementById('scriptPanelToggleBtn');
+  const collapsed=body.classList.toggle('collapsed');
+  btn.innerHTML=collapsed?'&#9660;':'&#9650;';
+}
+
+function sfChip(inputId, val){
+  document.getElementById(inputId).value=val;
+}
+
+function getScriptFields(){
+  return {
+    personnel: document.getElementById('sf_personnel').value.trim(),
+    downDist:  document.getElementById('sf_downDist').value.trim(),
+    situation: document.getElementById('sf_situation').value.trim(),
+    defCall:   document.getElementById('sf_defCall').value.trim(),
+    notes:     document.getElementById('sf_notes').value.trim(),
+  };
+}
+
+function loadScriptFields(sf){
+  document.getElementById('sf_personnel').value = sf?.personnel||'';
+  document.getElementById('sf_downDist').value  = sf?.downDist||'';
+  document.getElementById('sf_situation').value = sf?.situation||'';
+  document.getElementById('sf_defCall').value   = sf?.defCall||'';
+  document.getElementById('sf_notes').value     = sf?.notes||'';
+}
+
+// ── SCRIPTS (Option B) ────────────────────────────────────────────────────────
+let _editingScriptId = null;
+
+function showScripts(){
+  _libTab='scripts';
+  cancelSelectMode();
+  document.getElementById('templateList').style.display='none';
+  document.getElementById('playlistList').style.display='none';
+  document.getElementById('scriptList').style.display='';
+  document.getElementById('selectModeBtn').style.display='none';
+  document.getElementById('playlistTabBtn').textContent='&#8592; Plays';
+  document.getElementById('playlistTabBtn').onclick=showPlays;
+  document.getElementById('scriptsTabBtn').textContent='&#128203; Scripts';
+  document.getElementById('scriptsTabBtn').onclick=showScripts;
+  renderScripts();
+}
+
+function renderScripts(){
+  const el=document.getElementById('scriptList');
+  if(!DB.scripts.length){
+    el.innerHTML=`<div style="margin-bottom:16px"><button onclick="openNewScript()" style="width:100%;padding:15px;background:var(--gold);border:none;border-radius:12px;color:var(--navy);font-size:15px;font-weight:800;cursor:pointer;font-family:inherit">+ New Script</button></div>
+      <div class="empty"><div class="empty-icon">&#128203;</div><div class="empty-txt">No scripts yet.<br>Tap <strong>+ New Script</strong> to create one.</div></div>`;
+    return;
+  }
+  el.innerHTML=`<div style="margin-bottom:16px"><button onclick="openNewScript()" style="width:100%;padding:15px;background:var(--gold);border:none;border-radius:12px;color:var(--navy);font-size:15px;font-weight:800;cursor:pointer;font-family:inherit">+ New Script</button></div>`
+    + DB.scripts.map(sc=>{
+      const count=sc.entries.length;
+      const date=sc.createdAt?new Date(sc.createdAt).toLocaleDateString('en-US',{month:'short',day:'numeric',year:'numeric'}):'';
+      return `<div class="script-card" onclick="openScriptEditor('${sc.id}')">
+        <div class="script-card-name">${esc(sc.name||'Untitled Script')}</div>
+        <div class="script-card-meta">${count} play${count===1?'':'s'}${date?' &nbsp;·&nbsp; '+date:''}</div>
+        <div class="playlist-actions">
+          <button class="del-btn" onclick="deleteScript('${sc.id}',event)" title="Delete">&#10005;</button>
+        </div>
+      </div>`;
+    }).join('');
+}
+
+function openNewScript(){
+  _editingScriptId=null;
+  const sc={id:uid(),name:'',entries:[],createdAt:Date.now()};
+  DB.scripts.unshift(sc);
+  saveDB();
+  _editingScriptId=sc.id;
+  document.getElementById('scriptNameIn').value='';
+  renderScriptEditor();
+  document.getElementById('scriptEditorOv').classList.add('open');
+  document.body.style.overflow='hidden';
+}
+
+function openScriptEditor(id){
+  const sc=DB.scripts.find(s=>s.id===id);
+  if(!sc) return;
+  _editingScriptId=id;
+  document.getElementById('scriptNameIn').value=sc.name||'';
+  renderScriptEditor();
+  document.getElementById('scriptEditorOv').classList.add('open');
+  document.body.style.overflow='hidden';
+}
+
+function closeScriptEditor(){
+  document.getElementById('scriptEditorOv').classList.remove('open');
+  document.body.style.overflow='';
+  _editingScriptId=null;
+  renderScripts();
+}
+
+function saveAndCloseScriptEditor(){
+  const sc=DB.scripts.find(s=>s.id===_editingScriptId);
+  if(sc){
+    sc.name=document.getElementById('scriptNameIn').value.trim()||'Untitled Script';
+    saveDB();
+  }
+  closeScriptEditor();
+  showToast('Script saved');
+}
+
+function renderScriptEditor(){
+  const sc=DB.scripts.find(s=>s.id===_editingScriptId);
+  const body=document.getElementById('scriptEditorBody');
+  if(!sc||!sc.entries.length){
+    body.innerHTML=`<div class="empty" style="padding:30px 0"><div class="empty-icon">&#128203;</div><div class="empty-txt">No plays yet.<br>Tap <strong>+ Add Play</strong> below.</div></div>`;
+    return;
+  }
+  body.innerHTML=sc.entries.map((entry,i)=>{
+    const t=DB.templates.find(t=>t.id===entry.playId);
+    const playName=t?esc(t.name):'(deleted play)';
+    const thumb=t?.thumbnail?`<img src="${t.thumbnail}" class="se-thumb">`:`<div class="se-thumb"></div>`;
+    return `<div class="script-entry" id="se-${entry.id}">
+      <div class="se-head">
+        <span class="se-num">${i+1}</span>
+        ${thumb}
+        <span class="se-name">${playName}</span>
+        <div class="se-btns">
+          ${i>0?`<button class="se-btn" onclick="moveScriptEntry('${entry.id}',-1)">&#9650;</button>`:''}
+          ${i<sc.entries.length-1?`<button class="se-btn" onclick="moveScriptEntry('${entry.id}',1)">&#9660;</button>`:''}
+          <button class="se-btn" style="color:var(--red)" onclick="removeScriptEntry('${entry.id}')">&#10005;</button>
+        </div>
+      </div>
+      <div class="se-fields">
+        <div class="sf-grp">
+          <label class="sf-lbl">Personnel</label>
+          <input class="sf-in" value="${esc(entry.personnel||'')}" onchange="updateScriptEntryField('${entry.id}','personnel',this.value)" placeholder="e.g. 11">
+        </div>
+        <div class="sf-grp">
+          <label class="sf-lbl">Down &amp; Dist</label>
+          <input class="sf-in" value="${esc(entry.downDist||'')}" onchange="updateScriptEntryField('${entry.id}','downDist',this.value)" placeholder="e.g. 3rd&amp;Long">
+        </div>
+        <div class="sf-grp">
+          <label class="sf-lbl">Situation</label>
+          <input class="sf-in" value="${esc(entry.situation||'')}" onchange="updateScriptEntryField('${entry.id}','situation',this.value)" placeholder="e.g. Red Zone">
+        </div>
+        <div class="sf-grp">
+          <label class="sf-lbl">Def Call</label>
+          <input class="sf-in" value="${esc(entry.defCall||'')}" onchange="updateScriptEntryField('${entry.id}','defCall',this.value)" placeholder="e.g. Cover 2">
+        </div>
+        <div class="sf-grp" style="grid-column:1/-1">
+          <label class="sf-lbl">Notes</label>
+          <textarea class="sf-in" rows="2" style="resize:none;height:40px" onchange="updateScriptEntryField('${entry.id}','notes',this.value)" placeholder="Notes…">${esc(entry.notes||'')}</textarea>
+        </div>
+      </div>
+    </div>`;
+  }).join('');
+}
+
+function updateScriptEntryField(eid, field, val){
+  const sc=DB.scripts.find(s=>s.id===_editingScriptId);
+  if(!sc) return;
+  const entry=sc.entries.find(e=>e.id===eid);
+  if(!entry) return;
+  entry[field]=val;
+  saveDB();
+}
+
+function addPlayToScript(playId){
+  const sc=DB.scripts.find(s=>s.id===_editingScriptId);
+  if(!sc) return;
+  const t=DB.templates.find(t=>t.id===playId);
+  const sf=t?.sf||{};
+  sc.entries.push({
+    id:uid(),
+    playId,
+    personnel: sf.personnel||'',
+    downDist:  sf.downDist||'',
+    situation: sf.situation||'',
+    defCall:   sf.defCall||'',
+    notes:     sf.notes||'',
+  });
+  saveDB();
+  renderScriptEditor();
+}
+
+function removeScriptEntry(eid){
+  const sc=DB.scripts.find(s=>s.id===_editingScriptId);
+  if(!sc) return;
+  sc.entries=sc.entries.filter(e=>e.id!==eid);
+  saveDB();
+  renderScriptEditor();
+}
+
+function moveScriptEntry(eid, dir){
+  const sc=DB.scripts.find(s=>s.id===_editingScriptId);
+  if(!sc) return;
+  const idx=sc.entries.findIndex(e=>e.id===eid);
+  if(idx<0) return;
+  const newIdx=idx+dir;
+  if(newIdx<0||newIdx>=sc.entries.length) return;
+  const tmp=sc.entries[idx];
+  sc.entries[idx]=sc.entries[newIdx];
+  sc.entries[newIdx]=tmp;
+  saveDB();
+  renderScriptEditor();
+}
+
+function openPlayPicker(){
+  const body=document.getElementById('mPlayPickerBody');
+  if(!DB.templates.length){
+    body.innerHTML=`<div style="padding:20px;text-align:center;color:var(--gray)">No plays saved yet.</div>`;
+  } else {
+    body.innerHTML=DB.templates.map(t=>`
+      <div onclick="closeModal('mPlayPicker');addPlayToScript('${t.id}')" style="display:flex;align-items:center;gap:10px;padding:10px 0;border-bottom:1px solid rgba(255,255,255,.06);cursor:pointer">
+        ${t.thumbnail?`<img src="${t.thumbnail}" style="width:70px;height:44px;object-fit:cover;border-radius:6px;flex-shrink:0">`:`<div style="width:70px;height:44px;border-radius:6px;background:rgba(255,255,255,.04);flex-shrink:0"></div>`}
+        <span style="font-size:14px;font-weight:700">${esc(t.name)}</span>
+      </div>`).join('');
+  }
+  openModal('mPlayPicker');
+}
+
+function deleteScript(id, e){
+  e.stopPropagation();
+  if(!confirm('Delete this script?')) return;
+  DB.scripts=DB.scripts.filter(s=>s.id!==id);
+  saveDB();
+  renderScripts();
+}
+
+function printCurrentScript(){
+  const sc=DB.scripts.find(s=>s.id===_editingScriptId);
+  if(!sc) return;
+  const name=sc.name||'Untitled Script';
+  const rows=sc.entries.map((entry,i)=>{
+    const t=DB.templates.find(t=>t.id===entry.playId);
+    const playName=t?esc(t.name):'(deleted)';
+    const thumbCell=t?.thumbnail?`<img src="${t.thumbnail}" style="width:80px;height:50px;object-fit:cover;border-radius:4px;display:block">`:`<div style="width:80px;height:50px;background:#eee;border-radius:4px"></div>`;
+    return `<tr>
+      <td style="text-align:center;font-weight:900;color:#c88a00;font-size:16pt;width:32px">${i+1}</td>
+      <td style="width:90px">${thumbCell}</td>
+      <td style="font-weight:800;font-size:9pt">${playName}</td>
+      <td style="font-size:8pt">${esc(entry.personnel||'')}</td>
+      <td style="font-size:8pt">${esc(entry.downDist||'')}</td>
+      <td style="font-size:8pt">${esc(entry.situation||'')}</td>
+      <td style="font-size:8pt">${esc(entry.defCall||'')}</td>
+      <td style="font-size:8pt">${esc(entry.notes||'')}</td>
+    </tr>`;
+  }).join('');
+  document.getElementById('printPage').innerHTML=`
+    <style>
+      @page{size:letter landscape;margin:.4in}
+      body{font-family:Arial,Helvetica,sans-serif;color:#111}
+      table{width:100%;border-collapse:collapse}
+      th{background:#0a1628;color:#f0a500;font-size:8pt;letter-spacing:.5px;text-transform:uppercase;padding:5px 6px;text-align:left}
+      td{padding:4px 6px;border-bottom:1px solid #ddd;vertical-align:middle}
+      tr:nth-child(even) td{background:#f9f9f9}
+    </style>
+    <div style="font-family:Arial,sans-serif">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
+        <div style="font-size:22pt;font-weight:900;letter-spacing:3px">BLITZ<span style="color:#666">IQ</span></div>
+        <div style="font-size:16pt;font-weight:900">${esc(name)}</div>
+      </div>
+      <hr style="border:none;border-top:2.5px solid #111;margin-bottom:10px">
+      <table>
+        <thead><tr>
+          <th>#</th><th>Diagram</th><th>Play Name</th><th>Personnel</th><th>Down/Dist</th><th>Situation</th><th>Def Call</th><th>Notes</th>
+        </tr></thead>
+        <tbody>${rows}</tbody>
+      </table>
+      <div style="margin-top:10px;font-size:7pt;color:#aaa;text-align:center;border-top:1px solid #ddd;padding-top:6px">BlitzIQ &nbsp;·&nbsp; ${esc(name)} &nbsp;·&nbsp; richderrik58.github.io/blitzIQ</div>
+    </div>`;
+  window.print();
+  setTimeout(()=>{ document.getElementById('printPage').innerHTML=''; }, 800);
+}
+
+// ── CALL SHEET (Option C) ─────────────────────────────────────────────────────
+function printCallSheet(plId){
+  const pl=DB.playlists.find(p=>p.id===plId);
+  if(!pl) return;
+  const plays=pl.playIds.map(pid=>DB.templates.find(t=>t.id===pid)).filter(Boolean);
+  const rows=plays.map((t,i)=>{
+    const sf=t.sf||{};
+    return `<tr>
+      <td style="text-align:center;font-weight:900;color:#c88a00;font-size:14pt;width:28px">${i+1}</td>
+      <td style="font-weight:800;font-size:9pt">${esc(t.name)}</td>
+      <td style="font-size:8pt">${esc(sf.personnel||'')}</td>
+      <td style="font-size:8pt">${esc(sf.downDist||'')}</td>
+      <td style="font-size:8pt">${esc(sf.situation||'')}</td>
+      <td style="font-size:8pt">${esc(sf.defCall||'')}</td>
+      <td style="font-size:8pt">${esc(sf.notes||'')}</td>
+    </tr>`;
+  }).join('');
+  document.getElementById('printPage').innerHTML=`
+    <style>
+      @page{size:letter landscape;margin:.4in}
+      body{font-family:Arial,Helvetica,sans-serif;color:#111}
+      table{width:100%;border-collapse:collapse}
+      th{background:#0a1628;color:#f0a500;font-size:8pt;letter-spacing:.5px;text-transform:uppercase;padding:5px 6px;text-align:left}
+      td{padding:5px 6px;border-bottom:1px solid #ddd;vertical-align:middle}
+      tr:nth-child(even) td{background:#f9f9f9}
+    </style>
+    <div style="font-family:Arial,sans-serif">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
+        <div style="font-size:22pt;font-weight:900;letter-spacing:3px">BLITZ<span style="color:#666">IQ</span></div>
+        <div style="font-size:16pt;font-weight:900">${esc(pl.name)} — Call Sheet</div>
+      </div>
+      <hr style="border:none;border-top:2.5px solid #111;margin-bottom:10px">
+      <table>
+        <thead><tr>
+          <th>#</th><th>Play Name</th><th>Personnel</th><th>Down/Dist</th><th>Situation</th><th>Def Call</th><th>Notes</th>
+        </tr></thead>
+        <tbody>${rows}</tbody>
+      </table>
+      <div style="margin-top:10px;font-size:7pt;color:#aaa;text-align:center;border-top:1px solid #ddd;padding-top:6px">BlitzIQ &nbsp;·&nbsp; ${esc(pl.name)} &nbsp;·&nbsp; richderrik58.github.io/blitzIQ</div>
+    </div>`;
+  window.print();
+  setTimeout(()=>{ document.getElementById('printPage').innerHTML=''; }, 800);
+}
+
+// ── INIT ───────────────────────────────────────────────────────────────────────
+loadDB();
+renderLibrary();
+renderCustomPresets();
+</script>
+</body>
+</html>
