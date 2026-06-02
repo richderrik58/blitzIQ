@@ -1559,6 +1559,8 @@ function defXFromOL(presetName,pdIndex,anchors,strength){
   const bGapW=(wgx+wtx)/2;
   const cGapS=teX!==null?(stx+teX)/2:stx+ss*sp*0.8;
   const cGapW=wtx+sw*sp*0.8;
+  const fiveS=stx+ss*sp*0.5;    // strong 5-technique: outside shoulder of the strong tackle
+  const fiveW=wtx+sw*sp*0.5;    // weak 5-technique: outside shoulder of the weak tackle
   const edgeS=teX!==null?teX+ss*sp*0.8:stx+ss*sp*1.5;
   const edgeW=wtx+sw*sp*1.5;
   let x=null;
@@ -1568,10 +1570,11 @@ function defXFromOL(presetName,pdIndex,anchors,strength){
     if(pdIndex<pos.length) x=pos[pdIndex];
   } else if(presetName==='3-4'){
     // [0]DE-weak [1]NT [2]DE-strong [3]OLB-weak [4]ILB-weak [5]ILB-strong [6]OLB-strong
-    const pos=[bGapW, cx, bGapS, edgeW, aGapW, aGapS, edgeS];
+    const pos=[fiveW, cx, fiveS, edgeW, aGapW, aGapS, edgeS];
     if(pdIndex<pos.length) x=pos[pdIndex];
   } else if(presetName==='3-3-5'){
     // [0]DE-weak [1]NT [2]DE-strong [3]LB-weak [4]MLB [5]LB-strong
+    // Ends play 4i (inside shoulder of tackle); the outside LBs are the C-gap edge players
     const pos=[bGapW, cx, bGapS, cGapW, cx, cGapS];
     if(pdIndex<pos.length) x=pos[pdIndex];
   }
