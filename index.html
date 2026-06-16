@@ -1021,6 +1021,57 @@ function setScheme(s){ DB.scheme=s; saveDB(); renderOpps(); }
 function saveDB() { localStorage.setItem(SKEY, JSON.stringify(DB)); }
 function uid() { return Date.now() * 1000 + Math.floor(Math.random() * 999); }
 
+// ── BACKUP / RESTORE ────────────────────────────────────────────────────────
+// All scouting data lives only in localStorage, so give coaches a way to save
+// it to a file (and move it between devices / share it with their staff).
+function exportBackup() {
+  try {
+    const payload = { app:'BlitzIQ', version:1, exportedAt:new Date().toISOString(), data:DB };
+    const blob = new Blob([JSON.stringify(payload, null, 2)], {type:'application/json'});
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url; a.download = `blitziq-backup-${new Date().toISOString().slice(0,10)}.json`;
+    document.body.appendChild(a); a.click(); a.remove();
+    setTimeout(() => URL.revokeObjectURL(url), 1000);
+    const n = (DB.opponents || []).length;
+    showToast(`Backup saved — ${n} opponent${n===1?'':'s'}`);
+  } catch (e) {
+    showToast('Backup failed — ' + (e.message || 'error'));
+  }
+}
+
+function importBackupFile(input) {
+  const file = input.files && input.files[0];
+  if (!file) return;
+  const reader = new FileReader();
+  reader.onload = () => {
+    try {
+      const parsed = JSON.parse(reader.result);
+      const incoming = parsed && parsed.data ? parsed.data : parsed; // accept wrapped or raw DB
+      if (!incoming || !Array.isArray(incoming.opponents)) throw new Error('Not a BlitzIQ backup');
+      const incOpps = incoming.opponents;
+      const ok = confirm(`Import ${incOpps.length} opponent${incOpps.length===1?'':'s'}?\n\nOK = Merge into your current data (matching teams are updated, the rest are added).\nCancel = stop.`);
+      if (!ok) { input.value = ''; return; }
+      DB.opponents = DB.opponents || [];
+      const byId = new Map(DB.opponents.map(o => [o.id, o]));
+      let added = 0, updated = 0;
+      incOpps.forEach(o => {
+        if (o.id != null && byId.has(o.id)) { Object.assign(byId.get(o.id), o); updated++; }
+        else { DB.opponents.push(o); if (o.id != null) byId.set(o.id, o); added++; }
+      });
+      if (incoming.scheme && !DB.scheme) DB.scheme = incoming.scheme;
+      saveDB(); renderOpps();
+      showToast(`Imported — ${added} added, ${updated} updated`);
+    } catch (e) {
+      showToast('Import failed — ' + (e.message || 'invalid file'));
+    } finally {
+      input.value = '';
+    }
+  };
+  reader.onerror = () => { showToast('Could not read file'); input.value = ''; };
+  reader.readAsText(file);
+}
+
 // ── STATE ─────────────────────────────────────────────────────────────────────
 const st = { screen:1, opp:null, form:null, sit:null };
 
@@ -6146,7 +6197,13 @@ function printScript(){
 <!-- APP FOOTER -->
 <div style="text-align:center;padding:18px 16px 28px;font-size:11px;color:var(--gray);border-top:1px solid rgba(255,255,255,.07);margin-top:24px">
   BlitzIQ &nbsp;·&nbsp; Beta &nbsp;·&nbsp; Free during beta
-  <div style="margin-top:8px;display:flex;justify-content:center;gap:18px">
+  <div style="margin-top:14px;display:flex;justify-content:center;gap:10px;flex-wrap:wrap">
+    <button onclick="exportBackup()" style="background:rgba(240,165,0,.1);border:1px solid rgba(240,165,0,.4);color:var(--gold);font-size:12px;font-weight:700;padding:8px 16px;border-radius:8px;cursor:pointer;font-family:inherit">&#8681;&nbsp; Export Backup</button>
+    <button onclick="document.getElementById('importIn').click()" style="background:rgba(240,165,0,.1);border:1px solid rgba(240,165,0,.4);color:var(--gold);font-size:12px;font-weight:700;padding:8px 16px;border-radius:8px;cursor:pointer;font-family:inherit">&#8679;&nbsp; Import Backup</button>
+    <input type="file" id="importIn" accept="application/json,.json" style="display:none" onchange="importBackupFile(this)">
+  </div>
+  <div style="font-size:10px;color:var(--gray);margin-top:8px;line-height:1.5">Save your scouting data to a file &mdash; back it up or move it to another device</div>
+  <div style="margin-top:14px;display:flex;justify-content:center;gap:18px">
     <button onclick="openModal('mPrivacy')" style="background:none;border:none;color:var(--grayl);font-size:11px;cursor:pointer;text-decoration:underline;font-family:inherit;padding:0">Privacy Policy</button>
     <button onclick="openModal('mTerms')" style="background:none;border:none;color:var(--grayl);font-size:11px;cursor:pointer;text-decoration:underline;font-family:inherit;padding:0">Terms of Use</button>
   </div>
