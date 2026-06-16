@@ -873,6 +873,10 @@
         </div>
       </div>
       <div class="fld">
+        <label class="fld-lbl">Plays Charted <span style="color:var(--gray);font-weight:400">(optional — turns on small-sample warnings)</span></label>
+        <input class="fld-in" id="s_plays" placeholder="e.g. 14" type="number" min="0">
+      </div>
+      <div class="fld">
         <label class="fld-lbl">Tendency Notes</label>
         <textarea class="fld-ta" id="s_notes" placeholder="What does this team do in this situation?"></textarea>
       </div>
@@ -1349,6 +1353,19 @@ function renderForms() {
 function selForm(id) { st.form=st.opp.formations.find(f=>f.id===id); renderSits(); showScreen(3); }
 
 // ── SCREEN 3 ──────────────────────────────────────────────────────────────────
+// Sample-size confidence: a 100% tendency from 3 plays is noise, not a read.
+// Flags low play counts when charted; falls back to warning on absolute splits.
+const LOW_SAMPLE = 6;
+function sampleFlag(s){
+  const n = (typeof s.plays==='number' && isFinite(s.plays) && s.plays>0) ? s.plays : null;
+  if(n!=null){
+    if(n < LOW_SAMPLE) return {kind:'count', short:`${n} PLAY${n===1?'':'S'}`, full:`Small sample — only ${n} play${n===1?'':'s'} charted here. Treat this tendency with caution.`};
+    return null;
+  }
+  if(s.runPct===100 || s.passPct===100) return {kind:'absolute', short:'CONFIRM N', full:'Absolute 100/0 split — verify it isn’t based on just a few plays before committing the call.'};
+  return null;
+}
+
 function renderSits() {
   const f = st.form;
   document.getElementById('formOv').innerHTML = `<div class="ov-ttl">${esc(f.name)} — Formation Tendency</div>${sbar(f.runPct,f.passPct)}<div class="ptags" style="margin-top:10px"><span class="tag tag-r">&#127939; ${esc(f.favoriteRunPlay)}</span><span class="tag tag-p">&#9992; ${esc(f.favoritePassPlay)}</span></div>`;
@@ -1419,13 +1436,16 @@ function renderSits() {
     if(s.passPct===100||s.runPct===100) cls='sure';
     else if(s.passPct>=70) cls='pass-lean';
     else if(s.runPct>=60)  cls='run-lean';
-    const sure = s.passPct===100?'⚠ 100% PASS':s.runPct===100?'⚠ 100% RUN':'';
+    const flag = sampleFlag(s);
+    let sure = s.passPct===100?'⚠ 100% PASS':s.runPct===100?'⚠ 100% RUN':'';
+    if(sure && flag && flag.kind==='absolute') sure += ' · confirm sample';
     return `<div class="sit-card ${cls}" onclick="selSit(${s.id})">
       <button class="sit-del" onclick="delSit(${s.id},event)">✕</button>
       <div class="sit-down">${DLBLS[s.down]||s.down+' Down'}</div>
       <div class="sit-dist">${esc(s.distLabel)}</div>
       ${sbar(s.runPct,s.passPct)}
       ${sure?`<div class="sit-sure">${sure}</div>`:''}
+      ${flag&&flag.kind==='count'?`<div class="sit-sure">⚠ ${flag.short}</div>`:''}
     </div>`;
   }).join('');
 }
@@ -1451,10 +1471,12 @@ function renderDefCall() {
   const reason= dc.reason   || 'Add reasoning notes in the situation editor.';
   const alert = dc.alert    || 'Add watch-for notes in the situation editor.';
 
+  const sflag=sampleFlag(s);
   document.getElementById('sitOv').innerHTML=
     `<div class="ov-ttl">${esc(st.form.name)} — ${esc(s.distLabel)}</div>
      ${sbar(s.runPct,s.passPct)}
-     <div class="ov-note">${esc(s.notes||'')}</div>`;
+     <div class="ov-note">${esc(s.notes||'')}</div>
+     ${sflag?`<div style="margin-top:10px;background:rgba(245,158,11,.1);border:1px solid rgba(245,158,11,.4);border-radius:8px;padding:8px 11px;font-size:11px;color:var(--amber);font-weight:700;line-height:1.45">&#9888; ${esc(sflag.full)}</div>`:''}`;
 
   document.getElementById('defCall').innerHTML=`
     <div class="def-block"><div class="def-lbl">Recommended Coverage</div><div class="def-val">${esc(cov)}</div></div>
@@ -1533,7 +1555,7 @@ function resetForm(){
   document.getElementById('f_run').value='50'; document.getElementById('f_pass').value='50';
 }
 function resetSit(){
-  ['s_notes','s_cov','s_blitz','s_reason','s_alert','s_custom'].forEach(id=>document.getElementById(id).value='');
+  ['s_notes','s_cov','s_blitz','s_reason','s_alert','s_custom','s_plays'].forEach(id=>document.getElementById(id).value='');
   document.getElementById('s_custom').style.display='none';
   document.getElementById('s_run').value='50'; document.getElementById('s_pass').value='50';
   document.querySelectorAll('#mSit .sel-btn').forEach(b=>b.classList.remove('active'));
@@ -1587,9 +1609,11 @@ function saveSit(){
   if(!distVal){alert('Please select a Distance.');return;}
   const DLBLS=['','1st','2nd','3rd','4th'];
   const run=parseInt(document.getElementById('s_run').value)||50;
+  const playsRaw=parseInt(document.getElementById('s_plays').value);
+  const plays=(isFinite(playsRaw)&&playsRaw>0)?playsRaw:undefined;
   st.form.situations.push({id:uid(),down:sitDown,
     distLabel:`${DLBLS[sitDown]} & ${distVal}`,
-    runPct:run,passPct:100-run,
+    runPct:run,passPct:100-run,plays,
     notes:document.getElementById('s_notes').value.trim()||'No tendency notes added.',
     dc:{coverage:document.getElementById('s_cov').value.trim()||'Not specified',
         blitz:document.getElementById('s_blitz').value.trim()||'Not specified',
