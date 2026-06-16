@@ -32,6 +32,12 @@
     }
     *{margin:0;padding:0;box-sizing:border-box;-webkit-tap-highlight-color:transparent}
     body{background:var(--navy);color:var(--white);font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;min-height:100vh;max-width:640px;margin:0 auto}
+    /* Tablet / landscape: give the layout more room on bigger screens */
+    @media (min-width:768px){ body{max-width:780px} }
+    @media (min-width:1100px){ body{max-width:880px} }
+    /* Game-day high-contrast mode (sunlight readability) — overrides theme vars */
+    body.gameday{ --navy:#000000; --navy2:#0b0b0b; --navy3:#161616; --navyc:#000000; --gold:#ffc400; --goldd:#e0a800; --gray:#b9c4d0; --grayl:#eef2f6; }
+    body.gameday .card, body.gameday .def-block, body.gameday .sit-card, body.gameday .ov, body.gameday .alert-box{ border-color:rgba(255,196,0,.4) }
 
     /* HEADER */
     .hdr{background:var(--navy2);border-bottom:2px solid var(--gold);padding:14px 18px;display:flex;align-items:center;gap:10px;position:sticky;top:0;z-index:200}
@@ -96,6 +102,7 @@
 
     /* SIT GRID */
     .sit-grid{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+    @media (min-width:768px){ .sit-grid{grid-template-columns:1fr 1fr 1fr} }
     .sit-card{background:var(--navy2);border:1px solid rgba(255,255,255,.06);border-radius:12px;padding:14px;cursor:pointer;position:relative;transition:border-color .15s,transform .1s}
     .sit-card:active{transform:scale(.97);border-color:var(--gold)}
     .sit-card.pass-lean{border-color:rgba(96,165,250,.3)}
@@ -378,7 +385,8 @@
     </div>
     <div class="hdr-sub" id="hdrSub">Defensive Scouting</div>
   </div>
-  <button onclick="openFeedback()" style="margin-left:auto;background:rgba(255,255,255,0.08);border:1px solid rgba(255,255,255,0.2);color:var(--grayl);border-radius:8px;padding:6px 12px;font-size:11px;font-weight:700;cursor:pointer;font-family:inherit;letter-spacing:.5px">&#128172; Feedback</button>
+  <button id="gamedayBtn" onclick="toggleGameDay()" title="Game-day high-contrast mode" style="margin-left:auto;background:rgba(255,255,255,0.08);border:1px solid rgba(255,255,255,0.2);color:var(--grayl);border-radius:8px;padding:6px 11px;font-size:14px;cursor:pointer;font-family:inherit">&#9728;</button>
+  <button onclick="openFeedback()" style="margin-left:8px;background:rgba(255,255,255,0.08);border:1px solid rgba(255,255,255,0.2);color:var(--grayl);border-radius:8px;padding:6px 12px;font-size:11px;font-weight:700;cursor:pointer;font-family:inherit;letter-spacing:.5px">&#128172; Feedback</button>
 </div>
 
 <!-- BREADCRUMB -->
@@ -6065,6 +6073,25 @@ function printBlitzPackage(){
 }
 
 // ── SHARE / EMAIL ─────────────────────────────────────────────────────────────
+// Game-day mode: high-contrast theme for reading the screen in direct sunlight.
+function isGameDay(){ try { return localStorage.getItem('blitziq_gameday')==='1'; } catch(_) { return false; } }
+function applyGameDay(){
+  const on=isGameDay();
+  document.body.classList.toggle('gameday', on);
+  const b=document.getElementById('gamedayBtn');
+  if(b){
+    b.style.background=on?'var(--gold)':'rgba(255,255,255,0.08)';
+    b.style.color=on?'var(--navy)':'var(--grayl)';
+    b.title=on?'Game-day mode ON — tap for normal':'Game-day high-contrast mode';
+  }
+}
+function toggleGameDay(){
+  const on=isGameDay();
+  try { localStorage.setItem('blitziq_gameday', on?'0':'1'); } catch(_) {}
+  applyGameDay();
+  showToast(on?'Game-day mode off':'Game-day mode on — high contrast');
+}
+
 function showToast(msg, ms=2200){
   const el=document.getElementById('toastEl');
   el.textContent=msg; el.classList.add('show');
@@ -6241,7 +6268,7 @@ loadDB();
   });
   if(changed) saveDB();
 })();
-renderOpps(); syncHdr();
+renderOpps(); syncHdr(); applyGameDay();
 if (_loadNotice) setTimeout(() => { try { showToast(_loadNotice, 5000); } catch(_) {} }, 400);
 
 // ── INSTALL SCRIPT ────────────────────────────────────────────────────────────
