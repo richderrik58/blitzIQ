@@ -696,6 +696,12 @@
         <label class="fld-lbl">Key Players <span style="color:var(--gray);font-weight:400">(optional — one per line)</span></label>
         <textarea class="fld-ta" id="o_keyplayers" placeholder="#88 TE — vertical seam threat&#10;#4 RB — home-run speed, watch screens&#10;#7 QB — runs on scramble drill"></textarea>
       </div>
+      <div class="fld">
+        <label style="display:flex;align-items:center;gap:10px;cursor:pointer;font-size:13px;color:var(--grayl);line-height:1.4">
+          <input type="checkbox" id="o_self" style="width:18px;height:18px;flex-shrink:0;accent-color:var(--gold)">
+          This is <strong style="color:var(--gold)">my team</strong> — self-scout to see what you're tipping
+        </label>
+      </div>
     </div>
     <div class="modal-foot">
       <button class="btn-cancel" onclick="closeModal('mOpp')">Cancel</button>
@@ -1312,11 +1318,12 @@ function renderOpps() {
       </div>`;
     return;
   }
-  el.innerHTML = demoBanner(false) + DB.opponents.map(o => `
-    <div class="card" onclick="selOpp(${o.id})">
+  const opps = [...DB.opponents].sort((a,b)=>(b.self?1:0)-(a.self?1:0));
+  el.innerHTML = demoBanner(false) + opps.map(o => `
+    <div class="card" onclick="selOpp(${o.id})"${o.self?' style="border-color:rgba(240,165,0,.55)"':''}>
       <div class="card-hd">
         <div><div class="card-name">${esc(o.name)}</div><div class="card-meta">Season ${esc(o.season)} &nbsp;·&nbsp; ${o.formations.length} Formation${o.formations.length!==1?'s':''}</div></div>
-        <span class="season-badge">${esc(o.season)}</span>
+        ${o.self?`<span class="season-badge">&#128081; MY TEAM</span>`:`<span class="season-badge">${esc(o.season)}</span>`}
       </div>
       ${sbar(o.runPct,o.passPct)}
       <div class="card-note">${esc(o.notes)}</div>
@@ -1330,9 +1337,10 @@ function selOpp(id) { st.opp=DB.opponents.find(o=>o.id===id); renderForms(); sho
 function renderForms() {
   const o = st.opp;
   const isDemo=o.notes?.includes('DEMO-Riverside-Knights-2025');
+  const selfTells = o.self ? selfScoutTells(o) : [];
   document.getElementById('oppOv').innerHTML =
     (isDemo?demoBanner(true):'') +
-    `<div class="ov-ttl">${esc(o.name)} ${esc(o.season)} — Overall Tendency</div>${sbar(o.runPct,o.passPct)}<div class="ov-note">${isDemo?'Sample opponent — explore the app, then import your real scouting PDF':esc(o.notes)}</div>`;
+    `<div class="ov-ttl">${esc(o.name)} ${esc(o.season)} — ${o.self?'Self-Scout':'Overall Tendency'}</div>${sbar(o.runPct,o.passPct)}<div class="ov-note">${isDemo?'Sample opponent — explore the app, then import your real scouting PDF':esc(o.notes)}</div>`;
   // Game notes card
   // Import log (only for Hudl-imported opponents)
   const logEl=document.getElementById('gameNotesCard');
@@ -1352,6 +1360,14 @@ function renderForms() {
     <div class="def-block" style="margin-bottom:14px;border-color:rgba(240,165,0,.35)">
       <div class="def-lbl" style="margin-bottom:10px;color:var(--gold)">&#127944; Key Players</div>
       <div style="font-size:13px;color:rgba(255,255,255,.85);line-height:1.7;white-space:pre-wrap">${esc(o.keyPlayers)}</div>
+    </div>` : ''}
+    ${o.self ? `
+    <div class="def-block" style="margin-bottom:14px;border-color:rgba(239,68,68,.4);background:rgba(239,68,68,.04)">
+      <div class="def-lbl" style="margin-bottom:10px;color:var(--red)">&#9888; Self-Scout — What You're Tipping</div>
+      ${selfTells.length
+        ? `<div style="font-size:13px;color:rgba(255,255,255,.85);line-height:1.75">${selfTells.map(t=>`&#8226; ${esc(t)}`).join('<br>')}</div>
+           <div style="font-size:11px;color:var(--gray);margin-top:10px;font-style:italic">These are the most predictable tendencies in your data — vary your calls here so opponents can't key them.</div>`
+        : `<div style="font-size:12px;color:var(--gray)">No strong tendencies yet — add your formations &amp; situations to see what you give away.</div>`}
     </div>` : ''}
     ${o.importLog ? `
     <div style="margin-bottom:14px">
@@ -1414,6 +1430,25 @@ function sampleFlag(s){
 // Field-position & hash context (optional per situation). Calls change by
 // where the ball is and which hash it's on, so surface these as tags.
 function sitCtxLabel(s){ return [s.fieldZone, s.hash, s.motion?('Motion: '+s.motion):''].filter(Boolean).join(' · '); }
+
+// Self-scout: scan your own profile for the tendencies you're giving away,
+// ranked by how predictable they are. Mirrors what an opponent's DC would key.
+function selfScoutTells(o){
+  const tells=[];
+  (o.formations||[]).forEach(f=>{
+    if(f.passPct>=75) tells.push({sev:f.passPct, txt:`${f.name}: ${f.passPct}% pass overall — opponents can sit on it.`});
+    else if(f.runPct>=75) tells.push({sev:f.runPct, txt:`${f.name}: ${f.runPct}% run overall — predictable.`});
+    (f.situations||[]).forEach(s=>{
+      const ctx=sitCtxLabel(s);
+      const where=`${f.name} · ${s.distLabel}${ctx?' · '+ctx:''}`;
+      if(s.passPct===100||s.runPct===100) tells.push({sev:101, txt:`${where}: 100% ${s.passPct===100?'pass':'run'} — a dead giveaway.`});
+      else if(s.passPct>=85) tells.push({sev:s.passPct, txt:`${where}: ${s.passPct}% pass.`});
+      else if(s.runPct>=85) tells.push({sev:s.runPct, txt:`${where}: ${s.runPct}% run.`});
+      if(s.motion) tells.push({sev:78, txt:`${where}: motion “${s.motion}” may tip the play.`});
+    });
+  });
+  return tells.sort((a,b)=>b.sev-a.sev).slice(0,10).map(t=>t.txt);
+}
 function sitCtxChips(s){
   const tags=[];
   if(s.fieldZone) tags.push({t:s.fieldZone, gold:false});
@@ -1623,6 +1658,7 @@ function selDistCustom(btn){
 // ── FORM RESETS ───────────────────────────────────────────────────────────────
 function resetOpp(){
   ['o_name','o_notes','o_keyplayers'].forEach(id=>{document.getElementById(id).value='';document.getElementById(id).classList.remove('err');});
+  document.getElementById('o_self').checked=false;
   document.getElementById('o_season').value='2025';
   document.getElementById('o_run').value='50'; document.getElementById('o_pass').value='50';
 }
@@ -1650,6 +1686,7 @@ function saveOpp(){
     passPct:parseInt(document.getElementById('o_pass').value)||50,
     notes:document.getElementById('o_notes').value.trim()||'No scouting notes added.',
     keyPlayers:document.getElementById('o_keyplayers').value.trim()||'',
+    self:document.getElementById('o_self').checked||undefined,
     gameNotes:'',
     formations:[]});
   saveDB(); closeModal('mOpp'); resetOpp(); renderOpps();
@@ -5725,6 +5762,7 @@ function editOpp(id,e){
   document.getElementById('o_pass').value=o.passPct;
   document.getElementById('o_notes').value=o.notes||'';
   document.getElementById('o_keyplayers').value=o.keyPlayers||'';
+  document.getElementById('o_self').checked=!!o.self;
   // Switch save button to update mode
   const btn=document.querySelector('#mOpp .btn-save');
   btn.textContent='Update Opponent';
@@ -5735,6 +5773,7 @@ function editOpp(id,e){
     o.passPct=parseInt(document.getElementById('o_pass').value)||50;
     o.notes=document.getElementById('o_notes').value.trim();
     o.keyPlayers=document.getElementById('o_keyplayers').value.trim();
+    o.self=document.getElementById('o_self').checked||undefined;
     saveDB(); closeModal('mOpp'); resetOpp(); renderOpps();
     btn.textContent='Save Opponent'; btn.onclick=saveOpp;
   };
