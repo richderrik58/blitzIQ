@@ -437,6 +437,10 @@
       </div>
     </div>
   </div>
+  <div id="oppSearchWrap" style="display:none;margin-bottom:12px;position:relative">
+    <input id="oppSearch" type="text" placeholder="Search teams, formations, plays…" oninput="renderOpps()" autocomplete="off" style="width:100%;padding:11px 38px 11px 14px;background:var(--navy2);border:1px solid rgba(255,255,255,.12);border-radius:10px;color:var(--white);font-size:14px;font-family:inherit">
+    <button id="oppSearchClear" onclick="clearOppSearch()" style="display:none;position:absolute;right:8px;top:50%;transform:translateY(-50%);background:none;border:none;color:var(--gray);font-size:16px;cursor:pointer;padding:4px 8px;font-family:inherit">&#10005;</button>
+  </div>
   <div id="oppList"></div>
 </div>
 
@@ -1298,8 +1302,26 @@ function loadDemo(){
   st.opp=demoOpp; renderForms(); showScreen(2);
 }
 
+// Search matcher: every searchable field flattened into one haystack, with
+// multi-word AND semantics so "trips empty" narrows instead of widening.
+function oppMatchesQuery(o, terms){
+  const parts=[o.name,o.season,o.notes,o.keyPlayers];
+  (o.formations||[]).forEach(f=>{
+    parts.push(f.name,f.favoriteRunPlay,f.favoritePassPlay,f.personnel,f.downTendency);
+    (f.runPlays||[]).forEach(p=>parts.push(p));
+    (f.passPlays||[]).forEach(p=>parts.push(p));
+    (f.situations||[]).forEach(s=>parts.push(s.distLabel,s.fieldZone,s.hash,s.motion,s.notes,s.dc&&s.dc.coverage,s.dc&&s.dc.blitz));
+  });
+  const hay=parts.filter(Boolean).join(' ').toLowerCase();
+  return terms.every(t=>hay.includes(t));
+}
+function clearOppSearch(){ const i=document.getElementById('oppSearch'); if(i) i.value=''; renderOpps(); }
+
 function renderOpps() {
   const el = document.getElementById('oppList');
+  const searchWrap = document.getElementById('oppSearchWrap');
+  const showSearch = DB.opponents.length >= 3;
+  if (searchWrap) searchWrap.style.display = showSearch ? 'block' : 'none';
   if (!DB.opponents.length) {
     if (!DB.scheme) {
       el.innerHTML = `
@@ -1327,8 +1349,19 @@ function renderOpps() {
       </div>`;
     return;
   }
-  const opps = [...DB.opponents].sort((a,b)=>(b.self?1:0)-(a.self?1:0));
-  el.innerHTML = demoBanner(false) + opps.map(o => `
+  let opps = [...DB.opponents].sort((a,b)=>(b.self?1:0)-(a.self?1:0));
+  const q = showSearch ? (document.getElementById('oppSearch').value||'').trim().toLowerCase() : '';
+  const clearBtn = document.getElementById('oppSearchClear');
+  if (clearBtn) clearBtn.style.display = q ? 'block' : 'none';
+  if (q) {
+    const terms = q.split(/\s+/).filter(Boolean);
+    opps = opps.filter(o => oppMatchesQuery(o, terms));
+    if (!opps.length) {
+      el.innerHTML = `<div class="empty"><div class="empty-icon">🔍</div><div class="empty-txt">No teams match “${esc(q)}”.<br>Try a team name, formation, or play.</div></div>`;
+      return;
+    }
+  }
+  el.innerHTML = (q?'':demoBanner(false)) + opps.map(o => `
     <div class="card" onclick="selOpp(${o.id})"${o.self?' style="border-color:rgba(240,165,0,.55)"':''}>
       <div class="card-hd">
         <div><div class="card-name">${esc(o.name)}</div><div class="card-meta">Season ${esc(o.season)} &nbsp;·&nbsp; ${o.formations.length} Formation${o.formations.length!==1?'s':''}</div></div>
