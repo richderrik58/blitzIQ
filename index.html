@@ -4,6 +4,16 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0">
   <title>BlitzIQ — Defensive Scouting</title>
+  <!-- PWA: installable + offline -->
+  <link rel="manifest" href="manifest.webmanifest">
+  <meta name="theme-color" content="#0a1628">
+  <meta name="description" content="Defensive football scouting: import tendencies, browse formations, get defensive calls, and build game plans, practice scripts and play diagrams.">
+  <link rel="icon" type="image/png" href="icon-192.png">
+  <link rel="apple-touch-icon" href="apple-touch-icon.png">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="apple-mobile-web-app-title" content="BlitzIQ">
   <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
   <!-- Anthropic SDK for AI play generation (loaded as ES module, exposed globally) -->
   <script type="module">
@@ -6293,6 +6303,15 @@ function printScript(){
     <div class="modal-foot"><button class="btn-pri" onclick="closeModal('mTerms')">Close</button></div>
   </div>
 </div>
+
+<!-- PWA service worker registration -->
+<script>
+  if ('serviceWorker' in navigator) {
+    window.addEventListener('load', () => {
+      navigator.serviceWorker.register('sw.js').catch((e) => console.warn('SW registration failed:', e));
+    });
+  }
+</script>
 
 </body>
 </html>
