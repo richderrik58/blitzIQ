@@ -1021,14 +1021,47 @@ const SEED = { opponents: [{
 
 // ── STORAGE ───────────────────────────────────────────────────────────────────
 const SKEY = 'blitziq_v1';
+const SCHEMA_VERSION = 1;        // bump when the DB shape changes; add a step in migrateDB
 let DB;
+let _loadNotice = null;          // surfaced via toast after first render (e.g. recovery message)
+
+function freshDB(){ return JSON.parse(JSON.stringify(SEED)); }
+
+// Bring a loaded DB up to the current schema. Throws if the data isn't a usable
+// BlitzIQ DB so loadDB() can fall back instead of running on garbage.
+function migrateDB(db){
+  if(!db || typeof db!=='object' || !Array.isArray(db.opponents)) throw new Error('unrecognized data shape');
+  if(!('scheme' in db)) db.scheme = null;
+  let v = typeof db._sv === 'number' ? db._sv : 0;
+  // Forward migrations run in order; each lifts the data one version.
+  // while (v < SCHEMA_VERSION) { if (v === 1) { /* migrate 1 -> 2 */ } v++; }
+  db._sv = SCHEMA_VERSION;
+  return db;
+}
+
+// Crash-safe load: never let corrupt/incompatible storage white-screen the app.
+// A bad blob is preserved under a timestamped key so it can still be recovered.
 function loadDB() {
-  try { const r = localStorage.getItem(SKEY); if (r) { DB = JSON.parse(r); if(!('scheme' in DB)) DB.scheme=null; return; } } catch(e) {}
-  DB = JSON.parse(JSON.stringify(SEED));
+  let raw = null;
+  try { raw = localStorage.getItem(SKEY); } catch(e) { raw = null; }
+  if (raw) {
+    try { DB = migrateDB(JSON.parse(raw)); saveDB(); return; }
+    catch(e) {
+      try { localStorage.setItem(SKEY + '_corrupt_' + Date.now(), raw); } catch(_) {}
+      _loadNotice = 'Saved data couldn’t be read and was reset. The old copy was kept — use Import Backup to restore.';
+    }
+  }
+  DB = freshDB();
   saveDB();
 }
 function setScheme(s){ DB.scheme=s; saveDB(); renderOpps(); }
-function saveDB() { localStorage.setItem(SKEY, JSON.stringify(DB)); }
+
+// Crash-safe save: report (don't throw) on quota/blocked storage so edits in
+// memory aren't silently assumed persisted.
+function saveDB() {
+  try { localStorage.setItem(SKEY, JSON.stringify(DB)); return true; }
+  catch(e) { try { showToast('Could not save — device storage is full or blocked'); } catch(_) {} return false; }
+}
 function uid() { return Date.now() * 1000 + Math.floor(Math.random() * 999); }
 
 // ── BACKUP / RESTORE ────────────────────────────────────────────────────────
@@ -6061,6 +6094,7 @@ loadDB();
   if(changed) saveDB();
 })();
 renderOpps(); syncHdr();
+if (_loadNotice) setTimeout(() => { try { showToast(_loadNotice, 5000); } catch(_) {} }, 400);
 
 // ── INSTALL SCRIPT ────────────────────────────────────────────────────────────
 let cvScript = [];
