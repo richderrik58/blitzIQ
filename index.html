@@ -690,7 +690,11 @@
       </div>
       <div class="fld">
         <label class="fld-lbl">Scouting Notes</label>
-        <textarea class="fld-ta" id="o_notes" placeholder="Offense style, key players, tempo…"></textarea>
+        <textarea class="fld-ta" id="o_notes" placeholder="Offense style, tempo…"></textarea>
+      </div>
+      <div class="fld">
+        <label class="fld-lbl">Key Players <span style="color:var(--gray);font-weight:400">(optional — one per line)</span></label>
+        <textarea class="fld-ta" id="o_keyplayers" placeholder="#88 TE — vertical seam threat&#10;#4 RB — home-run speed, watch screens&#10;#7 QB — runs on scramble drill"></textarea>
       </div>
     </div>
     <div class="modal-foot">
@@ -762,6 +766,17 @@
           <button class="chip" onclick="fillFld('f_fpass','Smash')">Smash</button>
           <button class="chip" onclick="fillFld('f_fpass','Mesh')">Mesh</button>
           <button class="chip" onclick="fillFld('f_fpass','Bubble Screen')">Bubble Screen</button>
+        </div>
+      </div>
+      <div class="fld">
+        <label class="fld-lbl">Personnel <span style="color:var(--gray);font-weight:400">(optional)</span></label>
+        <input class="fld-in" id="f_pers" placeholder="e.g. 11 (1 RB, 1 TE)" type="text">
+        <div class="chips">
+          <button class="chip" onclick="fillFld('f_pers','10 Personnel')">10</button>
+          <button class="chip" onclick="fillFld('f_pers','11 Personnel')">11</button>
+          <button class="chip" onclick="fillFld('f_pers','12 Personnel')">12</button>
+          <button class="chip" onclick="fillFld('f_pers','21 Personnel')">21</button>
+          <button class="chip" onclick="fillFld('f_pers','22 Personnel')">22</button>
         </div>
       </div>
       <div class="fld">
@@ -870,6 +885,10 @@
           <option>Middle</option>
           <option>Right Hash</option>
         </select>
+      </div>
+      <div class="fld">
+        <label class="fld-lbl">Motion Tendency <span style="color:var(--gray);font-weight:400">(optional — biggest pre-snap tell)</span></label>
+        <input class="fld-in" id="s_motion" placeholder="e.g. Jet motion → outside zone away" type="text">
       </div>
       <div class="fld">
         <label class="fld-lbl">Run / Pass Tendency</label>
@@ -1329,6 +1348,11 @@ function renderForms() {
       </div>
       ${gn ? `<div style="font-size:13px;color:rgba(255,255,255,.82);line-height:1.65;white-space:pre-wrap">${esc(gn)}</div>` : ''}
     </div>
+    ${o.keyPlayers ? `
+    <div class="def-block" style="margin-bottom:14px;border-color:rgba(240,165,0,.35)">
+      <div class="def-lbl" style="margin-bottom:10px;color:var(--gold)">&#127944; Key Players</div>
+      <div style="font-size:13px;color:rgba(255,255,255,.85);line-height:1.7;white-space:pre-wrap">${esc(o.keyPlayers)}</div>
+    </div>` : ''}
     ${o.importLog ? `
     <div style="margin-bottom:14px">
       <button onclick="this.nextElementSibling.style.display=this.nextElementSibling.style.display==='none'?'block':'none';this.textContent=this.textContent.includes('Show')?'&#128196; Hide Import Log':'&#128196; Show Import Log'"
@@ -1352,8 +1376,9 @@ function renderForms() {
       ?passes.map(p=>`<div style="font-size:10px;color:var(--grayl);padding:1px 0;line-height:1.4">&#9992; ${esc(p)}</div>`).join('')
       :'<div style="font-size:10px;color:var(--gray);font-style:italic">—</div>';
     const usage=f.playCount&&f.totalPlays?`<span style="font-size:10px;color:var(--gray);margin-left:8px">${f.playCount}/${f.totalPlays} plays</span>`:'';
+    const persChip=f.personnel?`<span style="font-size:9px;font-weight:800;letter-spacing:.5px;text-transform:uppercase;background:rgba(240,165,0,.14);color:var(--gold);border:1px solid rgba(240,165,0,.35);padding:2px 8px;border-radius:10px;margin-left:8px;vertical-align:middle">${esc(f.personnel)}</span>`:'';
     return `<div class="card" onclick="selForm(${f.id})">
-      <div class="card-name-sm">${esc(f.name)}${usage}</div>
+      <div class="card-name-sm">${esc(f.name)}${persChip}${usage}</div>
       ${sbar(f.runPct,f.passPct)}
       <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:10px">
         <div>
@@ -1388,13 +1413,20 @@ function sampleFlag(s){
 
 // Field-position & hash context (optional per situation). Calls change by
 // where the ball is and which hash it's on, so surface these as tags.
-function sitCtxLabel(s){ return [s.fieldZone, s.hash].filter(Boolean).join(' · '); }
+function sitCtxLabel(s){ return [s.fieldZone, s.hash, s.motion?('Motion: '+s.motion):''].filter(Boolean).join(' · '); }
 function sitCtxChips(s){
-  const parts=[s.fieldZone,s.hash].filter(Boolean);
-  if(!parts.length) return '';
+  const tags=[];
+  if(s.fieldZone) tags.push({t:s.fieldZone, gold:false});
+  if(s.hash)      tags.push({t:s.hash, gold:false});
+  if(s.motion)    tags.push({t:'↔ '+s.motion, gold:true});
+  if(!tags.length) return '';
   return `<div style="display:flex;flex-wrap:wrap;gap:5px;margin-top:7px">`+
-    parts.map(p=>`<span style="font-size:9px;font-weight:800;letter-spacing:.5px;text-transform:uppercase;background:rgba(255,255,255,.06);color:var(--grayl);border:1px solid rgba(255,255,255,.14);padding:2px 8px;border-radius:10px">${esc(p)}</span>`).join('')+
-    `</div>`;
+    tags.map(x=>{
+      const sty=x.gold
+        ?'background:rgba(240,165,0,.14);color:var(--gold);border:1px solid rgba(240,165,0,.35)'
+        :'background:rgba(255,255,255,.06);color:var(--grayl);border:1px solid rgba(255,255,255,.14)';
+      return `<span style="font-size:9px;font-weight:800;letter-spacing:.5px;text-transform:uppercase;${sty};padding:2px 8px;border-radius:10px">${esc(x.t)}</span>`;
+    }).join('')+`</div>`;
 }
 function zoneTip(s){
   switch(s.fieldZone){
@@ -1590,16 +1622,16 @@ function selDistCustom(btn){
 
 // ── FORM RESETS ───────────────────────────────────────────────────────────────
 function resetOpp(){
-  ['o_name','o_notes'].forEach(id=>{document.getElementById(id).value='';document.getElementById(id).classList.remove('err');});
+  ['o_name','o_notes','o_keyplayers'].forEach(id=>{document.getElementById(id).value='';document.getElementById(id).classList.remove('err');});
   document.getElementById('o_season').value='2025';
   document.getElementById('o_run').value='50'; document.getElementById('o_pass').value='50';
 }
 function resetForm(){
-  ['f_name','f_frun','f_fpass','f_tend'].forEach(id=>{document.getElementById(id).value='';document.getElementById(id).classList.remove('err');});
+  ['f_name','f_frun','f_fpass','f_tend','f_pers'].forEach(id=>{document.getElementById(id).value='';document.getElementById(id).classList.remove('err');});
   document.getElementById('f_run').value='50'; document.getElementById('f_pass').value='50';
 }
 function resetSit(){
-  ['s_notes','s_cov','s_blitz','s_reason','s_alert','s_custom','s_plays','s_zone','s_hash'].forEach(id=>document.getElementById(id).value='');
+  ['s_notes','s_cov','s_blitz','s_reason','s_alert','s_custom','s_plays','s_zone','s_hash','s_motion'].forEach(id=>document.getElementById(id).value='');
   document.getElementById('s_custom').style.display='none';
   document.getElementById('s_run').value='50'; document.getElementById('s_pass').value='50';
   document.querySelectorAll('#mSit .sel-btn').forEach(b=>b.classList.remove('active'));
@@ -1617,6 +1649,7 @@ function saveOpp(){
     runPct:parseInt(document.getElementById('o_run').value)||50,
     passPct:parseInt(document.getElementById('o_pass').value)||50,
     notes:document.getElementById('o_notes').value.trim()||'No scouting notes added.',
+    keyPlayers:document.getElementById('o_keyplayers').value.trim()||'',
     gameNotes:'',
     formations:[]});
   saveDB(); closeModal('mOpp'); resetOpp(); renderOpps();
@@ -1644,6 +1677,7 @@ function saveForm(){
     favoriteRunPlay:document.getElementById('f_frun').value.trim()||'Not specified',
     favoritePassPlay:document.getElementById('f_fpass').value.trim()||'Not specified',
     downTendency:document.getElementById('f_tend').value.trim()||'No tendency notes added.',
+    personnel:document.getElementById('f_pers').value.trim()||undefined,
     situations:[]});
   saveDB(); closeModal('mForm'); resetForm(); renderForms();
 }
@@ -1657,9 +1691,10 @@ function saveSit(){
   const plays=(isFinite(playsRaw)&&playsRaw>0)?playsRaw:undefined;
   const fieldZone=document.getElementById('s_zone').value||undefined;
   const hash=document.getElementById('s_hash').value||undefined;
+  const motion=document.getElementById('s_motion').value.trim()||undefined;
   st.form.situations.push({id:uid(),down:sitDown,
     distLabel:`${DLBLS[sitDown]} & ${distVal}`,
-    runPct:run,passPct:100-run,plays,fieldZone,hash,
+    runPct:run,passPct:100-run,plays,fieldZone,hash,motion,
     notes:document.getElementById('s_notes').value.trim()||'No tendency notes added.',
     dc:{coverage:document.getElementById('s_cov').value.trim()||'Not specified',
         blitz:document.getElementById('s_blitz').value.trim()||'Not specified',
@@ -5689,6 +5724,7 @@ function editOpp(id,e){
   document.getElementById('o_run').value=o.runPct;
   document.getElementById('o_pass').value=o.passPct;
   document.getElementById('o_notes').value=o.notes||'';
+  document.getElementById('o_keyplayers').value=o.keyPlayers||'';
   // Switch save button to update mode
   const btn=document.querySelector('#mOpp .btn-save');
   btn.textContent='Update Opponent';
@@ -5698,6 +5734,7 @@ function editOpp(id,e){
     o.runPct=parseInt(document.getElementById('o_run').value)||50;
     o.passPct=parseInt(document.getElementById('o_pass').value)||50;
     o.notes=document.getElementById('o_notes').value.trim();
+    o.keyPlayers=document.getElementById('o_keyplayers').value.trim();
     saveDB(); closeModal('mOpp'); resetOpp(); renderOpps();
     btn.textContent='Save Opponent'; btn.onclick=saveOpp;
   };
@@ -5710,18 +5747,20 @@ function editForm(id,e){
   document.getElementById('f_name').value=f.name;
   document.getElementById('f_run').value=f.runPct;
   document.getElementById('f_pass').value=f.passPct;
-  document.getElementById('f_runplay').value=f.favoriteRunPlay||'';
-  document.getElementById('f_passplay').value=f.favoritePassPlay||'';
+  document.getElementById('f_frun').value=f.favoriteRunPlay||'';
+  document.getElementById('f_fpass').value=f.favoritePassPlay||'';
   document.getElementById('f_tend').value=f.downTendency||'';
+  document.getElementById('f_pers').value=f.personnel||'';
   const btn=document.querySelector('#mForm .btn-save');
   btn.textContent='Update Formation';
   btn.onclick=()=>{
     f.name=document.getElementById('f_name').value.trim()||f.name;
     f.runPct=parseInt(document.getElementById('f_run').value)||50;
     f.passPct=parseInt(document.getElementById('f_pass').value)||50;
-    f.favoriteRunPlay=document.getElementById('f_runplay').value.trim();
-    f.favoritePassPlay=document.getElementById('f_passplay').value.trim();
+    f.favoriteRunPlay=document.getElementById('f_frun').value.trim();
+    f.favoritePassPlay=document.getElementById('f_fpass').value.trim();
     f.downTendency=document.getElementById('f_tend').value.trim();
+    f.personnel=document.getElementById('f_pers').value.trim()||undefined;
     saveDB(); closeModal('mForm'); resetForm(); renderForms();
     btn.textContent='Save Formation'; btn.onclick=saveForm;
   };
