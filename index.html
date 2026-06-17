@@ -4052,6 +4052,30 @@ function copyScoutReport(){
   if(!_scoutReportText) return;
   navigator.clipboard.writeText(_scoutReportText).then(()=>showToast('Report copied')).catch(()=>showToast('Copy failed'));
 }
+function printScoutReport(){
+  if(!_scoutReportText) return;
+  const o=st.opp;
+  const body=_scoutReportText.split('\n').map(line=>{
+    const t=line.trim();
+    if(!t) return '<div style="height:6px"></div>';
+    if(t.startsWith('## ')) return `<div class="sec">${esc(t.slice(3))}</div>`;
+    if(t.startsWith('- ')||t.startsWith('• ')) return `<div class="b">&bull; ${esc(t.replace(/^[-•]\s*/,''))}</div>`;
+    return `<div class="p">${esc(t)}</div>`;
+  }).join('');
+  const title=o?`${esc(o.name)} ${esc(o.season)}`:'';
+  const html=`<!DOCTYPE html><html><head><meta charset="UTF-8"><title>BlitzIQ Scouting Report — ${title}</title>
+<style>@page{margin:.5in}*{margin:0;padding:0;box-sizing:border-box}
+body{font-family:Arial,Helvetica,sans-serif;color:#111;font-size:11pt;line-height:1.5}
+h1{font-size:16pt;font-weight:900;letter-spacing:1.5px}
+.sub{font-size:9pt;color:#6b7280;margin:2px 0 12px;padding-bottom:8px;border-bottom:2.5px solid #111}
+.sec{font-size:8pt;letter-spacing:2px;text-transform:uppercase;font-weight:800;color:#92400e;margin:14px 0 6px;border-left:3px solid #92400e;padding-left:8px}
+.b{font-size:10pt;margin:0 0 3px 14px}.p{font-size:10pt;margin-bottom:6px}</style></head>
+<body><h1>BLITZIQ SCOUTING REPORT</h1><div class="sub">${title} &middot; AI-assisted defensive scouting</div>${body}</body></html>`;
+  const w=window.open('','_blank','width=820,height=1100');
+  if(!w){ try{ showToast('Allow pop-ups to print the report'); }catch(_){} return; }
+  w.document.write(html); w.document.close(); w.focus();
+  setTimeout(()=>w.print(),350);
+}
 
 async function generateScoutingReport(){
   if(!st.opp) return;
@@ -6910,6 +6934,7 @@ function printScript(){
     <div class="modal-body" id="scoutBody"></div>
     <div class="modal-foot">
       <button class="btn-sec" onclick="copyScoutReport()">&#128203; Copy</button>
+      <button class="btn-sec" onclick="printScoutReport()">&#128438; Print</button>
       <button class="btn-pri" onclick="closeModal('mScout')">Done</button>
     </div>
   </div>
