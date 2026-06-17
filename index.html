@@ -6542,16 +6542,20 @@ function printPracticeScript(){
       <div style="font-size:8pt;color:#374151">${esc(a.detail)}</div>
     </div>`).join('');
 
-  const scriptRows=plays.map(p=>`<tr>
-    <td style="font-weight:800;color:#92400e">${p.n}</td>
-    <td style="font-weight:700">${esc(p.form)}</td>
-    <td>${esc(p.play)}</td>
-    <td>${esc(p.sit)}</td>
-    <td>${esc(p.hash)}</td>
-    <td style="font-weight:800;color:#92400e">${esc(p.cov)}</td>
-    <td style="font-weight:700">${esc(p.blitz)}</td>
-    <td style="color:#6b7280;font-style:italic">${esc(p.note)}</td>
-  </tr>`).join('');
+  const scriptCardsPrint=plays.map(p=>`
+    <div style="border:1px solid #d0d7de;border-radius:6px;overflow:hidden;break-inside:avoid;background:#fff">
+      <div style="display:flex;align-items:center;gap:6px;padding:3px 6px;background:#13294b;color:#fff">
+        <span style="background:#e0a100;color:#13294b;font-weight:900;font-size:7pt;border-radius:3px;padding:1px 5px">${p.n}</span>
+        <span style="font-weight:800;font-size:8pt">${esc(p.form)}</span>
+        <span style="font-size:7pt;color:#cbd5e1;margin-left:auto">${esc(p.sit)} · ${esc(p.hash)}</span>
+      </div>
+      ${playDiagramSVG(p.f, p.play, p.isRun)}
+      <div style="padding:4px 6px;font-size:7.5pt;line-height:1.35">
+        <div><b style="color:#13294b">${p.isRun?'RUN':'PASS'}:</b> ${esc(p.play)}</div>
+        <div><b style="color:#92400e">${esc(p.cov)}</b> · ${esc(p.blitz)}</div>
+        <div style="font-size:6.5pt;color:#6b7280;font-style:italic">${esc(p.note)}</div>
+      </div>
+    </div>`).join('');
 
   const scoutSection=scout.map(s=>`
     <div style="margin-bottom:8px;break-inside:avoid">
@@ -6590,9 +6594,7 @@ function printPracticeScript(){
 ${adjSection}
 
 <div class="sec">Practice Script — ${plays.length} Plays</div>
-<table class="script-tbl"><thead><tr>
-  <th>#</th><th>Formation</th><th>Play</th><th>Situation</th><th>Hash</th><th>Coverage</th><th>Blitz</th><th>Scout Notes</th>
-</tr></thead><tbody>${scriptRows}</tbody></table>
+<div style="display:grid;grid-template-columns:repeat(3,1fr);gap:8px">${scriptCardsPrint}</div>
 
 <div class="sec">Scout Team Instructions</div>
 ${scoutSection}
