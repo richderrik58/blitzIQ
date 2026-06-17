@@ -4476,7 +4476,7 @@ function getFormationGapHTML(f){
 // path instead. Coords match applyGeneratedPlay: x=fraction of width, y=px from
 // LOS (negative = upfield). Returns [] when the call can't be parsed.
 const ROUTE_LIB = {
-  GO:[[0,28],[0,-130]], STREAK:[[0,28],[0,-130]], VERT:[[0,28],[0,-130]], VERTICAL:[[0,28],[0,-130]], FLY:[[0,28],[0,-130]],
+  GO:[[0,28],[0,-130]], STREAK:[[0,28],[0,-130]], VERT:[[0,28],[0,-130]], VERTICAL:[[0,28],[0,-130]],
   SEAM:[[0,28],[-0.03,-130]],
   FADE:[[0,28],[0.05,-122]],
   HITCH:[[0,28],[0,-42],[0,-32]],
@@ -4496,7 +4496,7 @@ const ROUTE_LIB = {
   // DRAG: release 1 yd downfield, then cross the field finishing at ~5 yds depth
   DRAG:[[0,28],[0,-7],[-0.36,-35]], SHALLOW:[[0,28],[0,-7],[-0.36,-35]],
 };
-const RUN_WORDS=/\b(ZONE|POWER|ISO|COUNTER|DRAW|SWEEP|KICK|FOLD|SNEAK|PUNCH|BASE|DIVE|TRAP|GUT|BLAST|BELLY|WHAM|LEAD|JET|READ|MIDLINE|VEGAS|BUCK|GAP)\b/;
+const RUN_WORDS=/\b(ZONE|POWER|ISO|COUNTER|DRAW|SWEEP|KICK|FOLD|SNEAK|PUNCH|BASE|DIVE|TRAP|GUT|BLAST|BELLY|WHAM|LEAD|READ|MIDLINE|VEGAS|BUCK|GAP)\b/;
 const _clampF = v => Math.max(0.02, Math.min(0.98, v));
 
 // Map a formation name to an offensive alignment preset (shared by the play
@@ -4532,6 +4532,66 @@ function runCall(playName){
     dir: hole%2===0 ? 1 : -1, gap:letter, dist: letter?_GAP_DIST[letter]:0.12 };
 }
 
+// Route-tree numbers (backup for coaches who call routes by number): even break
+// in, odd break out. 9=go 8=post 7=corner 6=dig 5=out 4=curl 3=comeback 2=slant
+// 1=flat 0=hitch. Applied when a call carries a 3+ digit route string (e.g. 951).
+const ROUTE_NUM = {0:'HITCH',1:'FLAT',2:'SLANT',3:'COMEBACK',4:'CURL',5:'OUT',6:'DIG',7:'CORNER',8:'POST',9:'GO'};
+
+// Named pass concepts → routes for the play-side receivers (outside → in).
+const CONCEPT_ROUTES = {
+  SMASH:['HITCH','CORNER'], FLOOD:['GO','OUT','FLAT'], STICK:['GO','OUT','FLAT'],
+  MESH:['CORNER','DRAG','DRAG'], POSTDIG:['POST','DIG'], POSTWHEEL:['WHEEL','POST'],
+};
+function detectConcept(nm){
+  if(/\b(FOUR|4)\s*VERT/.test(nm)) return 'FOURVERT';
+  if(/\bALL\s*CURL/.test(nm)) return 'ALLCURL';
+  if(/\bSMASH\b/.test(nm)) return 'SMASH';
+  if(/\bFLOOD\b/.test(nm)) return 'FLOOD';
+  if(/\bSTICK\b|\bGHOST\b/.test(nm)) return 'STICK';
+  if(/\bMESH\b/.test(nm)) return 'MESH';
+  if(/POST\s*-?\s*DIG/.test(nm)) return 'POSTDIG';
+  if(/POST\s*-?\s*WHEEL/.test(nm)) return 'POSTWHEEL';
+  return null;
+}
+function applyConcept(concept, nm, recv, out){
+  if(concept==='FOURVERT'){ recv.forEach((r,i)=> out[i]={word:(r.xf>0.30&&r.xf<0.70)?'SEAM':'GO'}); return; }
+  if(concept==='ALLCURL'){ recv.forEach((r,i)=> out[i]={word:'CURL'}); return; }
+  const named = /\bLEFT\b|\bL\b/.test(nm) ? -1 : /\bRIGHT\b|\bR\b/.test(nm) ? 1 : null;
+  const leftN = recv.filter(r=>r.xf<0.5).length;
+  const side = named!==null ? named : (leftN>recv.length-leftN ? -1 : 1);    // named, else trips/strength
+  const idx = recv.map((r,i)=>({i,r}));
+  const playSide = idx.filter(o=> side>0 ? o.r.xf>0.5 : o.r.xf<0.5)
+    .sort((a,b)=> side>0 ? b.r.xf-a.r.xf : a.r.xf-b.r.xf);                     // outside → in
+  (CONCEPT_ROUTES[concept]||[]).forEach((w,k)=>{ if(playSide[k]) out[playSide[k].i]={word:w}; });
+  idx.forEach(o=>{ if(!out[o.i]) out[o.i]={word:'GO'}; });                     // backside clearout
+}
+// Assign one route per receiver: concept → numbered/named tokens (L→R) → jet flat.
+function assignRoutes(nm, recv){
+  const out = new Array(recv.length).fill(null);
+  const concept = detectConcept(nm);
+  if(concept){
+    applyConcept(concept, nm, recv, out);
+  } else {
+    const toks = nm.replace(/[^A-Z0-9\s]/g,' ').split(/\s+/).filter(Boolean);
+    const seq=[];
+    for(let i=0;i<toks.length;i++){
+      const t=toks[i];
+      if(t==='AND' && toks[i+1]==='GO'){ if(seq.length) seq[seq.length-1].andGo=true; i++; continue; }
+      if(/^\d{3,}$/.test(t)){ for(const ch of t){ const w=ROUTE_NUM[+ch]; if(w) seq.push({word:w}); } continue; }
+      if(ROUTE_LIB[t]) seq.push({word:t});
+    }
+    for(let i=0;i<seq.length && i<recv.length;i++) out[i]=seq[i];
+  }
+  if(/\b(JET|MOTION)\b/.test(nm)){                      // jet/motion pass → motion SLOT runs flat (FLY is the RB)
+    const dir = /\bLEFT\b|\bL\b/.test(nm) ? -1 : 1;
+    const idx = recv.map((r,i)=>({i,r}));
+    const side = idx.filter(o=> dir>0 ? o.r.xf>0.5 : o.r.xf<0.5);
+    const inner = (side.length?side:idx).sort((a,b)=>Math.abs(a.r.xf-0.5)-Math.abs(b.r.xf-0.5))[0];
+    if(inner) out[inner.i]={word:'FLAT'};
+  }
+  return out;
+}
+
 // Build per-receiver / ball-carrier route POLYLINES from a Hudl play call.
 // Each entry: {color, pts:[[xf, yPx], …]}; yPx = px from LOS (negative = upfield).
 function buildPlayPolylines(f, offPreset, playName){
@@ -4539,7 +4599,7 @@ function buildPlayPolylines(f, offPreset, playName){
   const preset = CV_PRESETS[offPreset] || CV_PRESETS['spread'];
   const nm = playName.toUpperCase();
   // Run call → ball-carrier path aimed at the numbered gap (A/B/C/D).
-  if(RUN_WORDS.test(nm) || /^\s*\d+\s*$/.test(nm)){
+  if(RUN_WORDS.test(nm) || /^\s*\d{1,2}\s*$/.test(nm)){
     const rc = runCall(nm);
     const dir = rc ? rc.dir : (/\bLEFT\b|\bL\b/.test(nm) ? -1 : 1);
     const dist = rc ? rc.dist : 0.12;
@@ -4562,22 +4622,22 @@ function buildPlayPolylines(f, offPreset, playName){
     const hx = _clampF(0.5+dir*dist);                  // the gap the run hits
     return [{color:'#22c55e', pts:[ [sx,sy], [0.5,48], [hx,-6], [_clampF(hx+dir*0.03),-46] ]}];
   }
-  // Pass call → one route per WR/TE, assigned left→right
+  // Pass call → one route per WR/TE (concept → numbered/named → jet flat)
   const recv = preset.filter(p=>p.type==='WR'||p.type==='TE').sort((a,b)=>a.xf-b.xf);
   if(!recv.length) return [];
-  const toks = nm.replace(/[^A-Z\s]/g,' ').split(/\s+/).filter(Boolean);
-  const seq=[];
-  for(let i=0;i<toks.length;i++){
-    if(toks[i]==='AND' && toks[i+1]==='GO'){ if(seq.length) seq[seq.length-1].andGo=true; i++; continue; }
-    if(ROUTE_LIB[toks[i]]) seq.push({word:toks[i]});
-  }
-  if(!seq.length) return [];
+  const assign = assignRoutes(nm, recv);
   const lines=[];
-  for(let i=0;i<seq.length && i<recv.length;i++){
-    const r=recv[i], sideSign = r.xf<0.5 ? -1 : 1;     // -1 = toward left sideline
-    const pts = ROUTE_LIB[seq[i].word].map(([o,y])=>[_clampF(r.xf + o*sideSign), y]);
-    if(seq[i].andGo) pts.push([pts[pts.length-1][0], -125]); // hitch/curl-and-go = deep extension
+  recv.forEach((r,i)=>{
+    const a=assign[i]; if(!a||!ROUTE_LIB[a.word]) return;
+    const sideSign = r.xf<0.5 ? -1 : 1;                // -1 = toward left sideline
+    const pts = ROUTE_LIB[a.word].map(([o,y])=>[_clampF(r.xf + o*sideSign), y]);
+    if(a.andGo) pts.push([pts[pts.length-1][0], -125]); // hitch/curl-and-go = deep extension
     lines.push({color:'#ef4444', pts});
+  });
+  if(/\bFLY\b/.test(nm)){                                // FLY motion is the RB → swing to the flat
+    const rb = preset.find(p=>p.type==='RB') || preset.find(p=>p.type==='FB');
+    if(rb){ const dir = /\bLEFT\b|\bL\b/.test(nm) ? -1 : 1;
+      lines.push({color:'#ef4444', pts:[[rb.xf,rb.yd],[_clampF(0.5+dir*0.30),36],[_clampF(0.5+dir*0.44),22]]}); }
   }
   return lines;
 }
@@ -4618,7 +4678,7 @@ function playDiagramSVG(f, playName, isRun){
   }).join('');
   // Gap marker (A/B/C/D) at the hole a numbered run hits
   const pNm=(playName||'').toUpperCase();
-  const rc=(RUN_WORDS.test(pNm)||/^\s*\d+\s*$/.test(pNm)) ? runCall(playName) : null;
+  const rc=(RUN_WORDS.test(pNm)||/^\s*\d{1,2}\s*$/.test(pNm)) ? runCall(playName) : null;
   const gapSVG = (rc&&rc.gap) ? (()=>{ const gx=X(_clampF(0.5+rc.dir*rc.dist)), gy=Y(-4);
     return `<circle cx="${gx}" cy="${gy}" r="6.6" fill="#eafaf0" stroke="#16a34a" stroke-width="1" stroke-dasharray="2 1.6"/><text x="${gx}" y="${gy+2.4}" font-size="6.4" font-weight="800" fill="#16a34a" text-anchor="middle">${rc.gap}</text>`;
   })() : '';
