@@ -4496,7 +4496,30 @@ const ROUTE_LIB = {
 };
 const RUN_WORDS=/\b(ZONE|POWER|ISO|COUNTER|DRAW|SWEEP|KICK|FOLD|SNEAK|PUNCH|BASE|DIVE|TRAP|GUT|BLAST|BELLY|WHAM|LEAD|JET|READ|MIDLINE|VEGAS|BUCK|GAP)\b/;
 const _clampF = v => Math.max(0.02, Math.min(0.98, v));
-function buildPlayRoutes(f, offPreset, playName){
+
+// Map a formation name to an offensive alignment preset (shared by the play
+// generator and the practice-script diagram renderer).
+function offPresetFor(name){
+  const nm=(name||'').toUpperCase();
+  if(/TREY\s+R\s+WEAK/.test(nm)) return 'trey-r-weak';
+  if(/TRIPS\s+L\s+STRONG/.test(nm)) return 'trips-l-strong';
+  if(/PRO\s+L\s+TWINS\s+R\s+STRONG/.test(nm)) return 'pro-l-twins-r-strong';
+  if(/TRIPS\s+L\s+WEAK/.test(nm)) return 'trips-l-weak';
+  if(/TREY\s+L\s+STRONG/.test(nm)) return 'trey-l-strong';
+  if(/PRO\s+R\s+TWINS\s+L\s+WEAK/.test(nm)) return 'pro-r-twins-l-weak';
+  if(/TREY\s+R\s+STRONG/.test(nm)) return 'trey-r-strong';
+  if(/PRO\s+L\s+WING\s+L\s+TWINS\s+R\s+WEAK/.test(nm)) return 'pro-l-wing-l-twins-r-weak';
+  if(/PRO\s+L\s+TWINS\s+R\s+WEAK/.test(nm)) return 'pro-l-twins-r-weak';
+  if(/TRIPS|TREY/.test(nm)) return 'trips';
+  if(/EMPTY/.test(nm)) return 'empty';
+  if(/PISTOL|STRONG/.test(nm)) return 'pro-set';
+  if(/I.FORM|IFORM/.test(nm)) return 'i-form';
+  return 'spread';
+}
+
+// Build per-receiver / ball-carrier route POLYLINES from a Hudl play call.
+// Each entry: {color, pts:[[xf, yPx], …]}; yPx = px from LOS (negative = upfield).
+function buildPlayPolylines(f, offPreset, playName){
   if(!playName || playName==='Not specified') return [];
   const preset = CV_PRESETS[offPreset] || CV_PRESETS['spread'];
   const nm = playName.toUpperCase();
@@ -4505,10 +4528,7 @@ function buildPlayRoutes(f, offPreset, playName){
     const rb = preset.find(p=>p.type==='RB') || preset.find(p=>p.type==='FB');
     const dir = /\bLEFT\b|\bL\b/.test(nm) ? -1 : 1;
     const sx = rb?rb.xf:0.6, sy = rb?rb.yd:72;
-    return [
-      {x1:sx, y1:sy, x2:0.5+dir*0.03, y2:46, color:'#22c55e'},
-      {x1:0.5+dir*0.03, y1:46, x2:_clampF(0.5+dir*0.12), y2:-44, color:'#22c55e'},
-    ];
+    return [{color:'#22c55e', pts:[[sx,sy],[0.5+dir*0.03,46],[_clampF(0.5+dir*0.12),-44]]}];
   }
   // Pass call → one route per WR/TE, assigned left→right
   const recv = preset.filter(p=>p.type==='WR'||p.type==='TE').sort((a,b)=>a.xf-b.xf);
@@ -4520,15 +4540,60 @@ function buildPlayRoutes(f, offPreset, playName){
     if(ROUTE_LIB[toks[i]]) seq.push({word:toks[i]});
   }
   if(!seq.length) return [];
-  const routes=[];
+  const lines=[];
   for(let i=0;i<seq.length && i<recv.length;i++){
     const r=recv[i], sideSign = r.xf<0.5 ? -1 : 1;     // -1 = toward left sideline
     const pts = ROUTE_LIB[seq[i].word].map(([o,y])=>[_clampF(r.xf + o*sideSign), y]);
     if(seq[i].andGo) pts.push([pts[pts.length-1][0], -125]); // hitch/curl-and-go = deep extension
-    for(let k=0;k<pts.length-1;k++)
-      routes.push({x1:pts[k][0], y1:pts[k][1], x2:pts[k+1][0], y2:pts[k+1][1], color:'#ef4444'});
+    lines.push({color:'#ef4444', pts});
   }
-  return routes;
+  return lines;
+}
+
+// Flatten polylines into the {x1,y1,x2,y2,color} segments the canvas renderer uses.
+function buildPlayRoutes(f, offPreset, playName){
+  return buildPlayPolylines(f, offPreset, playName).flatMap(pl =>
+    pl.pts.slice(1).map((p,i)=>({x1:pl.pts[i][0], y1:pl.pts[i][1], x2:p[0], y2:p[1], color:pl.color})));
+}
+
+// Static SVG diagram of a single play: offense aligned to the formation, defense
+// in its shell flipped to the offense's strength, and the play's routes drawn.
+// Used in the practice script so each rep shows the look the scout team must give.
+function playDiagramSVG(f, playName, isRun){
+  const W=300, H=196, LY=116, MX=14, FW=W-2*MX, sc=0.42;
+  const X = xf => +(MX + xf*FW).toFixed(1);
+  const Y = yd => +(LY + yd*sc).toFixed(1);
+  const offPreset = offPresetFor(f.name);
+  const off = CV_PRESETS[offPreset] || CV_PRESETS['spread'];
+  const def = CV_PRESETS[getDefPreset(f)] || CV_PRESETS['4-3'];
+  // Strength from the actual alignment: more WR/TE left → flip the defensive front.
+  const recv = off.filter(p=>p.type==='WR'||p.type==='TE');
+  const strongLeft = recv.filter(p=>p.xf<0.5).length > recv.length/2;
+  const lbl = (cx,cy,t,c) => t ? `<text x="${cx}" y="${cy+2.1}" font-size="5.3" font-weight="700" text-anchor="middle" fill="${c}">${t}</text>` : '';
+  const offSVG = off.map(p=>{
+    const cx=X(p.xf), cy=Y(p.yd);
+    if(p.type==='C'||p.type==='OL')
+      return `<rect x="${cx-4.6}" y="${cy-4.6}" width="9.2" height="9.2" rx="1.4" fill="#13294b" stroke="#fff" stroke-width="0.7"/>`+lbl(cx,cy,p.type==='C'?'C':'','#fff');
+    return `<circle cx="${cx}" cy="${cy}" r="6" fill="#13294b" stroke="#fff" stroke-width="0.7"/>`+lbl(cx,cy,p.type,'#fff');
+  }).join('');
+  const defSVG = def.map(p=>{
+    const cx=X(strongLeft ? 1-p.xf : p.xf), cy=Y(p.yd);
+    return `<circle cx="${cx}" cy="${cy}" r="6" fill="#fff" stroke="#c0392b" stroke-width="1.2"/>`+lbl(cx,cy,p.type,'#c0392b');
+  }).join('');
+  const routeSVG = buildPlayPolylines(f, offPreset, playName).map(pl=>{
+    const pts = pl.pts.map(([xf,yd])=>`${X(xf)},${Y(yd)}`).join(' ');
+    return `<polyline points="${pts}" fill="none" stroke="${pl.color}" stroke-width="1.7" stroke-linejoin="round" stroke-linecap="round" marker-end="url(#${pl.color==='#22c55e'?'arrG':'arrR'})"/>`;
+  }).join('');
+  return `<svg viewBox="0 0 ${W} ${H}" width="100%" preserveAspectRatio="xMidYMid meet" style="display:block;border-radius:8px;background:#f4f7f4">
+    <defs>
+      <marker id="arrR" markerWidth="5" markerHeight="5" refX="3.4" refY="2.5" orient="auto"><path d="M0,0 L5,2.5 L0,5 z" fill="#ef4444"/></marker>
+      <marker id="arrG" markerWidth="5" markerHeight="5" refX="3.4" refY="2.5" orient="auto"><path d="M0,0 L5,2.5 L0,5 z" fill="#22c55e"/></marker>
+    </defs>
+    <rect x="0.5" y="0.5" width="${W-1}" height="${H-1}" rx="7" fill="#f4f7f4" stroke="#ccd5cc"/>
+    <line x1="6" y1="${LY}" x2="${W-6}" y2="${LY}" stroke="#9aa6b2" stroke-width="1" stroke-dasharray="5 3"/>
+    <text x="8" y="${LY-3}" font-size="5" fill="#9aa6b2" letter-spacing="0.5">LOS</text>
+    ${routeSVG}${defSVG}${offSVG}
+  </svg>`;
 }
 
 function generateMockPlay(f, opts){
@@ -4536,22 +4601,8 @@ function generateMockPlay(f, opts){
   const nm=f.name.toUpperCase();
   const rec=generateRecommendation(f);
 
-  // Pick offensive preset — Broad Run specific formations map to custom presets
-  let offPreset='spread';
-  if(/TREY\s+R\s+WEAK/i.test(nm))                   offPreset='trey-r-weak';
-  else if(/TRIPS\s+L\s+STRONG/i.test(nm))            offPreset='trips-l-strong';
-  else if(/PRO\s+L\s+TWINS\s+R\s+STRONG/i.test(nm)) offPreset='pro-l-twins-r-strong';
-  else if(/TRIPS\s+L\s+WEAK/i.test(nm))              offPreset='trips-l-weak';
-  else if(/TREY\s+L\s+STRONG/i.test(nm))             offPreset='trey-l-strong';
-  else if(/PRO\s+R\s+TWINS\s+L\s+WEAK/i.test(nm))   offPreset='pro-r-twins-l-weak';
-  else if(/TREY\s+R\s+STRONG/i.test(nm))             offPreset='trey-r-strong';
-  else if(/PRO\s+L\s+WING\s+L\s+TWINS\s+R\s+WEAK/i.test(nm)) offPreset='pro-l-wing-l-twins-r-weak';
-  else if(/PRO\s+L\s+TWINS\s+R\s+WEAK/i.test(nm))   offPreset='pro-l-twins-r-weak';
-  else if(/TRIPS|TREY/.test(nm))                     offPreset='trips';
-  else if(/EMPTY/.test(nm))                          offPreset='empty';
-  else if(/PISTOL|STRONG/.test(nm))                  offPreset='pro-set';
-  else if(/I.FORM|IFORM/.test(nm))                   offPreset='i-form';
-
+  // Offensive alignment + defensive shell presets for this formation
+  const offPreset=offPresetFor(nm);
   const defPreset=getDefPreset(f);
 
   // Routes — draw the actual scouted play call when we can parse it; otherwise
@@ -6179,11 +6230,11 @@ function _buildPlayLines(o){
         :generateSituationDC(f,s,baseRec);
       // Primary tendency play
       const isRun=s.runPct>=50;
-      rows.push({n:n++,form:f.name,play:_pickPlay(f,isRun,n),sit:s.distLabel,
+      rows.push({n:n++,form:f.name,f,isRun,play:_pickPlay(f,isRun,n),sit:s.distLabel,
         hash:s.hash||_HASHES[n%5],cov:dc.coverage||baseRec.coverage,blitz:dc.blitz||baseRec.blitz,
         note:_scoutNote(_pickPlay(f,isRun,n),isRun)});
       // Counter tendency play (shows scout team the other option)
-      rows.push({n:n++,form:f.name,play:_pickPlay(f,!isRun,n),sit:s.distLabel,
+      rows.push({n:n++,form:f.name,f,isRun:!isRun,play:_pickPlay(f,!isRun,n),sit:s.distLabel,
         hash:s.hash||_HASHES[n%5],cov:dc.coverage||baseRec.coverage,blitz:dc.blitz||baseRec.blitz,
         note:_scoutNote(_pickPlay(f,!isRun,n),!isRun)});
     });
@@ -6251,17 +6302,20 @@ function buildPracticeScriptHTML(o){
     </div>`).join('');
 
   const plays=_buildPlayLines(o);
-  const playRows=plays.map(p=>`
-    <tr style="border-bottom:1px solid rgba(255,255,255,.04)">
-      <td style="padding:5px 8px 5px 0;color:var(--gold);font-weight:900;font-size:13px;min-width:28px">${p.n}</td>
-      <td style="padding:5px 8px 5px 0;font-weight:700;font-size:11px;white-space:nowrap">${esc(p.form)}</td>
-      <td style="padding:5px 8px 5px 0;font-size:11px">${esc(p.play)}</td>
-      <td style="padding:5px 8px 5px 0;font-size:11px;white-space:nowrap;color:var(--grayl)">${esc(p.sit)}</td>
-      <td style="padding:5px 8px 5px 0;font-size:11px;color:var(--gray)">${esc(p.hash)}</td>
-      <td style="padding:5px 8px 5px 0;font-size:11px;color:var(--gold);font-weight:700;white-space:nowrap">${esc(p.cov)}</td>
-      <td style="padding:5px 8px 5px 0;font-size:11px;white-space:nowrap">${esc(p.blitz)}</td>
-      <td style="padding:5px 0;font-size:10px;color:var(--gray);font-style:italic">${esc(p.note)}</td>
-    </tr>`).join('');
+  const playCards=plays.map(p=>`
+    <div style="background:#fff;border:1px solid rgba(0,0,0,.1);border-radius:12px;overflow:hidden;break-inside:avoid">
+      <div style="display:flex;align-items:center;gap:8px;padding:7px 10px;background:var(--navy2);border-bottom:1px solid rgba(255,255,255,.06)">
+        <span style="background:var(--gold);color:var(--navy);font-weight:900;font-size:11px;border-radius:6px;padding:2px 7px">${p.n}</span>
+        <span style="font-weight:800;font-size:12px;color:var(--white)">${esc(p.form)}</span>
+        <span style="font-size:10px;color:var(--grayl);margin-left:auto;white-space:nowrap">${esc(p.sit)} · ${esc(p.hash)}</span>
+      </div>
+      ${playDiagramSVG(p.f, p.play, p.isRun)}
+      <div style="padding:8px 10px;font-size:11px;color:#1b2a3a">
+        <div style="margin-bottom:4px"><span style="display:inline-block;width:30px;color:#8a93a0;font-size:9px;font-weight:800;letter-spacing:.5px">OFF</span> <span style="font-weight:700;color:#13294b">${p.isRun?'&#127939;':'&#9992;'} ${esc(p.play)}</span></div>
+        <div style="margin-bottom:4px"><span style="display:inline-block;width:30px;color:#8a93a0;font-size:9px;font-weight:800;letter-spacing:.5px">DEF</span> <span style="font-weight:800;color:#b06f00">${esc(p.cov)}</span> <span style="color:#5a6573">· ${esc(p.blitz)}</span></div>
+        <div style="font-size:10px;color:#8a93a0;font-style:italic">${esc(p.note)}</div>
+      </div>
+    </div>`).join('');
 
   const scout=_buildScoutInstructions(o);
   const scoutRows=scout.map(s=>`
@@ -6304,24 +6358,9 @@ function buildPracticeScriptHTML(o){
     </div>
 
     <div style="margin-bottom:22px">
-      <div style="font-size:10px;letter-spacing:2px;text-transform:uppercase;color:var(--gold);font-weight:800;margin-bottom:10px">&#127944; Practice Script — ${plays.length} Plays</div>
-      <div style="background:var(--navy2);border:1px solid rgba(255,255,255,.07);border-radius:12px;overflow:hidden">
-        <div style="overflow-x:auto;-webkit-overflow-scrolling:touch">
-          <table style="border-collapse:collapse;width:100%;min-width:700px">
-            <thead><tr style="border-bottom:2px solid rgba(255,255,255,.08)">
-              <th style="${thStyle}">#</th>
-              <th style="${thStyle}">Formation</th>
-              <th style="${thStyle}">Play</th>
-              <th style="${thStyle}">Situation</th>
-              <th style="${thStyle}">Hash</th>
-              <th style="${thStyle}">Coverage</th>
-              <th style="${thStyle}">Blitz</th>
-              <th style="${thStyle}">Scout Notes</th>
-            </tr></thead>
-            <tbody>${playRows}</tbody>
-          </table>
-        </div>
-      </div>
+      <div style="font-size:10px;letter-spacing:2px;text-transform:uppercase;color:var(--gold);font-weight:800;margin-bottom:4px">&#127944; Practice Script — ${plays.length} Plays</div>
+      <div style="font-size:11px;color:var(--grayl);margin-bottom:10px">Each rep drawn with the offense, routes, and the defensive call the scout team must give.</div>
+      <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(230px,1fr));gap:12px">${playCards}</div>
     </div>
 
     <div>
