@@ -4517,23 +4517,31 @@ function offPresetFor(name){
   return 'spread';
 }
 
+// Decode a Hudl run number → {carrier, dir, gap letter, lateral distance}.
+// 1st digit = ball carrier (1=QB,2=RB,3=FB,4=slot); 2nd digit = hole:
+// 2/3=A, 4/5=B, 6/7=C, 8/9=D — even=right, odd=left. A is tight to center, D widest.
+const _GAP_LETTER = {2:'A',3:'A',4:'B',5:'B',6:'C',7:'C',8:'D',9:'D'};
+const _GAP_DIST   = {A:0.06, B:0.12, C:0.19, D:0.27};
+function runCall(playName){
+  const m=(playName||'').toUpperCase().match(/\b([1-4])(\d)\b/);
+  if(!m) return null;
+  const hole=+m[2], letter=_GAP_LETTER[hole]||null;
+  return { carrier:({1:'QB',2:'RB',3:'FB',4:'WR'})[m[1]],
+    dir: hole%2===0 ? 1 : -1, gap:letter, dist: letter?_GAP_DIST[letter]:0.12 };
+}
+
 // Build per-receiver / ball-carrier route POLYLINES from a Hudl play call.
 // Each entry: {color, pts:[[xf, yPx], …]}; yPx = px from LOS (negative = upfield).
 function buildPlayPolylines(f, offPreset, playName){
   if(!playName || playName==='Not specified') return [];
   const preset = CV_PRESETS[offPreset] || CV_PRESETS['spread'];
   const nm = playName.toUpperCase();
-  // Run call → ball-carrier path. Hudl numbering: 1st digit = ball carrier
-  // (1=QB, 2=RB, 3=FB, 4=slot), 2nd digit = hole (even→right, odd→left).
+  // Run call → ball-carrier path aimed at the numbered gap (A/B/C/D).
   if(RUN_WORDS.test(nm) || /^\s*\d+\s*$/.test(nm)){
-    const num = nm.match(/\b([1-4])(\d)\b/);
-    let carrierType='RB', dir;
-    if(num){
-      carrierType = ({1:'QB',2:'RB',3:'FB',4:'WR'})[num[1]];
-      dir = (+num[2]%2===0) ? 1 : -1;                 // even hole = right, odd = left
-    } else {
-      dir = /\bLEFT\b|\bL\b/.test(nm) ? -1 : 1;
-    }
+    const rc = runCall(nm);
+    const dir = rc ? rc.dir : (/\bLEFT\b|\bL\b/.test(nm) ? -1 : 1);
+    const dist = rc ? rc.dist : 0.12;
+    const carrierType = rc ? rc.carrier : 'RB';
     let carrier;
     if(carrierType==='WR'){                            // slot = innermost receiver play-side
       const recv = preset.filter(p=>p.type==='WR'||p.type==='TE');
@@ -4544,7 +4552,8 @@ function buildPlayPolylines(f, offPreset, playName){
         || preset.find(p=>p.type==='FB') || preset.find(p=>p.type==='QB');
     }
     const sx = carrier?carrier.xf:0.6, sy = carrier?carrier.yd:72;
-    return [{color:'#22c55e', pts:[ [sx,sy], [0.5,48], [_clampF(0.5+dir*0.11),-6], [_clampF(0.5+dir*0.15),-46] ]}];
+    const hx = _clampF(0.5+dir*dist);                  // the gap the run hits
+    return [{color:'#22c55e', pts:[ [sx,sy], [0.5,48], [hx,-6], [_clampF(hx+dir*0.03),-46] ]}];
   }
   // Pass call → one route per WR/TE, assigned left→right
   const recv = preset.filter(p=>p.type==='WR'||p.type==='TE').sort((a,b)=>a.xf-b.xf);
@@ -4600,6 +4609,12 @@ function playDiagramSVG(f, playName, isRun){
     const pts = pl.pts.map(([xf,yd])=>`${X(xf)},${Y(yd)}`).join(' ');
     return `<polyline points="${pts}" fill="none" stroke="${pl.color}" stroke-width="1.7" stroke-linejoin="round" stroke-linecap="round" marker-end="url(#${pl.color==='#22c55e'?'arrG':'arrR'})"/>`;
   }).join('');
+  // Gap marker (A/B/C/D) at the hole a numbered run hits
+  const pNm=(playName||'').toUpperCase();
+  const rc=(RUN_WORDS.test(pNm)||/^\s*\d+\s*$/.test(pNm)) ? runCall(playName) : null;
+  const gapSVG = (rc&&rc.gap) ? (()=>{ const gx=X(_clampF(0.5+rc.dir*rc.dist)), gy=Y(-4);
+    return `<circle cx="${gx}" cy="${gy}" r="6.6" fill="#eafaf0" stroke="#16a34a" stroke-width="1" stroke-dasharray="2 1.6"/><text x="${gx}" y="${gy+2.4}" font-size="6.4" font-weight="800" fill="#16a34a" text-anchor="middle">${rc.gap}</text>`;
+  })() : '';
   return `<svg viewBox="0 0 ${W} ${H}" width="100%" preserveAspectRatio="xMidYMid meet" style="display:block;border-radius:8px;background:#f4f7f4">
     <defs>
       <marker id="arrR" markerWidth="5" markerHeight="5" refX="3.4" refY="2.5" orient="auto"><path d="M0,0 L5,2.5 L0,5 z" fill="#ef4444"/></marker>
@@ -4608,7 +4623,7 @@ function playDiagramSVG(f, playName, isRun){
     <rect x="0.5" y="0.5" width="${W-1}" height="${H-1}" rx="7" fill="#f4f7f4" stroke="#ccd5cc"/>
     <line x1="6" y1="${LY}" x2="${W-6}" y2="${LY}" stroke="#9aa6b2" stroke-width="1" stroke-dasharray="5 3"/>
     <text x="8" y="${LY-3}" font-size="5" fill="#9aa6b2" letter-spacing="0.5">LOS</text>
-    ${routeSVG}${defSVG}${offSVG}
+    ${routeSVG}${gapSVG}${defSVG}${offSVG}
   </svg>`;
 }
 
