@@ -4523,12 +4523,28 @@ function buildPlayPolylines(f, offPreset, playName){
   if(!playName || playName==='Not specified') return [];
   const preset = CV_PRESETS[offPreset] || CV_PRESETS['spread'];
   const nm = playName.toUpperCase();
-  // Run call → ball-carrier path from the back through a gap
+  // Run call → ball-carrier path. Hudl numbering: 1st digit = ball carrier
+  // (1=QB, 2=RB, 3=FB, 4=slot), 2nd digit = hole (even→right, odd→left).
   if(RUN_WORDS.test(nm) || /^\s*\d+\s*$/.test(nm)){
-    const rb = preset.find(p=>p.type==='RB') || preset.find(p=>p.type==='FB');
-    const dir = /\bLEFT\b|\bL\b/.test(nm) ? -1 : 1;
-    const sx = rb?rb.xf:0.6, sy = rb?rb.yd:72;
-    return [{color:'#22c55e', pts:[[sx,sy],[0.5+dir*0.03,46],[_clampF(0.5+dir*0.12),-44]]}];
+    const num = nm.match(/\b([1-4])(\d)\b/);
+    let carrierType='RB', dir;
+    if(num){
+      carrierType = ({1:'QB',2:'RB',3:'FB',4:'WR'})[num[1]];
+      dir = (+num[2]%2===0) ? 1 : -1;                 // even hole = right, odd = left
+    } else {
+      dir = /\bLEFT\b|\bL\b/.test(nm) ? -1 : 1;
+    }
+    let carrier;
+    if(carrierType==='WR'){                            // slot = innermost receiver play-side
+      const recv = preset.filter(p=>p.type==='WR'||p.type==='TE');
+      const side = recv.filter(p=> dir>0 ? p.xf>0.5 : p.xf<0.5);
+      carrier = (side.length?side:recv).sort((a,b)=>Math.abs(a.xf-0.5)-Math.abs(b.xf-0.5))[0];
+    } else {
+      carrier = preset.find(p=>p.type===carrierType) || preset.find(p=>p.type==='RB')
+        || preset.find(p=>p.type==='FB') || preset.find(p=>p.type==='QB');
+    }
+    const sx = carrier?carrier.xf:0.6, sy = carrier?carrier.yd:72;
+    return [{color:'#22c55e', pts:[ [sx,sy], [0.5,48], [_clampF(0.5+dir*0.11),-6], [_clampF(0.5+dir*0.15),-46] ]}];
   }
   // Pass call → one route per WR/TE, assigned left→right
   const recv = preset.filter(p=>p.type==='WR'||p.type==='TE').sort((a,b)=>a.xf-b.xf);
