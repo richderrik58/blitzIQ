@@ -262,8 +262,9 @@
     .canvas-ov.open{opacity:1;pointer-events:all}
     .canvas-hdr{background:var(--navy2);border-bottom:2px solid var(--gold);padding:5px 12px;height:44px;display:flex;align-items:center;justify-content:space-between;flex-shrink:0;gap:8px}
     @media (orientation:landscape) and (max-height:540px){.canvas-hdr{padding:3px 10px;height:40px}}
-    .toast{position:fixed;bottom:90px;left:50%;transform:translateX(-50%);background:rgba(34,197,94,.92);color:#fff;font-size:12px;font-weight:700;padding:8px 18px;border-radius:20px;z-index:9999;pointer-events:none;opacity:0;transition:opacity .2s}
+    .toast{position:fixed;bottom:90px;left:50%;transform:translateX(-50%);background:rgba(34,197,94,.92);color:#fff;font-size:12px;font-weight:700;padding:8px 18px;border-radius:20px;z-index:9999;pointer-events:none;opacity:0;transition:opacity .2s;display:flex;align-items:center}
     .toast.show{opacity:1}
+    .toast.act{background:var(--navy3);border:1px solid rgba(240,165,0,.45);pointer-events:auto}
     /* ── PRINT ── hide app chrome, show only #printPage ──────────────────── */
     #printPage{display:none}
     @media print{
@@ -1899,9 +1900,29 @@ function saveSit(){
 }
 
 // ── DELETE ────────────────────────────────────────────────────────────────────
-function delOpp(id,e){e.stopPropagation();if(!confirm('Delete this opponent? This cannot be undone.'))return;DB.opponents=DB.opponents.filter(o=>o.id!==id);saveDB();renderOpps();}
-function delForm(id,e){e.stopPropagation();if(!confirm('Delete this formation?'))return;st.opp.formations=st.opp.formations.filter(f=>f.id!==id);saveDB();renderForms();}
-function delSit(id,e){e.stopPropagation();if(!confirm('Delete this situation?'))return;st.form.situations=st.form.situations.filter(s=>s.id!==id);saveDB();renderSits();}
+// Soft delete: remove immediately but offer Undo for a few seconds (no scary
+// confirm dialog — the toast is the safety net and it actually restores).
+function delOpp(id,e){
+  e.stopPropagation();
+  const idx=DB.opponents.findIndex(o=>o.id===id); if(idx<0) return;
+  const item=DB.opponents[idx];
+  DB.opponents.splice(idx,1); saveDB(); renderOpps();
+  showUndoToast(`Deleted ${item.name||'opponent'}`, ()=>{ DB.opponents.splice(Math.min(idx,DB.opponents.length),0,item); saveDB(); renderOpps(); });
+}
+function delForm(id,e){
+  e.stopPropagation();
+  const arr=st.opp.formations; const idx=arr.findIndex(f=>f.id===id); if(idx<0) return;
+  const item=arr[idx];
+  arr.splice(idx,1); saveDB(); renderForms();
+  showUndoToast(`Deleted ${item.name||'formation'}`, ()=>{ arr.splice(Math.min(idx,arr.length),0,item); saveDB(); renderForms(); });
+}
+function delSit(id,e){
+  e.stopPropagation();
+  const arr=st.form.situations; const idx=arr.findIndex(s=>s.id===id); if(idx<0) return;
+  const item=arr[idx];
+  arr.splice(idx,1); saveDB(); renderSits();
+  showUndoToast(`Deleted ${item.distLabel||'situation'}`, ()=>{ arr.splice(Math.min(idx,arr.length),0,item); saveDB(); renderSits(); });
+}
 
 // ── LOADING ───────────────────────────────────────────────────────────────────
 function showLoad(msg){document.getElementById('loadTxt').textContent=msg||'Loading…';document.getElementById('loadOv').classList.add('open');}
@@ -6444,8 +6465,19 @@ function toggleGameDay(){
 
 function showToast(msg, ms=2200){
   const el=document.getElementById('toastEl');
-  el.textContent=msg; el.classList.add('show');
+  el.classList.remove('act'); el.textContent=msg; el.classList.add('show');
   setTimeout(()=>el.classList.remove('show'), ms);
+}
+
+// Actionable toast for soft-delete: shows an Undo button for a few seconds.
+let _undoTimer=null;
+function showUndoToast(msg, onUndo){
+  const el=document.getElementById('toastEl');
+  el.innerHTML=`<span>${esc(msg)}</span><button id="undoBtn" style="margin-left:12px;background:rgba(240,165,0,.2);border:1px solid var(--gold);color:var(--gold);font-weight:800;font-size:12px;padding:3px 12px;border-radius:6px;cursor:pointer;font-family:inherit">Undo</button>`;
+  el.classList.add('act','show');
+  clearTimeout(_undoTimer);
+  document.getElementById('undoBtn').onclick=()=>{ clearTimeout(_undoTimer); el.classList.remove('show','act'); onUndo(); };
+  _undoTimer=setTimeout(()=>{ el.classList.remove('show','act'); }, 5500);
 }
 
 function buildPlayCardText(){
