@@ -1868,7 +1868,14 @@ function zoneTip(s){
 
 function renderSits() {
   const f = st.form;
-  document.getElementById('formOv').innerHTML = `<div class="ov-ttl">${esc(f.name)} — Formation Tendency</div>${sbar(f.runPct,f.passPct)}${f.photo?`<img src="${f.photo}" alt="${esc(f.name)}" style="width:100%;border-radius:10px;margin-top:10px;border:1px solid rgba(255,255,255,.12)">`:''}<div class="ptags" style="margin-top:10px">${((f.runPlays&&f.runPlays.length)||(f.favoriteRunPlay&&f.favoriteRunPlay!=='Not specified'))?`<span class="tag tag-r">&#127939; ${esc(f.favoriteRunPlay)}</span>`:''}${((f.passPlays&&f.passPlays.length)||(f.favoritePassPlay&&f.favoritePassPlay!=='Not specified'))?`<span class="tag tag-p">&#9992; ${esc(f.favoritePassPlay)}</span>`:''}</div>${f.explosivePlays&&f.explosivePlays.length?`<div style="margin-top:12px"><div style="font-size:9px;letter-spacing:1px;text-transform:uppercase;color:var(--amber);font-weight:800;margin-bottom:5px">&#128165; Explosive Plays (${f.explosivePlays.length})</div>${f.explosivePlays.slice().sort((a,b)=>b.yards-a.yards).map(p=>`<div style="font-size:11px;color:var(--grayl);padding:2px 0;line-height:1.4">${p.type==='run'?'&#127939;':'&#9992;'} <strong style="color:var(--amber)">${p.yards} yd</strong> &mdash; ${esc(p.play)}${p.down?` <span style="color:var(--gray)">(${p.down}${p.down===1?'st':p.down===2?'nd':p.down===3?'rd':'th'}${p.dist?' &amp; '+esc(p.dist):''})</span>`:''}</div>`).join('')}</div>`:''}`;
+  // Clickable play chips — tap one to diagram that specific call.
+  const realPlay = p => p && p !== 'Not specified';
+  const runs = (f.runPlays && f.runPlays.length ? f.runPlays : [f.favoriteRunPlay]).filter(realPlay);
+  const passes = (f.passPlays && f.passPlays.length ? f.passPlays : [f.favoritePassPlay]).filter(realPlay);
+  const chip = (p, kind, i) => `<button class="tag tag-${kind==='run'?'r':'p'}" onclick="drawScoutedPlayIdx('${kind}',${i})" style="cursor:pointer;border:none;font-family:inherit;font-weight:700">${kind==='run'?'&#127939;':'&#9992;'} ${esc(p)}</button>`;
+  const chips = runs.map((p,i)=>chip(p,'run',i)).join('') + passes.map((p,i)=>chip(p,'pass',i)).join('');
+  const tagsBlock = chips ? `<div style="font-size:9px;letter-spacing:1px;text-transform:uppercase;color:var(--gray);margin:10px 0 4px">&#9998; Tap a play to diagram it</div><div class="ptags">${chips}</div>` : '';
+  document.getElementById('formOv').innerHTML = `<div class="ov-ttl">${esc(f.name)} — Formation Tendency</div>${sbar(f.runPct,f.passPct)}${f.photo?`<img src="${f.photo}" alt="${esc(f.name)}" style="width:100%;border-radius:10px;margin-top:10px;border:1px solid rgba(255,255,255,.12)">`:''}${tagsBlock}${f.explosivePlays&&f.explosivePlays.length?`<div style="margin-top:12px"><div style="font-size:9px;letter-spacing:1px;text-transform:uppercase;color:var(--amber);font-weight:800;margin-bottom:5px">&#128165; Explosive Plays (${f.explosivePlays.length})</div>${f.explosivePlays.slice().sort((a,b)=>b.yards-a.yards).map(p=>`<div style="font-size:11px;color:var(--grayl);padding:2px 0;line-height:1.4">${p.type==='run'?'&#127939;':'&#9992;'} <strong style="color:var(--amber)">${p.yards} yd</strong> &mdash; ${esc(p.play)}${p.down?` <span style="color:var(--gray)">(${p.down}${p.down===1?'st':p.down===2?'nd':p.down===3?'rd':'th'}${p.dist?' &amp; '+esc(p.dist):''})</span>`:''}</div>`).join('')}</div>`:''}`;
 
   // BlitzIQ auto-recommendation
   if(!f.recommendation) f.recommendation = generateRecommendation(f);
@@ -2803,18 +2810,18 @@ function parseHudlByPage(pages, filename, fullText) {
     // Method 2: derive from D&D average if still 50/50 after method 1
 
     // ── Extract D&D situations ────────────────────────────────────────────────
-    for (let i = 0; i < lines.length; i++) {
-      const s = lines[i];
-      if (!/^(1\s*st|2\s*nd|3\s*rd|4\s*th)\b/i.test(s)) continue;
-      let pct = null;
-      for (let k = 0; k <= 3; k++) { pct = extractPctPair(lines[i + k] || ''); if (pct) break; }
-      if (!pct) continue;
-      const d = /^1/.test(s) ? 1 : /^2/.test(s) ? 2 : /^3/.test(s) ? 3 : 4;
-      const lbl = `${d}${d===1?'st':d===2?'nd':d===3?'rd':'th'} Down`;
-      if (!f.situations.find(x => x.distLabel === lbl)) {
-        f.situations.push({ down: d, distLabel: lbl, runPct: pct.run, passPct: pct.pass, notes: 'Extracted from scouting report.', dc: {} });
+    // Down rows often sit mid-line (e.g. "…Avg - Eff  1st 2 /2 100%  0 /2 0%") —
+    // only 3rd down starts its own line — so scan the whole page for the pattern
+    // <down> <runFrac> <run%> <passFrac> <pass%> wherever it appears.
+    for (const s of lines) {
+      for (const m of s.matchAll(/\b([1-4])(?:st|nd|rd|th)\s+\d{1,3}\s*\/\s*\d{1,3}\s+(\d{1,3})%\s+\d{1,3}\s*\/\s*\d{1,3}\s+(\d{1,3})%/gi)) {
+        const d = +m[1];
+        const lbl = `${d}${d===1?'st':d===2?'nd':d===3?'rd':'th'} Down`;
+        if (!f.situations.find(x => x.distLabel === lbl))
+          f.situations.push({ down: d, distLabel: lbl, runPct: +m[2], passPct: +m[3], notes: 'Extracted from scouting report.', dc: {} });
       }
     }
+    f.situations.sort((a, b) => a.down - b.down);
 
     // Method 2: derive tendency from D&D average if still 50/50
     if (f.runPct === 50 && f.situations.length > 0) {
@@ -4245,47 +4252,23 @@ function resetApiKey(){
 
 async function generatePlayCard(){
   if (!st.form) return;
-  const key = localStorage.getItem('blitziq_api_key');
+  // Always draw deterministically from the parsed scouting data. (The old AI path
+  // returned a different JSON shape than the renderer expects, so it produced a
+  // blank diagram for anyone with an API key set.) Draws the dominant-tendency
+  // favorite play; tap a specific play chip to diagram that one instead.
+  showLoad('Generating play diagram…');
+  await new Promise(r=>setTimeout(r,300));
+  hideLoad();
+  applyGeneratedPlay(generateMockPlay(st.form));
+}
 
-  // No key — use mock mode
-  if (!key) {
-    showLoad('Generating play diagram…');
-    await new Promise(r=>setTimeout(r,900)); // brief delay feels natural
-    hideLoad();
-    applyGeneratedPlay(generateMockPlay(st.form));
-    return;
-  }
-
-  if (!_anthropicSDK) {
-    alert('AI service is still loading — please wait a moment and try again.');
-    return;
-  }
-
-  showLoad('Asking AI to generate play…');
-  try {
-    const client = new _anthropicSDK({ apiKey:key, dangerouslyAllowBrowser:true });
-    const msg = await client.messages.create({
-      model:'claude-sonnet-4-6', max_tokens:1500,
-      messages:[{role:'user', content:buildPlayGenPrompt(st.form)}]
-    });
-    const jsonMatch = msg.content[0].text.match(/\{[\s\S]+\}/);
-    if (!jsonMatch) throw new Error('No JSON returned — try again.');
-    hideLoad();
-    applyGeneratedPlay(JSON.parse(jsonMatch[0]));
-  } catch(err) {
-    hideLoad();
-    console.error('AI play gen error:', err);
-    if(err.status===401||String(err.message).includes('401')){
-      localStorage.removeItem('blitziq_api_key');
-      renderSits();
-      document.getElementById('apiKeyIn').value='';
-      openModal('mApiKey');
-    } else {
-      alert(err.status===429
-        ? 'Rate limit hit — wait a moment and try again.'
-        : 'AI generation failed: '+(err.message||'unknown error'));
-    }
-  }
+// Diagram a specific scouted play (from a clickable play chip in the overview).
+function drawScoutedPlayIdx(kind, i){
+  if (!st.form) return;
+  const arr = kind==='run' ? (st.form.runPlays||[]) : (st.form.passPlays||[]);
+  const play = arr[i] || (kind==='run' ? st.form.favoriteRunPlay : st.form.favoritePassPlay);
+  if (!play || play==='Not specified') return;
+  applyGeneratedPlay(generateMockPlay(st.form, { play, isRun: kind==='run' }));
 }
 
 // ── AI SCOUTING REPORT ────────────────────────────────────────────────────────
@@ -4548,7 +4531,8 @@ function buildPlayRoutes(f, offPreset, playName){
   return routes;
 }
 
-function generateMockPlay(f){
+function generateMockPlay(f, opts){
+  opts = opts || {};   // {play, isRun} to draw a specific call instead of the favorite
   const nm=f.name.toUpperCase();
   const rec=generateRecommendation(f);
 
@@ -4572,8 +4556,8 @@ function generateMockPlay(f){
 
   // Routes — draw the actual scouted play call when we can parse it; otherwise
   // fall back to a generic concept for the formation type.
-  const drawPass = f.passPct >= f.runPct;
-  const scoutPlay = drawPass ? f.favoritePassPlay : f.favoriteRunPlay;
+  const drawPass = opts.play ? !opts.isRun : (f.passPct >= f.runPct);
+  const scoutPlay = opts.play || (drawPass ? f.favoritePassPlay : f.favoriteRunPlay);
   let routes = buildPlayRoutes(f, offPreset, scoutPlay);
   if(routes.length){
     if(f.passPct>=70) routes.push({x1:0.38,y1:-88, x2:0.44,y2:28, color:'#f0a500',dashed:true});
