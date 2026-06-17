@@ -15,6 +15,8 @@
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
   <meta name="apple-mobile-web-app-title" content="BlitzIQ">
   <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
+  <!-- SheetJS for .xlsx playlist import (exposes global XLSX) -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
   <!-- Anthropic SDK for AI play generation (loaded as ES module, exposed globally) -->
   <script type="module">
     try {
@@ -403,6 +405,7 @@
     <button class="act-pri" onclick="openModal('mOpp')">+ Add Opponent</button>
     <button class="act-sec" onclick="document.getElementById('pdfIn').click()">&#8679; Import Scouting PDFs</button>
   </div>
+  <button class="act-sec" style="width:100%;margin-bottom:14px" onclick="document.getElementById('xlsxIn').click()">&#128202; Import Playlist (Excel) &mdash; with Explosive Plays</button>
   <button class="act-sec" style="width:100%;margin-bottom:14px" onclick="showBlitzLib()">&#9889; Blitz Library — 12 Packages</button>
   <button class="act-sec" id="compareBtn" style="width:100%;margin-bottom:14px;display:none" onclick="openCompare()">&#9878; Compare Two Teams</button>
   <!-- Hudl export guide -->
@@ -488,6 +491,7 @@
 
 <!-- HIDDEN FILE INPUT (multiple) -->
 <input type="file" id="pdfIn" accept=".pdf,application/pdf" multiple style="display:none" onchange="handlePDF(event)">
+<input type="file" id="xlsxIn" accept=".xlsx,.xls" style="display:none" onchange="handleXLSX(event)">
 
 <!-- LOADING (single-file fallback spinner) -->
 <div class="load-ov" id="loadOv">
@@ -1022,6 +1026,15 @@
 const PDFJS_WORKER_CDN = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
 let _pdfWorkerReady = null;
 
+// Max formations kept from a scouting import. Temporarily 6 (was 9) as a stopgap
+// while _findForm is hardened — formations 7-9 were losing their pass plays.
+// Raise back to 9 here once that fix lands.
+const MAX_FORMATIONS = 6;
+
+// Explosive-play yardage thresholds (per-snap gain from playlist GN/LS column).
+const EXPLOSIVE_RUN_YDS = 15;   // a run gaining 15+ yards
+const EXPLOSIVE_PASS_YDS = 20;  // a pass gaining 20+ yards
+
 function ensurePDFWorker() {
   if (_pdfWorkerReady) return _pdfWorkerReady;
   if (typeof pdfjsLib === 'undefined') {
@@ -1239,6 +1252,127 @@ function importCSV(){
   st.opp.formations.push(...forms);
   saveDB(); closeModal('mCSV'); renderForms();
   showToast(`Imported ${forms.length} formation${forms.length===1?'':'s'}`);
+}
+
+// ── XLSX PLAYLIST IMPORT (per-snap play-by-play → formations + explosive plays) ─
+// Hudl "Playlist Data" exports list one row per offensive snap with PLAY TYPE,
+// GN/LS (gain/loss yards), OFF FORM, OFF PLAY, DN/DIST. We aggregate those snaps
+// into formation records (same shape the PDF importer produces) and flag explosive
+// plays directly from GN/LS. Aggregating snaps avoids the PDF _findForm fragility.
+function handleXLSX(e){
+  const file=e.target.files&&e.target.files[0];
+  if(e.target) e.target.value='';
+  if(!file) return;
+  if(typeof XLSX==='undefined'){ alert('Spreadsheet parser is still loading — wait a moment and try again.'); return; }
+  const reader=new FileReader();
+  reader.onload=()=>{
+    try{
+      const wb=XLSX.read(reader.result,{type:'array'});
+      const ws=wb.Sheets[wb.SheetNames[0]];
+      const rows=XLSX.utils.sheet_to_json(ws,{header:1,blankrows:false,defval:''});
+      const data=parsePlaylistRows(rows,file.name);
+      if(!data.formations.length){
+        alert((data.extractionLog&&data.extractionLog[data.extractionLog.length-1])
+          ||'No offensive formations found — is this a Hudl playlist export with OFF FORM / PLAY TYPE columns?');
+        return;
+      }
+      openPreview(data);
+    }catch(err){ console.error(err); alert('Could not read this spreadsheet: '+((err&&err.message)||'unknown error')); }
+  };
+  reader.onerror=()=>alert('Could not read file');
+  reader.readAsArrayBuffer(file);
+}
+
+// Aggregate per-snap rows into the importer's `data` shape (+ explosivePlays).
+function parsePlaylistRows(rows,filename){
+  const year=String(new Date().getFullYear());
+  const empty=extra=>({teamName:'Imported Team',season:year,runPct:50,passPct:50,
+    formations:[],rawLines:[],confidence:0,sourceFiles:[filename],extractionLog:[`Playlist import: ${filename}`,extra]});
+  if(!rows||!rows.length) return empty('Spreadsheet was empty.');
+
+  const norm=s=>String(s==null?'':s).trim().toUpperCase();
+  // Header = first row containing both a formation column and a play-type column.
+  let hdrIdx=rows.findIndex(r=>Array.isArray(r)
+    && r.some(c=>/^(OFF\s*FORM|OFF\s*FORMATION|FORMATION|FORM)$/.test(norm(c)))
+    && r.some(c=>/^(PLAY\s*TYPE|TYPE)$/.test(norm(c))));
+  if(hdrIdx<0) hdrIdx=0;
+  const header=(rows[hdrIdx]||[]).map(norm);
+  const idxOf=cands=>{ for(const n of cands){ const i=header.indexOf(n); if(i>=0) return i; } return -1; };
+  const ci={
+    form: idxOf(['OFF FORM','OFF FORMATION','FORMATION','FORM']),
+    type: idxOf(['PLAY TYPE','TYPE']),
+    gnls: idxOf(['GN/LS','GAIN/LOSS','GN','YDS','YARDS','GAIN']),
+    play: idxOf(['OFF PLAY','PLAY','PLAY NAME']),
+    dn:   idxOf(['DN','DOWN']),
+    dist: idxOf(['DIST','DISTANCE']),
+    odk:  idxOf(['ODK']),
+  };
+  if(ci.form<0||ci.type<0) return empty('Could not find OFF FORM / PLAY TYPE columns — is this a Hudl playlist export?');
+
+  const groups=new Map();
+  let totRun=0,totPass=0,totSnaps=0;
+  const rawLines=[];
+  const intOf=v=>{ const n=parseInt(String(v).replace(/[^\d.\-]/g,''),10); return isFinite(n)?n:NaN; };
+
+  for(let r=hdrIdx+1;r<rows.length;r++){
+    const row=rows[r]; if(!Array.isArray(row)||!row.length) continue;
+    if(ci.odk>=0 && norm(row[ci.odk])!=='O') continue;       // offense only
+    const form=String(row[ci.form]==null?'':row[ci.form]).trim(); if(!form) continue;
+    const typeRaw=norm(row[ci.type]);
+    const type=/^RUN/.test(typeRaw)?'run':/^PASS/.test(typeRaw)?'pass':'other';
+    const play=ci.play>=0?String(row[ci.play]==null?'':row[ci.play]).trim():'';
+    const gn=ci.gnls>=0?intOf(row[ci.gnls]):NaN;
+    const dn=ci.dn>=0?intOf(row[ci.dn]):NaN;
+    const dist=ci.dist>=0?String(row[ci.dist]==null?'':row[ci.dist]).trim():'';
+
+    let g=groups.get(form);
+    if(!g){ g={snaps:0,run:0,pass:0,runPlays:new Map(),passPlays:new Map(),downs:new Map(),explosive:[]}; groups.set(form,g); }
+    g.snaps++; totSnaps++;
+    if(type==='run'){ g.run++; totRun++; if(play) g.runPlays.set(play,(g.runPlays.get(play)||0)+1); }
+    else if(type==='pass'){ g.pass++; totPass++; if(play) g.passPlays.set(play,(g.passPlays.get(play)||0)+1); }
+    if(dn>=1&&dn<=4){ let d=g.downs.get(dn); if(!d){ d={run:0,pass:0}; g.downs.set(dn,d); }
+      if(type==='run')d.run++; else if(type==='pass')d.pass++; }
+    if(isFinite(gn)&&((type==='run'&&gn>=EXPLOSIVE_RUN_YDS)||(type==='pass'&&gn>=EXPLOSIVE_PASS_YDS)))
+      g.explosive.push({type,yards:gn,play:play||'(unnamed)',down:isFinite(dn)?dn:null,dist});
+    if(rawLines.length<150)
+      rawLines.push(`${isFinite(dn)?dn+'&'+(dist||'?'):''}  ${form}  |  ${typeRaw||'?'}  ${play}  ${isFinite(gn)?'('+gn+' yd)':''}`.replace(/\s+/g,' ').trim());
+  }
+
+  const ord=dn=>({1:'1st',2:'2nd',3:'3rd',4:'4th'}[dn]||dn+'th');
+  const topPlays=m=>[...m.entries()].sort((a,b)=>b[1]-a[1]).map(e=>e[0]);
+  let formations=[...groups.entries()].map(([name,g])=>{
+    const denom=g.run+g.pass;
+    const runPct=denom?Math.round(g.run/denom*100):50;
+    const runPlays=topPlays(g.runPlays).slice(0,6);
+    const passPlays=topPlays(g.passPlays).slice(0,6);
+    const situations=[...g.downs.entries()].sort((a,b)=>a[0]-b[0]).map(([dn,d])=>{
+      const dd=d.run+d.pass, rp=dd?Math.round(d.run/dd*100):50;
+      return {down:dn,distLabel:`${ord(dn)} Down`,runPct:rp,passPct:100-rp,
+        notes:`From ${dd} snap${dd!==1?'s':''} in this formation.`};
+    });
+    return {name,runPct,passPct:100-runPct,playCount:g.snaps,totalPlays:totSnaps,
+      favoriteRunPlay:runPlays[0]||'Not specified',favoritePassPlay:passPlays[0]||'Not specified',
+      runPlays,passPlays,situations,
+      explosivePlays:g.explosive.sort((a,b)=>b.yards-a.yards)};
+  });
+  formations.sort((a,b)=>b.playCount-a.playCount);
+  const kept=formations.slice(0,MAX_FORMATIONS);
+
+  const tDenom=totRun+totPass, teamRun=tDenom?Math.round(totRun/tDenom*100):50;
+  const totExpl=kept.reduce((n,f)=>n+f.explosivePlays.length,0);
+  const cleaned=filename.replace(/\.[^.]+$/,'')            // drop extension
+    .replace(/\d{4}[-/.]\d{1,2}[-/.]\d{1,2}/g,'')          // drop date (separators still intact)
+    .replace(/playlist\s*data/ig,'')                       // drop generic Hudl label
+    .replace(/[_\-]+/g,' ').replace(/\s+/g,' ').trim();
+  const teamName=/[A-Za-z]/.test(cleaned)?cleaned:'Imported Team'; // need a real name, else generic
+  const log=[`Playlist import: ${filename}`,
+    `✓ ${groups.size} formation(s) from ${totSnaps} offensive snap(s) — keeping top ${kept.length}`,
+    `✓ ${totExpl} explosive play(s) (run ≥${EXPLOSIVE_RUN_YDS} yds, pass ≥${EXPLOSIVE_PASS_YDS} yds)`];
+
+  return {teamName,season:year,runPct:teamRun,passPct:100-teamRun,
+    formations:kept,rawLines,
+    confidence:totSnaps>=20?90:totSnaps>=8?70:45,
+    sourceFiles:[filename],extractionLog:log};
 }
 
 // ── STATE ─────────────────────────────────────────────────────────────────────
@@ -1652,8 +1786,9 @@ function renderForms() {
       :'<div style="font-size:10px;color:var(--gray);font-style:italic">—</div>';
     const usage=f.playCount&&f.totalPlays?`<span style="font-size:10px;color:var(--gray);margin-left:8px">${f.playCount}/${f.totalPlays} plays</span>`:'';
     const persChip=f.personnel?`<span style="font-size:9px;font-weight:800;letter-spacing:.5px;text-transform:uppercase;background:rgba(240,165,0,.14);color:var(--gold);border:1px solid rgba(240,165,0,.35);padding:2px 8px;border-radius:10px;margin-left:8px;vertical-align:middle">${esc(f.personnel)}</span>`:'';
+    const explChip=f.explosivePlays&&f.explosivePlays.length?`<span style="font-size:9px;font-weight:800;letter-spacing:.5px;text-transform:uppercase;background:rgba(245,158,11,.16);color:var(--amber);border:1px solid rgba(245,158,11,.4);padding:2px 8px;border-radius:10px;margin-left:8px;vertical-align:middle">&#128165; ${f.explosivePlays.length} explosive</span>`:'';
     return `<div class="card" onclick="selForm(${f.id})">
-      <div class="card-name-sm">${esc(f.name)}${persChip}${usage}</div>
+      <div class="card-name-sm">${esc(f.name)}${persChip}${explChip}${usage}</div>
       ${f.photo?`<img src="${f.photo}" alt="" style="width:100%;max-height:130px;object-fit:cover;border-radius:8px;margin-bottom:10px;border:1px solid rgba(255,255,255,.1)">`:''}
       ${sbar(f.runPct,f.passPct)}
       <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:10px">
@@ -1735,7 +1870,7 @@ function zoneTip(s){
 
 function renderSits() {
   const f = st.form;
-  document.getElementById('formOv').innerHTML = `<div class="ov-ttl">${esc(f.name)} — Formation Tendency</div>${sbar(f.runPct,f.passPct)}${f.photo?`<img src="${f.photo}" alt="${esc(f.name)}" style="width:100%;border-radius:10px;margin-top:10px;border:1px solid rgba(255,255,255,.12)">`:''}<div class="ptags" style="margin-top:10px"><span class="tag tag-r">&#127939; ${esc(f.favoriteRunPlay)}</span><span class="tag tag-p">&#9992; ${esc(f.favoritePassPlay)}</span></div>`;
+  document.getElementById('formOv').innerHTML = `<div class="ov-ttl">${esc(f.name)} — Formation Tendency</div>${sbar(f.runPct,f.passPct)}${f.photo?`<img src="${f.photo}" alt="${esc(f.name)}" style="width:100%;border-radius:10px;margin-top:10px;border:1px solid rgba(255,255,255,.12)">`:''}<div class="ptags" style="margin-top:10px"><span class="tag tag-r">&#127939; ${esc(f.favoriteRunPlay)}</span><span class="tag tag-p">&#9992; ${esc(f.favoritePassPlay)}</span></div>${f.explosivePlays&&f.explosivePlays.length?`<div style="margin-top:12px"><div style="font-size:9px;letter-spacing:1px;text-transform:uppercase;color:var(--amber);font-weight:800;margin-bottom:5px">&#128165; Explosive Plays (${f.explosivePlays.length})</div>${f.explosivePlays.slice().sort((a,b)=>b.yards-a.yards).map(p=>`<div style="font-size:11px;color:var(--grayl);padding:2px 0;line-height:1.4">${p.type==='run'?'&#127939;':'&#9992;'} <strong style="color:var(--amber)">${p.yards} yd</strong> &mdash; ${esc(p.play)}${p.down?` <span style="color:var(--gray)">(${p.down}${p.down===1?'st':p.down===2?'nd':p.down===3?'rd':'th'}${p.dist?' &amp; '+esc(p.dist):''})</span>`:''}</div>`).join('')}</div>`:''}`;
 
   // BlitzIQ auto-recommendation
   if(!f.recommendation) f.recommendation = generateRecommendation(f);
@@ -2258,9 +2393,9 @@ function combineResults(results){
     }
   }
 
-  // Keep top 9 formations by play count (same limit as per-file extraction)
+  // Keep top formations by play count (same limit as per-file extraction)
   formations.sort((a,b)=>(b.playCount||0)-(a.playCount||0));
-  if(formations.length>9) formations.splice(9);
+  if(formations.length>MAX_FORMATIONS) formations.splice(MAX_FORMATIONS);
 
   // Derive overall tendency from formation-weighted average if not found in any PDF
   // (Formation Breakdown PDFs don't include an overall run/pass line)
@@ -2644,9 +2779,9 @@ function parseHudlByPage(pages, filename, fullText) {
     formations.push(f);
   }
 
-  // Sort by playCount descending, keep top 9
+  // Sort by playCount descending, keep top formations
   formations.sort((a, b) => (b.playCount || 0) - (a.playCount || 0));
-  data.formations = formations.slice(0, 9);
+  data.formations = formations.slice(0, MAX_FORMATIONS);
 
   // Overall tendency: weighted average of formation tendencies
   const totalP = data.formations.reduce((s, f) => s + (f.playCount || 0), 0);
@@ -3004,18 +3139,18 @@ function extractFormations(lines,data,tp){
     }
   }
 
-  // Sort anchors by usage (playCount descending) and keep only top 9
+  // Sort anchors by usage (playCount descending) and keep only the top formations
   const sortedAnchors=anchors
     .filter(a=>a.playCount>0)
     .sort((a,b)=>(b.playCount||0)-(a.playCount||0));
   // Include anchors with no playCount as lower-priority fallbacks
   const noCount=anchors.filter(a=>!a.playCount);
-  const top9=[...sortedAnchors,...noCount].slice(0,9);
+  const topForms=[...sortedAnchors,...noCount].slice(0,MAX_FORMATIONS);
 
-  data.extractionLog.push(`→ Phase 1: ${anchors.length} anchor(s) found — keeping top ${top9.length} by usage`);
+  data.extractionLog.push(`→ Phase 1: ${anchors.length} anchor(s) found — keeping top ${topForms.length} by usage`);
 
-  // ── Phase 2: build formation records from top 9 anchors ──────────────────
-  for(const a of top9){
+  // ── Phase 2: build formation records from the top anchors ────────────────
+  for(const a of topForms){
     if(seenNames.has(a.name)) continue;
     seenNames.add(a.name);
     formations.push({
@@ -3041,7 +3176,7 @@ function extractFormations(lines,data,tp){
         parsed.runPlays=[]; parsed.passPlays=[];
         parsed.downTendency='Imported from scouting report.'; parsed.situations=[];
         formations.push(parsed);
-        if(formations.length>=9) break; // cap at 9
+        if(formations.length>=MAX_FORMATIONS) break; // cap at MAX_FORMATIONS
       }
     }
   }
@@ -3669,6 +3804,21 @@ function openPreview(data,results){
       <div class="conf-msg mid">No down &amp; distance data detected. Add situations manually after importing.</div>
     </div>`}
 
+    ${(()=>{
+      const ex=data.formations.flatMap(f=>(f.explosivePlays||[]).map(p=>({...p,form:f.name})));
+      if(!ex.length) return '';
+      ex.sort((a,b)=>b.yards-a.yards);
+      return `<div class="prev-sec">
+        <div class="prev-sec-lbl">&#128165; Explosive Plays (${ex.length}) &mdash; run &ge;${EXPLOSIVE_RUN_YDS}, pass &ge;${EXPLOSIVE_PASS_YDS} yds</div>
+        <div class="pfc" style="padding:12px">
+          <table class="sit-tbl">
+            <tr><th>Gain</th><th>Type</th><th>Formation</th><th>Play</th></tr>
+            ${ex.map(p=>`<tr><td>${p.yards} yd</td><td class="${p.type==='run'?'run':'pass'}">${p.type==='run'?'RUN':'PASS'}</td><td>${esc(p.form)}</td><td>${esc(p.play)}</td></tr>`).join('')}
+          </table>
+        </div>
+      </div>`;
+    })()}
+
     <div class="prev-sec">
       <button class="raw-toggle" onclick="toggleSection('rawTxt',this,'Show Raw Text','Hide Raw Text')">Show Raw Text</button>
       <div id="rawTxt" style="display:none"><div class="raw-pre">${esc(data.rawLines.slice(0,150).join('\n'))}</div></div>
@@ -3719,6 +3869,7 @@ function importPreview(){
       favoriteRunPlay:ffrun||'Not specified',favoritePassPlay:ffpass||'Not specified',
       runPlays:f.runPlays||[],    // preserve full run play array
       passPlays:f.passPlays||[], // preserve full pass play array
+      explosivePlays:f.explosivePlays||[], // per-snap explosive plays (playlist import)
       playCount:f.playCount||null, totalPlays:f.totalPlays||null,
       downTendency:'Imported from scouting report.',
       situations:f.situations.map(s=>({...s,id:uid(),dc:{coverage:'',blitz:'',reason:'',alert:''}}))});
