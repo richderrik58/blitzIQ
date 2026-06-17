@@ -1364,11 +1364,18 @@ function aggregateTendencies(o){
   const byDown=[1,2,3,4].map(d=>{ const ss=sits.filter(s=>s.down===d); return ss.length?{label:DLBL[d],...wmean(ss)}:null; }).filter(Boolean);
   const ZONES=['Backed Up','Open Field','Midfield','Red Zone','Goal Line'];
   const byZone=ZONES.map(z=>{ const ss=sits.filter(s=>s.fieldZone===z); return ss.length?{label:z,...wmean(ss)}:null; }).filter(Boolean);
-  return {byDown, byZone, total:sits.length};
+  // By personnel: group whole formations (personnel lives on the formation),
+  // weighting each by its situation count (fallback 1) so busier looks count more.
+  const forms=o.formations||[];
+  const pmap={};
+  forms.forEach(f=>{ if(!f.personnel) return; const k=f.personnel; const w=(f.situations&&f.situations.length)||1;
+    if(!pmap[k]) pmap[k]={run:0,wt:0,n:0}; pmap[k].run+=(f.runPct||0)*w; pmap[k].wt+=w; pmap[k].n++; });
+  const byPersonnel=Object.keys(pmap).map(k=>{ const m=pmap[k]; const r=m.wt?Math.round(m.run/m.wt):50; return {label:k,run:r,pass:100-r,n:m.n}; });
+  return {byDown, byZone, byPersonnel, total:sits.length};
 }
 function tendencyChartHTML(o){
-  const {byDown,byZone,total}=aggregateTendencies(o);
-  if(!total) return '';
+  const {byDown,byZone,byPersonnel,total}=aggregateTendencies(o);
+  if(!total && !(byPersonnel&&byPersonnel.length)) return '';
   const row=b=>`<div style="margin-bottom:10px">
     <div style="display:flex;justify-content:space-between;font-size:11px;margin-bottom:4px">
       <span style="color:var(--grayl);font-weight:600">${esc(b.label)} <span style="color:var(--gray)">· ${b.n}</span></span>
@@ -1380,6 +1387,7 @@ function tendencyChartHTML(o){
   let html=`<div class="def-block" style="margin-bottom:14px"><div class="def-lbl" style="margin-bottom:12px">&#128202; Tendency Breakdown</div>`;
   if(byDown.length) html+=`<div style="font-size:10px;letter-spacing:1px;text-transform:uppercase;color:var(--gray);font-weight:700;margin-bottom:8px">By Down</div>`+byDown.map(row).join('');
   if(byZone.length) html+=`<div style="font-size:10px;letter-spacing:1px;text-transform:uppercase;color:var(--gray);font-weight:700;margin:14px 0 8px">By Field Zone</div>`+byZone.map(row).join('');
+  if(byPersonnel&&byPersonnel.length) html+=`<div style="font-size:10px;letter-spacing:1px;text-transform:uppercase;color:var(--gray);font-weight:700;margin:14px 0 8px">By Personnel</div>`+byPersonnel.map(row).join('');
   return html+`</div>`;
 }
 
