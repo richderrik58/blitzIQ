@@ -404,6 +404,7 @@
     <button class="act-sec" onclick="document.getElementById('pdfIn').click()">&#8679; Import Scouting PDFs</button>
   </div>
   <button class="act-sec" style="width:100%;margin-bottom:14px" onclick="showBlitzLib()">&#9889; Blitz Library — 12 Packages</button>
+  <button class="act-sec" id="compareBtn" style="width:100%;margin-bottom:14px;display:none" onclick="openCompare()">&#9878; Compare Two Teams</button>
   <!-- Hudl export guide -->
   <div style="background:var(--navy2);border:1px solid rgba(240,165,0,.2);border-radius:12px;margin-bottom:18px;overflow:hidden">
     <button onclick="toggleHudlGuide()" style="width:100%;padding:12px 16px;background:none;border:none;color:var(--gold);font-size:12px;font-weight:700;cursor:pointer;display:flex;justify-content:space-between;align-items:center;font-family:inherit;letter-spacing:.5px;text-transform:uppercase">
@@ -1398,6 +1399,8 @@ function renderOpps() {
   const searchWrap = document.getElementById('oppSearchWrap');
   const showSearch = DB.opponents.length >= 3;
   if (searchWrap) searchWrap.style.display = showSearch ? 'block' : 'none';
+  const cmpBtn = document.getElementById('compareBtn');
+  if (cmpBtn) cmpBtn.style.display = DB.opponents.length >= 2 ? 'block' : 'none';
   if (!DB.opponents.length) {
     if (!DB.scheme) {
       el.innerHTML = `
@@ -1453,6 +1456,40 @@ function renderOpps() {
     </div>`).join('');
 }
 function selOpp(id) { st.opp=DB.opponents.find(o=>o.id===id); renderForms(); showScreen(2); }
+
+// ── COMPARE TEAMS ─────────────────────────────────────────────────────────────
+function openCompare(){
+  if(DB.opponents.length<2) return;
+  const opts=DB.opponents.map(o=>`<option value="${o.id}">${esc(o.name)} ${esc(o.season)}</option>`).join('');
+  const a=document.getElementById('cmpA'), b=document.getElementById('cmpB');
+  a.innerHTML=opts; b.innerHTML=opts;
+  a.selectedIndex=0; b.selectedIndex=Math.min(1, DB.opponents.length-1);
+  renderCompare(); openModal('mCompare');
+}
+function renderCompare(){
+  const A=DB.opponents.find(o=>String(o.id)===document.getElementById('cmpA').value);
+  const B=DB.opponents.find(o=>String(o.id)===document.getElementById('cmpB').value);
+  document.getElementById('compareBody').innerHTML=(A&&B)?buildCompareHTML(A,B):'';
+}
+function buildCompareHTML(A,B){
+  const bar=(run,pass)=>`<div style="height:8px;background:rgba(255,255,255,.08);border-radius:4px;overflow:hidden;display:flex"><div style="width:${run}%;background:var(--green)"></div><div style="width:${pass}%;background:var(--blue)"></div></div>`;
+  const col=(o)=>{
+    const agg=aggregateTendencies(o);
+    const downs=agg.byDown.length
+      ? agg.byDown.map(d=>`<div style="margin-bottom:7px"><div style="font-size:10px;color:var(--gray)">${esc(d.label)}</div>${bar(d.run,d.pass)}<div style="font-size:10px;color:var(--grayl);margin-top:2px">${d.run}%R / ${d.pass}%P</div></div>`).join('')
+      : `<div style="font-size:11px;color:var(--gray);font-style:italic">No situations charted</div>`;
+    return `<div style="flex:1;min-width:0">
+      <div style="font-weight:800;font-size:14px">${esc(o.name)}</div>
+      <div style="font-size:10px;color:var(--gray);margin-bottom:10px">${esc(o.season)} · ${o.formations.length} formation${o.formations.length!==1?'s':''}</div>
+      <div style="font-size:10px;letter-spacing:1px;text-transform:uppercase;color:var(--gray);margin-bottom:4px">Overall</div>
+      ${bar(o.runPct,o.passPct)}
+      <div style="font-size:11px;color:var(--grayl);margin:3px 0 12px">${o.runPct}%R / ${o.passPct}%P</div>
+      <div style="font-size:10px;letter-spacing:1px;text-transform:uppercase;color:var(--gray);margin-bottom:6px">By Down</div>
+      ${downs}
+    </div>`;
+  };
+  return `<div style="display:flex;gap:16px">${col(A)}${col(B)}</div>`;
+}
 
 // ── SCREEN 2 ──────────────────────────────────────────────────────────────────
 function renderForms() {
@@ -6874,6 +6911,24 @@ function printScript(){
     <div class="modal-foot">
       <button class="btn-sec" onclick="copyScoutReport()">&#128203; Copy</button>
       <button class="btn-pri" onclick="closeModal('mScout')">Done</button>
+    </div>
+  </div>
+</div>
+
+<!-- COMPARE TEAMS MODAL -->
+<div class="modal-ov" id="mCompare">
+  <div class="modal-sheet" style="max-height:90vh;overflow-y:auto">
+    <div class="modal-handle"></div>
+    <div class="modal-hdr">
+      <span class="modal-title">&#9878; Compare Teams</span>
+      <button class="modal-x" aria-label="Close" onclick="closeModal('mCompare')">&#10005;</button>
+    </div>
+    <div class="modal-body">
+      <div style="display:flex;gap:8px;margin-bottom:16px">
+        <select class="fld-in" id="cmpA" aria-label="First team" onchange="renderCompare()" style="flex:1;min-width:0"></select>
+        <select class="fld-in" id="cmpB" aria-label="Second team" onchange="renderCompare()" style="flex:1;min-width:0"></select>
+      </div>
+      <div id="compareBody"></div>
     </div>
   </div>
 </div>
