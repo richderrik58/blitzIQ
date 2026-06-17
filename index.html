@@ -1808,12 +1808,20 @@ async function handlePDF(e) {
   files.sort((a,b)=>b.size-a.size);
   initProgress(files);
   const results=[];
+  const reports=[];  // per-file outcome so coaches know exactly what imported
 
   for(let i=0;i<files.length;i++){
     const file=files[i];
     try {
       setProgress(i,'reading',20,'Reading…');
       const text=await extractPDFText(file);
+      // Scanned images / photos yield little or no extractable text — flag clearly
+      if(!text || text.replace(/\s/g,'').length < 30){
+        setProgress(i,'error',100,'No text ✕');
+        reports.push({name:file.name,status:'empty',forms:0,sits:0,
+          reason:'No readable text — likely a scanned image or photo. Export a text-based tendency report.'});
+        continue;
+      }
       setProgress(i,'parsing',65,'Extracting…');
       await new Promise(r=>setTimeout(r,0)); // yield so UI updates
       // Use page-aware parser when per-page data is available (Formation Breakdown PDFs)
@@ -1822,11 +1830,23 @@ async function handlePDF(e) {
         : parseHudl(text, file.name);
       parsed.filename=file.name;
       results.push(parsed);
-      setProgress(i,'done',100,'Done ✓');
+      // Classify: a synthetic 'Overall Tendency' isn't a real formation card
+      const realForms=parsed.formations.filter(f=>f.name!=='Overall Tendency');
+      const forms=realForms.length;
+      const sits=(parsed.situations?parsed.situations.length:0)
+        + parsed.formations.reduce((n,f)=>n+((f.situations&&f.situations.length)||0),0);
+      const hasOverall=(parsed.runPct!==50||parsed.passPct!==50);
+      let status,reason='';
+      if(forms>0){ status='ok'; }
+      else if(hasOverall){ status='partial'; reason='Run/pass totals only — no formation names, so no formation cards or recommendations.'; }
+      else { status='empty'; reason='No tendency data detected in this file.'; }
+      reports.push({name:file.name,status,forms,sits,reason});
+      setProgress(i,'done',100, forms>0?'Done ✓':'Partial');
       updateProgSub(`Processed ${i+1} of ${files.length} file${files.length>1?'s':''}…`);
     } catch(err) {
       console.error(err);
       setProgress(i,'error',100,'Error ✕');
+      reports.push({name:file.name,status:'error',forms:0,sits:0,reason:(err&&err.message)||'Could not read this file.'});
     }
   }
 
@@ -1834,13 +1854,19 @@ async function handlePDF(e) {
   hideProgress();
 
   const valid=results.filter(r=>r.formations.length>0||r.situations.length>0);
-  if(!valid.length&&results.length>0){
-    alert('No scouting data was detected in the uploaded PDF(s). Make sure these are text-based scouting tendency exports, not scanned images.');
+  if(!valid.length){
+    const lines=reports.map(r=>`• ${r.name}: ${r.reason||'no data'}`).join('\n');
+    alert(`No usable scouting data was imported.\n\n${lines}\n\nTip: export a text-based Formation Tendencies report (not a scan or screenshot).`);
     return;
   }
-  if(!results.length){
-    alert('Could not read any of the uploaded files.');
-    return;
+
+  // If anything was less than a clean import, tell the coach which files and why
+  const problems=reports.filter(r=>r.status!=='ok');
+  if(problems.length){
+    const okLines=reports.filter(r=>r.status==='ok')
+      .map(r=>`✓ ${r.name} — ${r.forms} formation${r.forms!==1?'s':''}, ${r.sits} situation${r.sits!==1?'s':''}`);
+    const badLines=problems.map(r=>`${r.status==='partial'?'⚠':'✕'} ${r.name} — ${r.reason}`);
+    alert([`Imported ${reports.length-problems.length} of ${reports.length} file(s):`,'',...okLines,...badLines].join('\n'));
   }
 
   const combined=combineResults(results);
