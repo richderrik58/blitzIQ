@@ -1026,10 +1026,8 @@
 const PDFJS_WORKER_CDN = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
 let _pdfWorkerReady = null;
 
-// Max formations kept from a scouting import. Temporarily 6 (was 9) as a stopgap
-// while _findForm is hardened — formations 7-9 were losing their pass plays.
-// Raise back to 9 here once that fix lands.
-const MAX_FORMATIONS = 6;
+// Max formations kept from a PDF/CSV scouting import.
+const MAX_FORMATIONS = 9;
 
 // Playlist (.xlsx) import aggregates per-snap data and never touches _findForm,
 // so the 7-9 pass-play bug can't occur — it keeps the full top 9.
@@ -1780,14 +1778,19 @@ function renderForms() {
     return;
   }
   el.innerHTML = o.formations.map(f => {
-    const runs=(f.runPlays&&f.runPlays.length?f.runPlays:[f.favoriteRunPlay].filter(Boolean));
-    const passes=(f.passPlays&&f.passPlays.length?f.passPlays:[f.favoritePassPlay].filter(Boolean));
-    const runHTML=runs.length
-      ?runs.map(p=>`<div style="font-size:10px;color:var(--grayl);padding:1px 0;line-height:1.4">&#127939; ${esc(p)}</div>`).join('')
-      :'<div style="font-size:10px;color:var(--gray);font-style:italic">—</div>';
-    const passHTML=passes.length
-      ?passes.map(p=>`<div style="font-size:10px;color:var(--grayl);padding:1px 0;line-height:1.4">&#9992; ${esc(p)}</div>`).join('')
-      :'<div style="font-size:10px;color:var(--gray);font-style:italic">—</div>';
+    const realPlay=p=>p&&p!=='Not specified';
+    const runs=(f.runPlays&&f.runPlays.length?f.runPlays:[f.favoriteRunPlay]).filter(realPlay);
+    const passes=(f.passPlays&&f.passPlays.length?f.passPlays:[f.favoritePassPlay]).filter(realPlay);
+    // Only render a play column when that side actually has plays.
+    const runCol=runs.length?`<div>
+          <div style="font-size:9px;letter-spacing:1px;text-transform:uppercase;color:var(--green);font-weight:700;margin-bottom:4px">Run Plays</div>
+          ${runs.map(p=>`<div style="font-size:10px;color:var(--grayl);padding:1px 0;line-height:1.4">&#127939; ${esc(p)}</div>`).join('')}
+        </div>`:'';
+    const passCol=passes.length?`<div>
+          <div style="font-size:9px;letter-spacing:1px;text-transform:uppercase;color:var(--blue);font-weight:700;margin-bottom:4px">Pass Plays</div>
+          ${passes.map(p=>`<div style="font-size:10px;color:var(--grayl);padding:1px 0;line-height:1.4">&#9992; ${esc(p)}</div>`).join('')}
+        </div>`:'';
+    const playCols=(runCol||passCol)?`<div style="display:grid;grid-template-columns:${runCol&&passCol?'1fr 1fr':'1fr'};gap:8px;margin-top:10px">${runCol}${passCol}</div>`:'';
     const usage=f.playCount&&f.totalPlays?`<span style="font-size:10px;color:var(--gray);margin-left:8px">${f.playCount}/${f.totalPlays} plays</span>`:'';
     const persChip=f.personnel?`<span style="font-size:9px;font-weight:800;letter-spacing:.5px;text-transform:uppercase;background:rgba(240,165,0,.14);color:var(--gold);border:1px solid rgba(240,165,0,.35);padding:2px 8px;border-radius:10px;margin-left:8px;vertical-align:middle">${esc(f.personnel)}</span>`:'';
     const explChip=f.explosivePlays&&f.explosivePlays.length?`<span style="font-size:9px;font-weight:800;letter-spacing:.5px;text-transform:uppercase;background:rgba(245,158,11,.16);color:var(--amber);border:1px solid rgba(245,158,11,.4);padding:2px 8px;border-radius:10px;margin-left:8px;vertical-align:middle">&#128165; ${f.explosivePlays.length} explosive</span>`:'';
@@ -1795,16 +1798,7 @@ function renderForms() {
       <div class="card-name-sm">${esc(f.name)}${persChip}${explChip}${usage}</div>
       ${f.photo?`<img src="${f.photo}" alt="" style="width:100%;max-height:130px;object-fit:cover;border-radius:8px;margin-bottom:10px;border:1px solid rgba(255,255,255,.1)">`:''}
       ${sbar(f.runPct,f.passPct)}
-      <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:10px">
-        <div>
-          <div style="font-size:9px;letter-spacing:1px;text-transform:uppercase;color:var(--green);font-weight:700;margin-bottom:4px">Run Plays</div>
-          ${runHTML}
-        </div>
-        <div>
-          <div style="font-size:9px;letter-spacing:1px;text-transform:uppercase;color:var(--blue);font-weight:700;margin-bottom:4px">Pass Plays</div>
-          ${passHTML}
-        </div>
-      </div>
+      ${playCols}
       <button class="del-btn" aria-label="Delete" onclick="delForm(${f.id},event)">✕</button>
       <button class="edit-btn" aria-label="Edit" onclick="editForm(${f.id},event)" title="Edit">&#9998;</button>
     </div>`;
@@ -1874,7 +1868,7 @@ function zoneTip(s){
 
 function renderSits() {
   const f = st.form;
-  document.getElementById('formOv').innerHTML = `<div class="ov-ttl">${esc(f.name)} — Formation Tendency</div>${sbar(f.runPct,f.passPct)}${f.photo?`<img src="${f.photo}" alt="${esc(f.name)}" style="width:100%;border-radius:10px;margin-top:10px;border:1px solid rgba(255,255,255,.12)">`:''}<div class="ptags" style="margin-top:10px"><span class="tag tag-r">&#127939; ${esc(f.favoriteRunPlay)}</span><span class="tag tag-p">&#9992; ${esc(f.favoritePassPlay)}</span></div>${f.explosivePlays&&f.explosivePlays.length?`<div style="margin-top:12px"><div style="font-size:9px;letter-spacing:1px;text-transform:uppercase;color:var(--amber);font-weight:800;margin-bottom:5px">&#128165; Explosive Plays (${f.explosivePlays.length})</div>${f.explosivePlays.slice().sort((a,b)=>b.yards-a.yards).map(p=>`<div style="font-size:11px;color:var(--grayl);padding:2px 0;line-height:1.4">${p.type==='run'?'&#127939;':'&#9992;'} <strong style="color:var(--amber)">${p.yards} yd</strong> &mdash; ${esc(p.play)}${p.down?` <span style="color:var(--gray)">(${p.down}${p.down===1?'st':p.down===2?'nd':p.down===3?'rd':'th'}${p.dist?' &amp; '+esc(p.dist):''})</span>`:''}</div>`).join('')}</div>`:''}`;
+  document.getElementById('formOv').innerHTML = `<div class="ov-ttl">${esc(f.name)} — Formation Tendency</div>${sbar(f.runPct,f.passPct)}${f.photo?`<img src="${f.photo}" alt="${esc(f.name)}" style="width:100%;border-radius:10px;margin-top:10px;border:1px solid rgba(255,255,255,.12)">`:''}<div class="ptags" style="margin-top:10px">${((f.runPlays&&f.runPlays.length)||(f.favoriteRunPlay&&f.favoriteRunPlay!=='Not specified'))?`<span class="tag tag-r">&#127939; ${esc(f.favoriteRunPlay)}</span>`:''}${((f.passPlays&&f.passPlays.length)||(f.favoritePassPlay&&f.favoritePassPlay!=='Not specified'))?`<span class="tag tag-p">&#9992; ${esc(f.favoritePassPlay)}</span>`:''}</div>${f.explosivePlays&&f.explosivePlays.length?`<div style="margin-top:12px"><div style="font-size:9px;letter-spacing:1px;text-transform:uppercase;color:var(--amber);font-weight:800;margin-bottom:5px">&#128165; Explosive Plays (${f.explosivePlays.length})</div>${f.explosivePlays.slice().sort((a,b)=>b.yards-a.yards).map(p=>`<div style="font-size:11px;color:var(--grayl);padding:2px 0;line-height:1.4">${p.type==='run'?'&#127939;':'&#9992;'} <strong style="color:var(--amber)">${p.yards} yd</strong> &mdash; ${esc(p.play)}${p.down?` <span style="color:var(--gray)">(${p.down}${p.down===1?'st':p.down===2?'nd':p.down===3?'rd':'th'}${p.dist?' &amp; '+esc(p.dist):''})</span>`:''}</div>`).join('')}</div>`:''}`;
 
   // BlitzIQ auto-recommendation
   if(!f.recommendation) f.recommendation = generateRecommendation(f);
@@ -2545,7 +2539,9 @@ function parseHudlByPage(pages, filename, fullText) {
     return m ? m[1].trim() : null;
   }
   function pnMergedFromLine(s) {
-    const fracs = [...s.matchAll(/\b\d{1,3}\/\d{1,4}\b/g)];
+    // pdf.js emits Hudl fractions as "2 /6" (space before slash), so the pattern
+    // must tolerate whitespace around the slash or two-column rows never split.
+    const fracs = [...s.matchAll(/\b\d{1,3}\s*\/\s*\d{1,4}\b/g)];
     if (!fracs.length) return { run: null, pass: null };
     const rp = s.slice(0, fracs[0].index).replace(/\s{2,}[-\d.]+(?:\s[-\d.]+)*\s*$/, '').trim();
     const run = (rp.length >= 3 && /^[A-Z0-9]/.test(rp) && /[A-Z]{2}/.test(rp) && !/[%]/.test(rp)) ? rp : null;
@@ -2575,9 +2571,13 @@ function parseHudlByPage(pages, filename, fullText) {
     return /[A-Za-z]{2}/.test(s);
   }
   function extractPlayName(s) {
-    const fracM = s.match(/^(.+?)\s+\d{1,3}\/\d{1,4}/);
-    if (fracM) { const c = fracM[1].replace(/\s+[-\d.]+\s*$/, '').trim(); if (c.length >= 2 && /[A-Za-z]{2}/.test(c)) return c; }
-    return s.replace(/\s{2,}[\d.%]+.*$/, '').trim() || s.trim();
+    // Drop a leading wrapped stat number that pdf.js split onto the name line
+    // (e.g. "10.0  SEAM DIG" → "SEAM DIG"); a real play like "22 ZONE" has a
+    // single space after the number, so it's untouched.
+    const strip = n => n.replace(/^\d+(?:\.\d+)?\s{2,}/, '').trim();
+    const fracM = s.match(/^(.+?)\s+\d{1,3}\s*\/\s*\d{1,4}/);
+    if (fracM) { const c = strip(fracM[1].replace(/\s+[-\d.]+\s*$/, '').trim()); if (c.length >= 2 && /[A-Za-z]{2}/.test(c)) return c; }
+    return strip(s.replace(/\s{2,}[\d.%]+.*$/, '').trim()) || s.trim();
   }
 
   // ── Extract formation name from a page's opening lines ───────────────────────
@@ -2690,9 +2690,9 @@ function parseHudlByPage(pages, filename, fullText) {
       // >15 leading spaces = right/pass column (X > ~90pt encoded at 6pt/space)
       // Also fall back to tendency: if pass-heavy formation, extra single-frac = pass
       const isRightCol = isMergedFav && (leadSp > 15 || runPctEarly < 50);
-      const hasFrac = /\b\d{1,3}\/\d{1,4}\b/.test(s);
+      const hasFrac = /\b\d{1,3}\s*\/\s*\d{1,4}\b/.test(s);
       if (hasFrac) {
-        const fracs2 = [...s.matchAll(/\b\d{1,3}\/\d{1,4}\b/g)];
+        const fracs2 = [...s.matchAll(/\b\d{1,3}\s*\/\s*\d{1,4}\b/g)];
         const { run, pass } = pnMergedFromLine(s);
         if (fracs2.length >= 2) {
           // Both columns present on this line
