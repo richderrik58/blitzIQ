@@ -4485,6 +4485,69 @@ function getFormationGapHTML(f){
 // ── MOCK PLAY GENERATOR (no API key required) ─────────────────────────────────
 // Uses CV_PRESETS for player placement (same tested coordinate system)
 // Routes are canvas-relative: x as fraction of cw, y as pixels from LOS (negative=def side)
+// ── Draw the ACTUAL scouted play from its Hudl call string ────────────────────
+// Hudl play names list one route per eligible receiver in order, e.g.
+// "GO HITCH HITCH HITCH" or "CURL POST HITCH AND GO". We map each route word to
+// a polyline (relative to a receiver) and lay them onto the formation's WR/TE
+// positions left→right. Run calls (ZONE/POWER/… or a bare number) draw a ball
+// path instead. Coords match applyGeneratedPlay: x=fraction of width, y=px from
+// LOS (negative = upfield). Returns [] when the call can't be parsed.
+const ROUTE_LIB = {
+  GO:[[0,28],[0,-130]], STREAK:[[0,28],[0,-130]], VERT:[[0,28],[0,-130]], VERTICAL:[[0,28],[0,-130]], FLY:[[0,28],[0,-130]],
+  SEAM:[[0,28],[-0.03,-130]],
+  FADE:[[0,28],[0.05,-122]],
+  HITCH:[[0,28],[0,-42],[0,-32]],
+  CURL:[[0,28],[0,-58],[-0.04,-50]],
+  SLANT:[[0,28],[-0.16,-44]],
+  POST:[[0,28],[0,-70],[-0.18,-126]],
+  CORNER:[[0,28],[0,-66],[0.15,-112]], FLAG:[[0,28],[0,-66],[0.15,-112]],
+  DIG:[[0,28],[0,-58],[-0.24,-58]], IN:[[0,28],[0,-58],[-0.24,-58]],
+  OUT:[[0,28],[0,-52],[0.16,-52]],
+  WHEEL:[[0,28],[0.06,16],[0.11,-96]],
+  FLAT:[[0,28],[0.14,6]],
+  BUBBLE:[[0,28],[0.07,46],[0.17,34]],
+  SMOKE:[[0,28],[0.02,14]], NOW:[[0,28],[0.02,14]],
+  SCREEN:[[0,28],[0.05,44]],
+  COMEBACK:[[0,28],[0,-80],[0.05,-64]],
+  SPOT:[[0,28],[0,-32],[-0.10,-30]], POP:[[0,28],[0,-30],[0,-24]],
+};
+const RUN_WORDS=/\b(ZONE|POWER|ISO|COUNTER|DRAW|SWEEP|KICK|FOLD|SNEAK|PUNCH|BASE|DIVE|TRAP|GUT|BLAST|BELLY|WHAM|LEAD|JET|READ|MIDLINE|VEGAS|BUCK|GAP)\b/;
+const _clampF = v => Math.max(0.02, Math.min(0.98, v));
+function buildPlayRoutes(f, offPreset, playName){
+  if(!playName || playName==='Not specified') return [];
+  const preset = CV_PRESETS[offPreset] || CV_PRESETS['spread'];
+  const nm = playName.toUpperCase();
+  // Run call → ball-carrier path from the back through a gap
+  if(RUN_WORDS.test(nm) || /^\s*\d+\s*$/.test(nm)){
+    const rb = preset.find(p=>p.type==='RB') || preset.find(p=>p.type==='FB');
+    const dir = /\bLEFT\b|\bL\b/.test(nm) ? -1 : 1;
+    const sx = rb?rb.xf:0.6, sy = rb?rb.yd:72;
+    return [
+      {x1:sx, y1:sy, x2:0.5+dir*0.03, y2:46, color:'#22c55e'},
+      {x1:0.5+dir*0.03, y1:46, x2:_clampF(0.5+dir*0.12), y2:-44, color:'#22c55e'},
+    ];
+  }
+  // Pass call → one route per WR/TE, assigned left→right
+  const recv = preset.filter(p=>p.type==='WR'||p.type==='TE').sort((a,b)=>a.xf-b.xf);
+  if(!recv.length) return [];
+  const toks = nm.replace(/[^A-Z\s]/g,' ').split(/\s+/).filter(Boolean);
+  const seq=[];
+  for(let i=0;i<toks.length;i++){
+    if(toks[i]==='AND' && toks[i+1]==='GO'){ if(seq.length) seq[seq.length-1].andGo=true; i++; continue; }
+    if(ROUTE_LIB[toks[i]]) seq.push({word:toks[i]});
+  }
+  if(!seq.length) return [];
+  const routes=[];
+  for(let i=0;i<seq.length && i<recv.length;i++){
+    const r=recv[i], sideSign = r.xf<0.5 ? -1 : 1;     // -1 = toward left sideline
+    const pts = ROUTE_LIB[seq[i].word].map(([o,y])=>[_clampF(r.xf + o*sideSign), y]);
+    if(seq[i].andGo) pts.push([pts[pts.length-1][0], -125]); // hitch/curl-and-go = deep extension
+    for(let k=0;k<pts.length-1;k++)
+      routes.push({x1:pts[k][0], y1:pts[k][1], x2:pts[k+1][0], y2:pts[k+1][1], color:'#ef4444'});
+  }
+  return routes;
+}
+
 function generateMockPlay(f){
   const nm=f.name.toUpperCase();
   const rec=generateRecommendation(f);
@@ -4507,9 +4570,15 @@ function generateMockPlay(f){
 
   const defPreset=getDefPreset(f);
 
-  // Routes — xf=fraction of field width, yd=pixels from LOS (negative=upfield/toward defense)
-  let routes=[];
-  if(/TRIPS|TREY/.test(nm)){
+  // Routes — draw the actual scouted play call when we can parse it; otherwise
+  // fall back to a generic concept for the formation type.
+  const drawPass = f.passPct >= f.runPct;
+  const scoutPlay = drawPass ? f.favoritePassPlay : f.favoriteRunPlay;
+  let routes = buildPlayRoutes(f, offPreset, scoutPlay);
+  if(routes.length){
+    if(f.passPct>=70) routes.push({x1:0.38,y1:-88, x2:0.44,y2:28, color:'#f0a500',dashed:true});
+    else if(f.runPct>=60) routes.push({x1:0.23,y1:-88, x2:0.26,y2:28, color:'#f0a500',dashed:true});
+  } else if(/TRIPS|TREY/.test(nm)){
     // Curl-flat to trips side
     routes=[
       {x1:0.08,y1:28, x2:0.08,y2:-65, color:'#ef4444'},          // X — comeback
@@ -4553,7 +4622,9 @@ function generateMockPlay(f){
     );
   }
 
-  return{offPreset, defPreset, routes,
+  const playLabel = (scoutPlay && scoutPlay!=='Not specified')
+    ? `${f.name} — ${drawPass?'PASS':'RUN'}: ${scoutPlay}` : '';
+  return{offPreset, defPreset, routes, playLabel,
     defensiveCall:{coverage:rec.coverage, blitz:rec.blitz, reason:rec.reason}};
 }
 
@@ -4609,6 +4680,7 @@ Return ONLY valid JSON with no extra text:
 
 function applyGeneratedPlay(playData){
   if(playData.defensiveCall) showDefensiveCall(playData.defensiveCall);
+  if(playData.playLabel){ const st_=document.getElementById('canvasSubTitle'); if(st_) st_.textContent=playData.playLabel; }
   openCanvas((cw, ch) => {
     const los = ch * 0.58;
 
