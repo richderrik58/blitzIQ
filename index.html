@@ -37,6 +37,8 @@
     @media (min-width:1100px){ body{max-width:880px} }
     /* Game-day high-contrast mode (sunlight readability) — overrides theme vars */
     body.gameday{ --navy:#000000; --navy2:#0b0b0b; --navy3:#161616; --navyc:#000000; --gold:#ffc400; --goldd:#e0a800; --gray:#b9c4d0; --grayl:#eef2f6; }
+    /* Colorblind-safe run/pass accents (Okabe-Ito: orange = run, blue = pass) */
+    body.cvd{ --green:#e69f00; --blue:#0072b2; }
     body.gameday .card, body.gameday .def-block, body.gameday .sit-card, body.gameday .ov, body.gameday .alert-box{ border-color:rgba(255,196,0,.4) }
 
     /* HEADER */
@@ -6477,6 +6479,21 @@ function toggleGameDay(){
   showToast(on?'Game-day mode off':'Game-day mode on — high contrast');
 }
 
+// Colorblind-safe mode: remap run/pass accents to an Okabe-Ito orange/blue pair.
+function isCVD(){ try { return localStorage.getItem('blitziq_cvd')==='1'; } catch(_) { return false; } }
+function applyCVD(){
+  const on=isCVD();
+  document.body.classList.toggle('cvd', on);
+  const b=document.getElementById('cvdBtn');
+  if(b) b.textContent=on?'◑ Colorblind mode: On':'◑ Colorblind mode: Off';
+}
+function toggleCVD(){
+  const on=isCVD();
+  try { localStorage.setItem('blitziq_cvd', on?'0':'1'); } catch(_) {}
+  applyCVD();
+  showToast(on?'Colorblind mode off':'Colorblind-safe colors on');
+}
+
 function showToast(msg, ms=2200){
   const el=document.getElementById('toastEl');
   el.classList.remove('act'); el.textContent=msg; el.classList.add('show');
@@ -6666,7 +6683,7 @@ loadDB();
   });
   if(changed) saveDB();
 })();
-renderOpps(); syncHdr(); applyGameDay();
+renderOpps(); syncHdr(); applyGameDay(); applyCVD();
 if (_loadNotice) setTimeout(() => { try { showToast(_loadNotice, 5000); } catch(_) {} }, 400);
 
 // ── INSTALL SCRIPT ────────────────────────────────────────────────────────────
@@ -6820,6 +6837,9 @@ function printScript(){
     <input type="file" id="importIn" accept="application/json,.json" style="display:none" onchange="importBackupFile(this)">
   </div>
   <div style="font-size:10px;color:var(--gray);margin-top:8px;line-height:1.5">Save your scouting data to a file &mdash; back it up or move it to another device</div>
+  <div style="margin-top:14px">
+    <button id="cvdBtn" onclick="toggleCVD()" style="background:rgba(255,255,255,.06);border:1px solid rgba(255,255,255,.18);color:var(--grayl);font-size:11px;font-weight:700;padding:7px 14px;border-radius:8px;cursor:pointer;font-family:inherit">&#9681; Colorblind mode: Off</button>
+  </div>
   <div style="margin-top:14px;display:flex;justify-content:center;gap:18px">
     <button onclick="openModal('mPrivacy')" style="background:none;border:none;color:var(--grayl);font-size:11px;cursor:pointer;text-decoration:underline;font-family:inherit;padding:0">Privacy Policy</button>
     <button onclick="openModal('mTerms')" style="background:none;border:none;color:var(--grayl);font-size:11px;cursor:pointer;text-decoration:underline;font-family:inherit;padding:0">Terms of Use</button>
