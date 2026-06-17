@@ -1327,6 +1327,26 @@ function oppMatchesQuery(o, terms){
 }
 function clearOppSearch(){ const i=document.getElementById('oppSearch'); if(i) i.value=''; renderOpps(); }
 
+// Scouting completeness: a weighted checklist that nudges coaches to fill the
+// gaps that make a report actually useful. Returns a % and the missing items.
+function scoutCompleteness(o){
+  const forms=o.formations||[];
+  const allSits=forms.reduce((n,f)=>n+((f.situations&&f.situations.length)||0),0);
+  const checks=[
+    {ok:forms.length>=1, w:25, gap:'Add at least one formation'},
+    {ok:forms.length>=3, w:15, gap:'Scout more formations (aim for 3+)'},
+    {ok:allSits>0, w:20, gap:'Add down & distance situations'},
+    {ok:forms.length>0 && forms.filter(f=>f.situations&&f.situations.length).length>=Math.ceil(forms.length/2), w:10, gap:'Add situations to more formations'},
+    {ok:forms.some(f=>(f.favoriteRunPlay&&f.favoriteRunPlay!=='Not specified')||(f.favoritePassPlay&&f.favoritePassPlay!=='Not specified')), w:10, gap:'Note favorite run/pass plays'},
+    {ok:!!(o.keyPlayers&&o.keyPlayers.trim()), w:10, gap:'List key players'},
+    {ok:forms.some(f=>f.personnel), w:10, gap:'Tag personnel groupings'},
+  ];
+  let pct=0; const missing=[];
+  checks.forEach(c=>{ if(c.ok) pct+=c.w; else missing.push(c.gap); });
+  return {pct:Math.min(100,pct), missing};
+}
+function complColor(p){ return p>=75?'var(--green)':p>=40?'var(--amber)':'var(--red)'; }
+
 function renderOpps() {
   const el = document.getElementById('oppList');
   const searchWrap = document.getElementById('oppSearchWrap');
@@ -1378,6 +1398,9 @@ function renderOpps() {
         ${o.self?`<span class="season-badge">&#128081; MY TEAM</span>`:`<span class="season-badge">${esc(o.season)}</span>`}
       </div>
       ${sbar(o.runPct,o.passPct)}
+      ${(()=>{const c=scoutCompleteness(o);return `<div style="display:flex;align-items:center;gap:8px;margin-top:10px">
+        <div style="flex:1;height:5px;background:rgba(255,255,255,.08);border-radius:3px;overflow:hidden"><div style="width:${c.pct}%;height:100%;background:${complColor(c.pct)}"></div></div>
+        <div style="font-size:10px;font-weight:700;color:${complColor(c.pct)};white-space:nowrap">${c.pct}% scouted</div></div>`;})()}
       <div class="card-note">${esc(o.notes)}</div>
       <button class="del-btn" onclick="delOpp(${o.id},event)">✕</button>
       <button class="edit-btn" onclick="editOpp(${o.id},event)" title="Edit">&#9998;</button>
@@ -1390,6 +1413,7 @@ function renderForms() {
   const o = st.opp;
   const isDemo=o.notes?.includes('DEMO-Riverside-Knights-2025');
   const selfTells = o.self ? selfScoutTells(o) : [];
+  const compl = scoutCompleteness(o);
   document.getElementById('oppOv').innerHTML =
     (isDemo?demoBanner(true):'') +
     `<div class="ov-ttl">${esc(o.name)} ${esc(o.season)} — ${o.self?'Self-Scout':'Overall Tendency'}</div>${sbar(o.runPct,o.passPct)}<div class="ov-note">${isDemo?'Sample opponent — explore the app, then import your real scouting PDF':esc(o.notes)}</div>`;
@@ -1408,6 +1432,16 @@ function renderForms() {
       </div>
       ${gn ? `<div style="font-size:13px;color:rgba(255,255,255,.82);line-height:1.65;white-space:pre-wrap">${esc(gn)}</div>` : ''}
     </div>
+    ${compl.missing.length ? `
+    <div class="def-block" style="margin-bottom:14px">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
+        <div class="def-lbl" style="margin:0">Scouting Completeness</div>
+        <div style="font-size:14px;font-weight:800;color:${complColor(compl.pct)}">${compl.pct}%</div>
+      </div>
+      <div style="height:6px;background:rgba(255,255,255,.08);border-radius:3px;overflow:hidden;margin-bottom:10px"><div style="width:${compl.pct}%;height:100%;background:${complColor(compl.pct)}"></div></div>
+      <div style="font-size:11px;color:var(--gray);margin-bottom:5px">To strengthen this report:</div>
+      ${compl.missing.slice(0,4).map(m=>`<div style="font-size:12px;color:var(--grayl);line-height:1.7">&#9633; ${esc(m)}</div>`).join('')}
+    </div>` : ''}
     ${o.keyPlayers ? `
     <div class="def-block" style="margin-bottom:14px;border-color:rgba(240,165,0,.35)">
       <div class="def-lbl" style="margin-bottom:10px;color:var(--gold)">&#127944; Key Players</div>
