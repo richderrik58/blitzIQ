@@ -461,7 +461,10 @@
     <button class="act-sec" style="grid-column:1/-1" onclick="printCallSheet()">&#128221; Call Sheet + Wristband</button>
     <button class="act-sec" style="grid-column:1/-1;font-size:14px" onclick="showPracticeScript()">&#127944; Practice Script Generator</button>
   </div>
-  <p class="sec-lbl">Offensive Formations</p>
+  <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px">
+    <p class="sec-lbl" style="margin:0">Offensive Formations</p>
+    <button onclick="openCSVImport()" style="background:none;border:none;color:var(--gold);font-size:11px;font-weight:700;cursor:pointer;font-family:inherit;text-decoration:underline">&#8679; Import CSV</button>
+  </div>
   <div id="formList"></div>
   <button class="add-btn" onclick="openModal('mForm')">+ Add Formation</button>
 </div>
@@ -1195,6 +1198,47 @@ function importBackupFile(input) {
   };
   reader.onerror = () => { showToast('Could not read file'); input.value = ''; };
   reader.readAsText(file);
+}
+
+// ── CSV / SPREADSHEET IMPORT (formations into current opponent) ────────────────
+// Lenient: comma or tab; recognizes header columns by name, else assumes a
+// fixed column order. Run/pass auto-complete to 100.
+function parseFormationsCSV(text){
+  const lines=(text||'').split(/\r?\n/).map(l=>l.trim()).filter(Boolean);
+  if(!lines.length) return [];
+  const delim=(lines[0].indexOf('\t')>=0 && lines[0].indexOf(',')<0) ? '\t' : ',';
+  const split=l=>l.split(delim).map(c=>c.trim());
+  let header=split(lines[0]).map(h=>h.toLowerCase()), start=1;
+  const idx=names=>header.findIndex(h=>names.includes(h));
+  const ci={ name:idx(['formation','name']), run:idx(['run','run%','runpct','run %']),
+    pass:idx(['pass','pass%','passpct','pass %']), runplay:idx(['runplay','run_play','run play','favrun','favorite run play']),
+    passplay:idx(['passplay','pass_play','pass play','favpass','favorite pass play']), pers:idx(['personnel','pers']) };
+  if(ci.name<0){ header=null; start=0; ci.name=0; ci.run=1; ci.pass=-1; ci.runplay=2; ci.passplay=3; ci.pers=4; }
+  const forms=[];
+  for(let i=start;i<lines.length;i++){
+    const c=split(lines[i]); const name=(c[ci.name]||'').trim(); if(!name) continue;
+    let run=ci.run>=0?parseInt(c[ci.run]):NaN, pass=ci.pass>=0?parseInt(c[ci.pass]):NaN;
+    if(isFinite(run)&&!isFinite(pass)) pass=100-run;
+    else if(isFinite(pass)&&!isFinite(run)) run=100-pass;
+    else if(!isFinite(run)) run=50;
+    run=Math.max(0,Math.min(100,run));
+    forms.push({ id:uid(), name, runPct:run, passPct:100-run,
+      favoriteRunPlay:(ci.runplay>=0&&c[ci.runplay])||'Not specified',
+      favoritePassPlay:(ci.passplay>=0&&c[ci.passplay])||'Not specified',
+      personnel:(ci.pers>=0&&c[ci.pers])||undefined,
+      downTendency:'Imported from CSV.', situations:[] });
+  }
+  return forms;
+}
+function openCSVImport(){ if(!st.opp) return; document.getElementById('csvText').value=''; openModal('mCSV'); }
+function importCSV(){
+  if(!st.opp) return;
+  const forms=parseFormationsCSV(document.getElementById('csvText').value);
+  if(!forms.length){ showToast('No formations found — check the column format'); return; }
+  st.opp.formations=st.opp.formations||[];
+  st.opp.formations.push(...forms);
+  saveDB(); closeModal('mCSV'); renderForms();
+  showToast(`Imported ${forms.length} formation${forms.length===1?'':'s'}`);
 }
 
 // ── STATE ─────────────────────────────────────────────────────────────────────
@@ -7024,6 +7068,31 @@ function printScript(){
     <div class="modal-foot">
       <button class="btn-cancel" onclick="closeModal('mGame')">Cancel</button>
       <button class="btn-save" onclick="saveGame()">Add Game</button>
+    </div>
+  </div>
+</div>
+
+<!-- CSV IMPORT MODAL -->
+<div class="modal-ov" id="mCSV">
+  <div class="modal-sheet" style="max-height:90vh;overflow-y:auto">
+    <div class="modal-handle"></div>
+    <div class="modal-hdr">
+      <span class="modal-title">&#8679; Import Formations (CSV)</span>
+      <button class="modal-x" aria-label="Close" onclick="closeModal('mCSV')">&#10005;</button>
+    </div>
+    <div class="modal-body">
+      <div style="font-size:12px;color:var(--grayl);line-height:1.6;margin-bottom:10px">
+        Paste rows from a spreadsheet. First row should be a header. Recognized columns:
+        <span style="color:var(--gold)">formation, run, pass, run play, pass play, personnel</span> (only <b>formation</b> is required; run/pass auto-complete to 100).
+      </div>
+      <div style="font-size:11px;color:var(--gray);background:var(--navyc);border-radius:8px;padding:10px;font-family:monospace;white-space:pre;overflow-x:auto;margin-bottom:12px">formation,run,pass,run play,pass play,personnel
+Trips R,30,70,Jet Sweep,Four Verts,11
+I-Form,80,20,Power O,PA Boot,21</div>
+      <textarea class="fld-ta" id="csvText" style="min-height:140px;font-family:monospace;font-size:12px" placeholder="Paste CSV rows here…"></textarea>
+    </div>
+    <div class="modal-foot">
+      <button class="btn-cancel" onclick="closeModal('mCSV')">Cancel</button>
+      <button class="btn-save" onclick="importCSV()">Import</button>
     </div>
   </div>
 </div>
