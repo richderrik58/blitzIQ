@@ -6221,6 +6221,7 @@ function _scoutNote(play, isRun){
 
 function _buildPlayLines(o){
   const rows=[]; let n=1;
+  const ov=o.scriptOverrides||{};   // coach's own wording, keyed per play slot
   o.formations.forEach(f=>{
     const baseRec=f.recommendation||generateRecommendation(f);
     const sits=(f.situations&&f.situations.length)?f.situations
@@ -6228,18 +6229,61 @@ function _buildPlayLines(o){
     sits.forEach(s=>{
       const dc=s.dc&&(s.dc.coverage||s.dc.blitz)?s.dc
         :generateSituationDC(f,s,baseRec);
-      // Primary tendency play
+      const add=(isRun)=>{
+        const rowN=n++;
+        const key=`${f.name}|${s.distLabel}|${isRun?'R':'P'}`;
+        const o1=ov[key]||{};                      // override: {play, cov, blitz}
+        const play=o1.play||_pickPlay(f,isRun,n);  // coach's play, else ours
+        rows.push({n:rowN,form:f.name,f,isRun,key,play,sit:s.distLabel,
+          hash:s.hash||_HASHES[n%5],
+          cov:o1.cov||dc.coverage||baseRec.coverage,
+          blitz:o1.blitz||dc.blitz||baseRec.blitz,
+          note:_scoutNote(play,isRun)});
+      };
       const isRun=s.runPct>=50;
-      rows.push({n:n++,form:f.name,f,isRun,play:_pickPlay(f,isRun,n),sit:s.distLabel,
-        hash:s.hash||_HASHES[n%5],cov:dc.coverage||baseRec.coverage,blitz:dc.blitz||baseRec.blitz,
-        note:_scoutNote(_pickPlay(f,isRun,n),isRun)});
-      // Counter tendency play (shows scout team the other option)
-      rows.push({n:n++,form:f.name,f,isRun:!isRun,play:_pickPlay(f,!isRun,n),sit:s.distLabel,
-        hash:s.hash||_HASHES[n%5],cov:dc.coverage||baseRec.coverage,blitz:dc.blitz||baseRec.blitz,
-        note:_scoutNote(_pickPlay(f,!isRun,n),!isRun)});
+      add(isRun);     // primary tendency play
+      add(!isRun);    // counter (shows scout team the other option)
     });
   });
   return rows;
+}
+
+// One editable practice-script card: diagram + coach-editable OFF play & DEF call.
+function _practiceCard(p, idx){
+  const inp=(val,field,extra)=>`<input value="${esc(val)}" onchange="updateScriptPlay(${idx},'${field}',this.value)" spellcheck="false" title="Edit — type your own, or clear to use ours" style="border:none;background:transparent;font:inherit;color:inherit;width:100%;padding:1px 2px;border-bottom:1px dashed rgba(0,0,0,.18);outline:none;${extra||''}">`;
+  return `<div id="psc${idx}" style="background:#fff;border:1px solid rgba(0,0,0,.1);border-radius:12px;overflow:hidden;break-inside:avoid">
+    <div style="display:flex;align-items:center;gap:8px;padding:7px 10px;background:var(--navy2);border-bottom:1px solid rgba(255,255,255,.06)">
+      <span style="background:var(--gold);color:var(--navy);font-weight:900;font-size:11px;border-radius:6px;padding:2px 7px">${p.n}</span>
+      <span style="font-weight:800;font-size:12px;color:var(--white)">${esc(p.form)}</span>
+      <span style="font-size:10px;color:var(--grayl);margin-left:auto;white-space:nowrap">${esc(p.sit)} · ${esc(p.hash)}</span>
+    </div>
+    ${playDiagramSVG(p.f, p.play, p.isRun)}
+    <div style="padding:8px 10px;font-size:11px;color:#1b2a3a">
+      <div style="display:flex;align-items:center;gap:4px;margin-bottom:4px"><span style="width:30px;flex-shrink:0;color:#8a93a0;font-size:9px;font-weight:800;letter-spacing:.5px">OFF</span> ${inp(p.play,'play','font-weight:700;color:#13294b')}</div>
+      <div style="display:flex;align-items:center;gap:4px;margin-bottom:2px"><span style="width:30px;flex-shrink:0;color:#8a93a0;font-size:9px;font-weight:800;letter-spacing:.5px">DEF</span> ${inp(p.cov,'cov','font-weight:800;color:#b06f00')}</div>
+      <div style="display:flex;align-items:center;gap:4px;margin-bottom:4px"><span style="width:30px;flex-shrink:0"></span> ${inp(p.blitz,'blitz','color:#5a6573')}</div>
+      <div style="font-size:10px;color:#8a93a0;font-style:italic">${esc(p.note)}</div>
+    </div>
+  </div>`;
+}
+
+// Save a coach's edit to a script play/call and redraw that card.
+function updateScriptPlay(idx, field, value){
+  const p=(window._psRows||[])[idx]; if(!p||!st.opp) return;
+  const v=(value||'').trim();
+  st.opp.scriptOverrides=st.opp.scriptOverrides||{};
+  const ov=st.opp.scriptOverrides[p.key]=st.opp.scriptOverrides[p.key]||{};
+  if(field==='play'){
+    if(v){ ov.play=v; p.play=v; } else { delete ov.play; p.play=_pickPlay(p.f,p.isRun,p.n); } // clear → back to ours
+    p.note=_scoutNote(p.play,p.isRun);
+  } else { // cov | blitz
+    if(v) ov[field]=v; else delete ov[field];
+    if(v) p[field]=v;
+  }
+  if(!Object.keys(ov).length) delete st.opp.scriptOverrides[p.key];
+  saveDB();
+  const el=document.getElementById('psc'+idx);
+  if(el) el.outerHTML=_practiceCard(p, idx);
 }
 
 function _buildAdjustments(o){
@@ -6302,20 +6346,8 @@ function buildPracticeScriptHTML(o){
     </div>`).join('');
 
   const plays=_buildPlayLines(o);
-  const playCards=plays.map(p=>`
-    <div style="background:#fff;border:1px solid rgba(0,0,0,.1);border-radius:12px;overflow:hidden;break-inside:avoid">
-      <div style="display:flex;align-items:center;gap:8px;padding:7px 10px;background:var(--navy2);border-bottom:1px solid rgba(255,255,255,.06)">
-        <span style="background:var(--gold);color:var(--navy);font-weight:900;font-size:11px;border-radius:6px;padding:2px 7px">${p.n}</span>
-        <span style="font-weight:800;font-size:12px;color:var(--white)">${esc(p.form)}</span>
-        <span style="font-size:10px;color:var(--grayl);margin-left:auto;white-space:nowrap">${esc(p.sit)} · ${esc(p.hash)}</span>
-      </div>
-      ${playDiagramSVG(p.f, p.play, p.isRun)}
-      <div style="padding:8px 10px;font-size:11px;color:#1b2a3a">
-        <div style="margin-bottom:4px"><span style="display:inline-block;width:30px;color:#8a93a0;font-size:9px;font-weight:800;letter-spacing:.5px">OFF</span> <span style="font-weight:700;color:#13294b">${p.isRun?'&#127939;':'&#9992;'} ${esc(p.play)}</span></div>
-        <div style="margin-bottom:4px"><span style="display:inline-block;width:30px;color:#8a93a0;font-size:9px;font-weight:800;letter-spacing:.5px">DEF</span> <span style="font-weight:800;color:#b06f00">${esc(p.cov)}</span> <span style="color:#5a6573">· ${esc(p.blitz)}</span></div>
-        <div style="font-size:10px;color:#8a93a0;font-style:italic">${esc(p.note)}</div>
-      </div>
-    </div>`).join('');
+  window._psRows=plays;   // cache so inline edits can resolve their play slot
+  const playCards=plays.map((p,idx)=>_practiceCard(p,idx)).join('');
 
   const scout=_buildScoutInstructions(o);
   const scoutRows=scout.map(s=>`
@@ -6359,7 +6391,7 @@ function buildPracticeScriptHTML(o){
 
     <div style="margin-bottom:22px">
       <div style="font-size:10px;letter-spacing:2px;text-transform:uppercase;color:var(--gold);font-weight:800;margin-bottom:4px">&#127944; Practice Script — ${plays.length} Plays</div>
-      <div style="font-size:11px;color:var(--grayl);margin-bottom:10px">Each rep drawn with the offense, routes, and the defensive call the scout team must give.</div>
+      <div style="font-size:11px;color:var(--grayl);margin-bottom:10px">Each rep drawn with the offense, routes, and the defensive call. Tap any play or call to use your own wording — it saves; clear it to go back to ours.</div>
       <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(230px,1fr));gap:12px">${playCards}</div>
     </div>
 
