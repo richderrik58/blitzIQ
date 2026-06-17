@@ -1142,15 +1142,21 @@ function uid() { return Date.now() * 1000 + Math.floor(Math.random() * 999); }
 // it to a file (and move it between devices / share it with their staff).
 function exportBackup() {
   try {
-    const payload = { app:'BlitzIQ', version:1, exportedAt:new Date().toISOString(), data:DB };
-    const blob = new Blob([JSON.stringify(payload, null, 2)], {type:'application/json'});
+    const json = JSON.stringify({ app:'BlitzIQ', version:1, exportedAt:new Date().toISOString(), data:DB }, null, 2);
+    const mb = json.length / (1024 * 1024);   // ~bytes; backups are ASCII/base64
+    const blob = new Blob([json], {type:'application/json'});
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url; a.download = `blitziq-backup-${new Date().toISOString().slice(0,10)}.json`;
     document.body.appendChild(a); a.click(); a.remove();
     setTimeout(() => URL.revokeObjectURL(url), 1000);
     const n = (DB.opponents || []).length;
-    showToast(`Backup saved — ${n} opponent${n===1?'':'s'}`);
+    if (mb >= 4) {
+      // Approaching the ~5MB localStorage ceiling — mostly formation photos.
+      showToast(`Backup saved (${mb.toFixed(1)} MB) — large from photos; may not re-import on some devices.`, 5500);
+    } else {
+      showToast(`Backup saved — ${n} opponent${n===1?'':'s'}${mb>=1?` · ${mb.toFixed(1)} MB`:''}`);
+    }
   } catch (e) {
     showToast('Backup failed — ' + (e.message || 'error'));
   }
