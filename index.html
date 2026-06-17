@@ -1394,6 +1394,50 @@ function tendencyChartHTML(o){
   return html+`</div>`;
 }
 
+// Season trend: an optional per-game run/pass log on the opponent, so a coach
+// can see how a team is trending over the season (additive — no change to
+// formations/situations).
+function gameTrendHTML(o){
+  const games=o.games||[];
+  let inner;
+  if(games.length){
+    const first=games[0], last=games[games.length-1], delta=last.passPct-first.passPct;
+    const trend = games.length>=2
+      ? `<div style="font-size:11px;color:var(--grayl);margin-bottom:10px">Pass tendency ${delta>0?'&#9650; +'+delta:delta<0?'&#9660; '+delta:'flat '+delta}% over ${games.length} games (${first.passPct}% &rarr; ${last.passPct}% pass)</div>`
+      : '';
+    const rows=games.map(g=>`<div style="margin-bottom:8px">
+      <div style="display:flex;justify-content:space-between;font-size:11px;margin-bottom:3px">
+        <span style="color:var(--grayl);font-weight:600">${esc(g.label)}</span>
+        <span><span style="color:var(--green);font-weight:700">R ${g.runPct}%</span> <span style="color:var(--blue);font-weight:700">P ${g.passPct}%</span><button onclick="delGame(${g.id},event)" aria-label="Delete game" style="background:none;border:none;color:var(--gray);cursor:pointer;font-size:11px;padding:0 0 0 8px">&#10005;</button></span>
+      </div>
+      <div style="height:7px;background:rgba(255,255,255,.08);border-radius:4px;overflow:hidden;display:flex"><div style="width:${g.runPct}%;background:var(--green)"></div><div style="width:${g.passPct}%;background:var(--blue)"></div></div>
+    </div>`).join('');
+    inner=trend+rows;
+  } else {
+    inner=`<div style="font-size:12px;color:var(--gray);margin-bottom:4px">Log each game's run/pass split to see how this opponent trends over the season.</div>`;
+  }
+  return `<div class="def-block" style="margin-bottom:14px">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px">
+      <div class="def-lbl" style="margin:0">&#128200; Season Trend</div>
+      <button onclick="addGameToOpp()" style="background:rgba(240,165,0,.12);border:1px solid rgba(240,165,0,.35);color:var(--gold);font-size:12px;font-weight:700;padding:5px 12px;border-radius:7px;cursor:pointer;font-family:inherit">+ Add Game</button>
+    </div>${inner}</div>`;
+}
+function addGameToOpp(){ if(!st.opp) return; document.getElementById('g_label').value=''; document.getElementById('g_run').value='50'; openModal('mGame'); }
+function saveGame(){
+  if(!st.opp) return;
+  st.opp.games=st.opp.games||[];
+  const label=document.getElementById('g_label').value.trim()||`Game ${st.opp.games.length+1}`;
+  const run=Math.max(0,Math.min(100,parseInt(document.getElementById('g_run').value)||50));
+  st.opp.games.push({id:uid(),label,runPct:run,passPct:100-run});
+  saveDB(); closeModal('mGame'); renderForms();
+}
+function delGame(id,e){
+  e.stopPropagation();
+  const arr=st.opp.games||[]; const idx=arr.findIndex(g=>g.id===id); if(idx<0) return;
+  const item=arr[idx]; arr.splice(idx,1); saveDB(); renderForms();
+  showUndoToast(`Deleted ${item.label||'game'}`, ()=>{ arr.splice(Math.min(idx,arr.length),0,item); saveDB(); renderForms(); });
+}
+
 function renderOpps() {
   const el = document.getElementById('oppList');
   const searchWrap = document.getElementById('oppSearchWrap');
@@ -1526,6 +1570,7 @@ function renderForms() {
       ${compl.missing.slice(0,4).map(m=>`<div style="font-size:12px;color:var(--grayl);line-height:1.7">&#9633; ${esc(m)}</div>`).join('')}
     </div>` : ''}
     ${tendencyChartHTML(o)}
+    ${gameTrendHTML(o)}
     ${o.keyPlayers ? `
     <div class="def-block" style="margin-bottom:14px;border-color:rgba(240,165,0,.35)">
       <div class="def-lbl" style="margin-bottom:10px;color:var(--gold)">&#127944; Key Players</div>
@@ -6954,6 +6999,31 @@ function printScript(){
         <select class="fld-in" id="cmpB" aria-label="Second team" onchange="renderCompare()" style="flex:1;min-width:0"></select>
       </div>
       <div id="compareBody"></div>
+    </div>
+  </div>
+</div>
+
+<!-- LOG A GAME MODAL -->
+<div class="modal-ov" id="mGame">
+  <div class="modal-sheet">
+    <div class="modal-handle"></div>
+    <div class="modal-hdr">
+      <span class="modal-title">&#128200; Log a Game</span>
+      <button class="modal-x" aria-label="Close" onclick="closeModal('mGame')">&#10005;</button>
+    </div>
+    <div class="modal-body">
+      <div class="fld">
+        <label class="fld-lbl">Game label</label>
+        <input class="fld-in" id="g_label" placeholder="e.g. Week 3 vs Central" type="text">
+      </div>
+      <div class="fld">
+        <label class="fld-lbl">Run % <span style="color:var(--gray);font-weight:400">(pass auto-fills)</span></label>
+        <input class="fld-in" id="g_run" type="number" value="50" min="0" max="100">
+      </div>
+    </div>
+    <div class="modal-foot">
+      <button class="btn-cancel" onclick="closeModal('mGame')">Cancel</button>
+      <button class="btn-save" onclick="saveGame()">Add Game</button>
     </div>
   </div>
 </div>
