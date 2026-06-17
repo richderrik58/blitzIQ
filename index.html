@@ -1031,6 +1031,10 @@ let _pdfWorkerReady = null;
 // Raise back to 9 here once that fix lands.
 const MAX_FORMATIONS = 6;
 
+// Playlist (.xlsx) import aggregates per-snap data and never touches _findForm,
+// so the 7-9 pass-play bug can't occur — it keeps the full top 9.
+const MAX_PLAYLIST_FORMATIONS = 9;
+
 // Explosive-play yardage thresholds (per-snap gain from playlist GN/LS column).
 const EXPLOSIVE_RUN_YDS = 15;   // a run gaining 15+ yards
 const EXPLOSIVE_PASS_YDS = 20;  // a pass gaining 20+ yards
@@ -1356,7 +1360,7 @@ function parsePlaylistRows(rows,filename){
       explosivePlays:g.explosive.sort((a,b)=>b.yards-a.yards)};
   });
   formations.sort((a,b)=>b.playCount-a.playCount);
-  const kept=formations.slice(0,MAX_FORMATIONS);
+  const kept=formations.slice(0,MAX_PLAYLIST_FORMATIONS);
 
   const tDenom=totRun+totPass, teamRun=tDenom?Math.round(totRun/tDenom*100):50;
   const totExpl=kept.reduce((n,f)=>n+f.explosivePlays.length,0);
