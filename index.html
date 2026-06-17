@@ -378,7 +378,7 @@
 
 <!-- HEADER -->
 <div class="hdr">
-  <button id="backBtn" onclick="goBack()">&#8249;</button>
+  <button id="backBtn" onclick="goBack()" aria-label="Go back">&#8249;</button>
   <div class="hdr-txt">
     <div style="display:flex;align-items:center;gap:8px">
       <div class="logo">BLITZ<span>IQ</span></div>
@@ -386,7 +386,7 @@
     </div>
     <div class="hdr-sub" id="hdrSub">Defensive Scouting</div>
   </div>
-  <button id="gamedayBtn" onclick="toggleGameDay()" title="Game-day high-contrast mode" style="margin-left:auto;background:rgba(255,255,255,0.08);border:1px solid rgba(255,255,255,0.2);color:var(--grayl);border-radius:8px;padding:6px 11px;font-size:14px;cursor:pointer;font-family:inherit">&#9728;</button>
+  <button id="gamedayBtn" onclick="toggleGameDay()" title="Game-day high-contrast mode" aria-label="Toggle game-day high-contrast mode" style="margin-left:auto;background:rgba(255,255,255,0.08);border:1px solid rgba(255,255,255,0.2);color:var(--grayl);border-radius:8px;padding:6px 11px;font-size:14px;cursor:pointer;font-family:inherit">&#9728;</button>
   <button onclick="openFeedback()" style="margin-left:8px;background:rgba(255,255,255,0.08);border:1px solid rgba(255,255,255,0.2);color:var(--grayl);border-radius:8px;padding:6px 12px;font-size:11px;font-weight:700;cursor:pointer;font-family:inherit;letter-spacing:.5px">&#128172; Feedback</button>
 </div>
 
@@ -440,7 +440,7 @@
   </div>
   <div id="oppSearchWrap" style="display:none;margin-bottom:12px;position:relative">
     <input id="oppSearch" type="text" placeholder="Search teams, formations, plays…" oninput="renderOpps()" autocomplete="off" style="width:100%;padding:11px 38px 11px 14px;background:var(--navy2);border:1px solid rgba(255,255,255,.12);border-radius:10px;color:var(--white);font-size:14px;font-family:inherit">
-    <button id="oppSearchClear" onclick="clearOppSearch()" style="display:none;position:absolute;right:8px;top:50%;transform:translateY(-50%);background:none;border:none;color:var(--gray);font-size:16px;cursor:pointer;padding:4px 8px;font-family:inherit">&#10005;</button>
+    <button id="oppSearchClear" onclick="clearOppSearch()" aria-label="Clear search" style="display:none;position:absolute;right:8px;top:50%;transform:translateY(-50%);background:none;border:none;color:var(--gray);font-size:16px;cursor:pointer;padding:4px 8px;font-family:inherit">&#10005;</button>
   </div>
   <div id="oppList"></div>
 </div>
@@ -671,7 +671,7 @@
     <div class="modal-handle"></div>
     <div class="modal-hdr">
       <span class="modal-title">Add Opponent</span>
-      <button class="modal-x" onclick="closeModal('mOpp')">&#10005;</button>
+      <button class="modal-x" aria-label="Close" onclick="closeModal('mOpp')">&#10005;</button>
     </div>
     <div class="modal-body">
       <div class="fld">
@@ -731,7 +731,7 @@
     <div class="modal-handle"></div>
     <div class="modal-hdr">
       <span class="modal-title">Add Formation</span>
-      <button class="modal-x" onclick="closeModal('mForm')">&#10005;</button>
+      <button class="modal-x" aria-label="Close" onclick="closeModal('mForm')">&#10005;</button>
     </div>
     <div class="modal-body">
       <div class="fld">
@@ -809,7 +809,7 @@
         <input type="file" id="f_photoIn" accept="image/*" style="display:none" onchange="onFormPhoto(this)">
         <div id="f_photoWrap" style="display:none;position:relative;margin-bottom:8px">
           <img id="f_photoImg" alt="Formation" style="width:100%;border-radius:8px;border:1px solid rgba(255,255,255,.12);display:block">
-          <button type="button" onclick="removeFormPhoto()" style="position:absolute;top:8px;right:8px;background:rgba(239,68,68,.9);border:none;color:#fff;width:28px;height:28px;border-radius:7px;font-size:13px;cursor:pointer">&#10005;</button>
+          <button type="button" onclick="removeFormPhoto()" aria-label="Remove photo" style="position:absolute;top:8px;right:8px;background:rgba(239,68,68,.9);border:none;color:#fff;width:28px;height:28px;border-radius:7px;font-size:13px;cursor:pointer">&#10005;</button>
         </div>
         <button type="button" id="f_photoBtn" onclick="document.getElementById('f_photoIn').click()" style="width:100%;padding:11px;background:rgba(240,165,0,.08);border:1.5px dashed rgba(240,165,0,.35);border-radius:10px;color:var(--gold);font-size:13px;font-weight:700;cursor:pointer;font-family:inherit">&#128247; Add Photo</button>
       </div>
@@ -827,7 +827,7 @@
     <div class="modal-handle"></div>
     <div class="modal-hdr">
       <span class="modal-title">&#9889; AI Play Generator</span>
-      <button class="modal-x" onclick="closeModal('mApiKey')">&#10005;</button>
+      <button class="modal-x" aria-label="Close" onclick="closeModal('mApiKey')">&#10005;</button>
     </div>
     <div class="modal-body">
       <div style="background:rgba(240,165,0,.08);border:1px solid rgba(240,165,0,.3);border-radius:10px;padding:14px;margin-bottom:16px">
@@ -853,7 +853,7 @@
     <div class="modal-handle"></div>
     <div class="modal-hdr">
       <span class="modal-title">Game Notes</span>
-      <button class="modal-x" onclick="closeModal('mGameNotes')">&#10005;</button>
+      <button class="modal-x" aria-label="Close" onclick="closeModal('mGameNotes')">&#10005;</button>
     </div>
     <div class="modal-body">
       <div class="fld">
@@ -874,7 +874,7 @@
     <div class="modal-handle"></div>
     <div class="modal-hdr">
       <span class="modal-title">Add Situation</span>
-      <button class="modal-x" onclick="closeModal('mSit')">&#10005;</button>
+      <button class="modal-x" aria-label="Close" onclick="closeModal('mSit')">&#10005;</button>
     </div>
     <div class="modal-body">
       <div class="fld">
@@ -1432,8 +1432,8 @@ function renderOpps() {
         <div style="flex:1;height:5px;background:rgba(255,255,255,.08);border-radius:3px;overflow:hidden"><div style="width:${c.pct}%;height:100%;background:${complColor(c.pct)}"></div></div>
         <div style="font-size:10px;font-weight:700;color:${complColor(c.pct)};white-space:nowrap">${c.pct}% scouted</div></div>`;})()}
       <div class="card-note">${esc(o.notes)}</div>
-      <button class="del-btn" onclick="delOpp(${o.id},event)">✕</button>
-      <button class="edit-btn" onclick="editOpp(${o.id},event)" title="Edit">&#9998;</button>
+      <button class="del-btn" aria-label="Delete" onclick="delOpp(${o.id},event)">✕</button>
+      <button class="edit-btn" aria-label="Edit" onclick="editOpp(${o.id},event)" title="Edit">&#9998;</button>
     </div>`).join('');
 }
 function selOpp(id) { st.opp=DB.opponents.find(o=>o.id===id); renderForms(); showScreen(2); }
@@ -1524,8 +1524,8 @@ function renderForms() {
           ${passHTML}
         </div>
       </div>
-      <button class="del-btn" onclick="delForm(${f.id},event)">✕</button>
-      <button class="edit-btn" onclick="editForm(${f.id},event)" title="Edit">&#9998;</button>
+      <button class="del-btn" aria-label="Delete" onclick="delForm(${f.id},event)">✕</button>
+      <button class="edit-btn" aria-label="Edit" onclick="editForm(${f.id},event)" title="Edit">&#9998;</button>
     </div>`;
   }).join('');
 }
@@ -1665,7 +1665,7 @@ function renderSits() {
     let sure = s.passPct===100?'⚠ 100% PASS':s.runPct===100?'⚠ 100% RUN':'';
     if(sure && flag && flag.kind==='absolute') sure += ' · confirm sample';
     return `<div class="sit-card ${cls}" onclick="selSit(${s.id})">
-      <button class="sit-del" onclick="delSit(${s.id},event)">✕</button>
+      <button class="sit-del" aria-label="Delete situation" onclick="delSit(${s.id},event)">✕</button>
       <div class="sit-down">${DLBLS[s.down]||s.down+' Down'}</div>
       <div class="sit-dist">${esc(s.distLabel)}</div>
       ${sbar(s.runPct,s.passPct)}
@@ -6818,7 +6818,7 @@ function printScript(){
     <div class="modal-handle"></div>
     <div class="modal-hdr">
       <span class="modal-title">&#128196; Install Script</span>
-      <button class="modal-x" onclick="closeModal('mScript')">&#10005;</button>
+      <button class="modal-x" aria-label="Close" onclick="closeModal('mScript')">&#10005;</button>
     </div>
     <div class="modal-body" id="scriptModalBody" style="padding:0"></div>
     <div class="modal-foot">
@@ -6834,7 +6834,7 @@ function printScript(){
     <div class="modal-handle"></div>
     <div class="modal-hdr">
       <span class="modal-title">&#9889; AI Scouting Report</span>
-      <button class="modal-x" onclick="closeModal('mScout')">&#10005;</button>
+      <button class="modal-x" aria-label="Close" onclick="closeModal('mScout')">&#10005;</button>
     </div>
     <div class="modal-body" id="scoutBody"></div>
     <div class="modal-foot">
@@ -6850,7 +6850,7 @@ function printScript(){
     <div class="modal-handle"></div>
     <div class="modal-hdr">
       <span class="modal-title">Privacy Policy</span>
-      <button class="modal-x" onclick="closeModal('mPrivacy')">&#10005;</button>
+      <button class="modal-x" aria-label="Close" onclick="closeModal('mPrivacy')">&#10005;</button>
     </div>
     <div class="modal-body" style="font-size:13px;color:var(--grayl);line-height:1.7">
       <p style="font-size:11px;color:var(--gray);margin-bottom:16px">Last updated: May 2026 &nbsp;·&nbsp; BlitzIQ Beta</p>
@@ -6883,7 +6883,7 @@ function printScript(){
     <div class="modal-handle"></div>
     <div class="modal-hdr">
       <span class="modal-title">Terms of Use</span>
-      <button class="modal-x" onclick="closeModal('mTerms')">&#10005;</button>
+      <button class="modal-x" aria-label="Close" onclick="closeModal('mTerms')">&#10005;</button>
     </div>
     <div class="modal-body" style="font-size:13px;color:var(--grayl);line-height:1.7">
       <p style="font-size:11px;color:var(--gray);margin-bottom:16px">Last updated: May 2026 &nbsp;·&nbsp; BlitzIQ Beta</p>
