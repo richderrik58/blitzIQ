@@ -2486,6 +2486,10 @@ async function extractPDFText(file) {
       lines: pageText.split('\n').map(l => l.trim()).filter(l => l.length > 0),
       rawLines: rawLinesList,
       lineXs,
+      // Raw item coordinates enable column-aware play reconstruction (run vs pass
+      // live in fixed X columns; wrapped names continue on the next line down).
+      items: tc.items.filter(it => it.str && it.str.trim())
+        .map(it => ({ x: it.transform[4], y: it.transform[5], s: it.str.trim() })),
       charCount: pageText.trim().length
     });
 
@@ -2578,6 +2582,53 @@ function parseHudlByPage(pages, filename, fullText) {
     const fracM = s.match(/^(.+?)\s+\d{1,3}\s*\/\s*\d{1,4}/);
     if (fracM) { const c = strip(fracM[1].replace(/\s+[-\d.]+\s*$/, '').trim()); if (c.length >= 2 && /[A-Za-z]{2}/.test(c)) return c; }
     return strip(s.replace(/\s{2,}[\d.%]+.*$/, '').trim()) || s.trim();
+  }
+
+  // ── Column-aware FAV play reconstruction from raw item coordinates ───────────
+  // Hudl detail pages lay FAV RUNS / FAV PASSES / STRENGTH in fixed X columns.
+  // Each play's name sits at the left of its column with stats to its right; a
+  // long name wraps to the next line down (same X, no fraction). Bucketing items
+  // by column X and grouping by Y lets us rebuild clean play names and keep run
+  // vs pass perfectly separated — no fraction-position guessing, no cross-column
+  // bleed. Returns null when the page has no item coords or no FAV headers.
+  function extractFavByColumns(items) {
+    if (!items || !items.length) return null;
+    const runH  = items.find(it => /^FAV(?:ORITE)?\s*RUNS?\b/i.test(it.s));
+    const passH = items.find(it => /FAV(?:ORITE)?\s*PASS/i.test(it.s));
+    if (!runH || !passH) return null;
+    const strH = items.find(it => /^STRENGTH\b/i.test(it.s) && Math.abs(it.y - runH.y) <= 3);
+    const runX = runH.x, passX = passH.x, strX = strH ? strH.x : passX + (passX - runX);
+    const headerY = runH.y;
+    // Section ends at the first BACKFIELDS/MOTION row below the header.
+    const endItem = items.filter(it => /^(BACKFIELDS|MOTION)\b/i.test(it.s) && it.y < headerY - 2)
+      .sort((a, b) => b.y - a.y)[0];
+    const endY = endItem ? endItem.y : -Infinity;
+
+    // Build plays for one column: name items in [nameLo,nameHi); a "/N" item in
+    // [statLo,statHi) marks a real play row, else the name row is a continuation.
+    const colPlays = (nameLo, nameHi, statLo, statHi) => {
+      const rows = [];
+      for (const it of items) {
+        if (it.y >= headerY - 2 || it.y <= endY) continue;
+        let row = rows.find(r => Math.abs(r.y - it.y) <= 3);
+        if (!row) { row = { y: it.y, name: [], frac: false }; rows.push(row); }
+        if (it.x >= nameLo && it.x < nameHi) row.name.push(it);
+        if (it.x >= statLo && it.x < statHi && /^\/\d/.test(it.s)) row.frac = true;
+      }
+      rows.sort((a, b) => b.y - a.y);
+      const plays = [];
+      for (const r of rows) {
+        const nm = r.name.sort((a, b) => a.x - b.x).map(i => i.s).join(' ').replace(/\s+/g, ' ').trim();
+        if (!nm) continue;                                  // stat-only row
+        if (r.frac) plays.push(nm);                          // new play
+        else if (plays.length) plays[plays.length - 1] = (plays[plays.length - 1] + ' ' + nm).replace(/\s+/g, ' ').trim();
+      }
+      return plays;
+    };
+    const runPlays  = colPlays(runX - 8,  runX + 85,  runX + 85,  passX - 8);
+    const passPlays = colPlays(passX - 8, passX + 85, passX + 85, strX - 8);
+    if (!runPlays.length && !passPlays.length) return null;
+    return { runPlays, passPlays };
   }
 
   // ── Extract formation name from a page's opening lines ───────────────────────
@@ -2674,49 +2725,54 @@ function parseHudlByPage(pages, filename, fullText) {
     }
 
     // ── Extract plays ─────────────────────────────────────────────────────────
-    // Two-fraction rows: both run (left) and pass (right) extracted directly.
-    // Single-fraction rows in merged FAV mode: route by leading-space X encoding
-    // (rawLines), with tendency as tiebreaker (pass-heavy → extra rows = pass).
-    let inRuns = false, inPasses = false;
-    for (let i = 0; i < lines.length; i++) {
-      const s = lines[i];
-      if (isRunHdr(s)) { inRuns = true; inPasses = false; continue; }
-      if (isPassHdr(s)) { inRuns = false; inPasses = true; continue; }
-      if (isSectionEnd(s)) { inRuns = false; inPasses = false; continue; }
-      if (!inRuns && !inPasses) continue;
-      if (!isLikelyPlay(s)) continue;
-      const raw = rawLinesArr[i] || s;
-      const leadSp = (raw.match(/^(\s+)/) || ['',''])[1].length;
-      // >15 leading spaces = right/pass column (X > ~90pt encoded at 6pt/space)
-      // Also fall back to tendency: if pass-heavy formation, extra single-frac = pass
-      const isRightCol = isMergedFav && (leadSp > 15 || runPctEarly < 50);
-      const hasFrac = /\b\d{1,3}\s*\/\s*\d{1,4}\b/.test(s);
-      if (hasFrac) {
-        const fracs2 = [...s.matchAll(/\b\d{1,3}\s*\/\s*\d{1,4}\b/g)];
-        const { run, pass } = pnMergedFromLine(s);
-        if (fracs2.length >= 2) {
-          // Both columns present on this line
-          const rp = run || extractPlayName(s);
-          if (rp && rp.length >= 2 && !f.runPlays.includes(rp)) f.runPlays.push(rp);
-          if (pass && pass.length >= 2 && !f.passPlays.includes(pass)) f.passPlays.push(pass);
+    // Preferred path: rebuild plays from item coordinates — run and pass live in
+    // fixed X columns and wrapped names continue on the next line down, so this
+    // keeps the two sides cleanly separated and reassembles multi-line names.
+    const col = extractFavByColumns(pg.items);
+    if (col) {
+      col.runPlays.forEach(rp => { if (rp.length >= 2 && !f.runPlays.includes(rp)) f.runPlays.push(rp); });
+      col.passPlays.forEach(pp => { if (pp.length >= 2 && !f.passPlays.includes(pp)) f.passPlays.push(pp); });
+    } else {
+      // Fallback: legacy line-based router for pages without item coordinates.
+      // Two-fraction rows give both run (left) and pass (right); single-fraction
+      // rows route by leading-space X encoding, tendency as tiebreaker.
+      let inRuns = false, inPasses = false;
+      for (let i = 0; i < lines.length; i++) {
+        const s = lines[i];
+        if (isRunHdr(s)) { inRuns = true; inPasses = false; continue; }
+        if (isPassHdr(s)) { inRuns = false; inPasses = true; continue; }
+        if (isSectionEnd(s)) { inRuns = false; inPasses = false; continue; }
+        if (!inRuns && !inPasses) continue;
+        if (!isLikelyPlay(s)) continue;
+        const raw = rawLinesArr[i] || s;
+        const leadSp = (raw.match(/^(\s+)/) || ['',''])[1].length;
+        const isRightCol = isMergedFav && (leadSp > 15 || runPctEarly < 50);
+        const hasFrac = /\b\d{1,3}\s*\/\s*\d{1,4}\b/.test(s);
+        if (hasFrac) {
+          const fracs2 = [...s.matchAll(/\b\d{1,3}\s*\/\s*\d{1,4}\b/g)];
+          const { run, pass } = pnMergedFromLine(s);
+          if (fracs2.length >= 2) {
+            const rp = run || extractPlayName(s);
+            if (rp && rp.length >= 2 && !f.runPlays.includes(rp)) f.runPlays.push(rp);
+            if (pass && pass.length >= 2 && !f.passPlays.includes(pass)) f.passPlays.push(pass);
+          } else {
+            const pn = run || extractPlayName(s);
+            if (pn && pn.length >= 2) {
+              if (isRightCol || inPasses) {
+                if (!f.passPlays.includes(pn)) f.passPlays.push(pn);
+              } else if (inRuns) {
+                if (!f.runPlays.includes(pn)) f.runPlays.push(pn);
+              }
+            }
+          }
         } else {
-          // Single fraction — X encoding + tendency fallback
-          const pn = run || extractPlayName(s);
+          const pn = pnFromLine(s) || extractPlayName(s);
           if (pn && pn.length >= 2) {
             if (isRightCol || inPasses) {
               if (!f.passPlays.includes(pn)) f.passPlays.push(pn);
             } else if (inRuns) {
               if (!f.runPlays.includes(pn)) f.runPlays.push(pn);
             }
-          }
-        }
-      } else {
-        const pn = pnFromLine(s) || extractPlayName(s);
-        if (pn && pn.length >= 2) {
-          if (isRightCol || inPasses) {
-            if (!f.passPlays.includes(pn)) f.passPlays.push(pn);
-          } else if (inRuns) {
-            if (!f.runPlays.includes(pn)) f.runPlays.push(pn);
           }
         }
       }
