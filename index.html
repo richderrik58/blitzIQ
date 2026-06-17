@@ -453,6 +453,7 @@
     <button class="act-sec" onclick="printGamePlan()">&#128438; Print Plan</button>
     <button class="act-sec" onclick="shareGamePlan()">&#11014; Email Plan</button>
     <button class="act-sec" onclick="copyGamePlan()">&#128203; Copy Text</button>
+    <button class="act-sec" style="grid-column:1/-1" onclick="generateScoutingReport()">&#9889; AI Scouting Report</button>
     <button class="act-sec" style="grid-column:1/-1" onclick="printCallSheet()">&#128221; Call Sheet + Wristband</button>
     <button class="act-sec" style="grid-column:1/-1;font-size:14px" onclick="showPracticeScript()">&#127944; Practice Script Generator</button>
   </div>
@@ -3798,6 +3799,111 @@ async function generatePlayCard(){
   }
 }
 
+// ── AI SCOUTING REPORT ────────────────────────────────────────────────────────
+// Narrative scouting report for an opponent. Uses the Anthropic SDK when a key
+// is set; otherwise builds a solid heuristic report from the scouting data so
+// the feature works for everyone (same philosophy as the mock play generator).
+let _scoutReportText='';
+
+function renderReportText(text){
+  return text.split('\n').map(line=>{
+    const t=line.trim();
+    if(!t) return '<div style="height:8px"></div>';
+    if(t.startsWith('## ')) return `<div style="font-size:11px;letter-spacing:1.5px;text-transform:uppercase;color:var(--gold);font-weight:800;margin:14px 0 6px">${esc(t.slice(3))}</div>`;
+    if(t.startsWith('- ')||t.startsWith('• ')) return `<div style="font-size:13px;color:var(--grayl);line-height:1.6;padding-left:14px;text-indent:-10px;margin-bottom:3px">• ${esc(t.replace(/^[-•]\s*/,''))}</div>`;
+    return `<div style="font-size:13px;color:rgba(255,255,255,.85);line-height:1.65;margin-bottom:6px">${esc(t)}</div>`;
+  }).join('');
+}
+
+function buildScoutPrompt(o){
+  const lines=[
+    `You are an expert defensive coordinator. Write a concise, actionable scouting report for the opponent below. Use short sections with "## " headers and "- " bullets. Sections: Overview, Formation Tendencies, Keys & Tells, Key Players (only if provided), and How To Attack (specific coverages, pressures, and adjustments). Be specific and football-literate. Plain text only, no preamble.`,'',
+    `OPPONENT: ${o.name} ${o.season}`,
+    `Overall: ${o.runPct}% run / ${o.passPct}% pass`];
+  if(o.notes&&o.notes!=='No scouting notes added.') lines.push(`Notes: ${o.notes}`);
+  if(o.keyPlayers) lines.push(`Key players:\n${o.keyPlayers}`);
+  lines.push('','FORMATIONS:');
+  o.formations.forEach(f=>{
+    lines.push(`- ${f.name}${f.personnel?` [${f.personnel}]`:''}: ${f.runPct}% run / ${f.passPct}% pass; fav run ${f.favoriteRunPlay}, fav pass ${f.favoritePassPlay}`);
+    (f.situations||[]).forEach(s=>{
+      const ctx=sitCtxLabel(s);
+      lines.push(`    • ${s.distLabel}${ctx?' ('+ctx+')':''}: ${s.runPct}% run / ${s.passPct}% pass${s.plays?` [${s.plays} plays]`:''}`);
+    });
+  });
+  return lines.join('\n');
+}
+
+function buildMockScoutReport(o){
+  applyRecommendations(o);
+  const L=[];
+  const lean=o.passPct>=55?`pass-leaning (${o.passPct}% pass)`:o.runPct>=55?`run-leaning (${o.runPct}% run)`:`balanced (${o.runPct}% run / ${o.passPct}% pass)`;
+  L.push('## Overview');
+  L.push(`${o.name} ${o.season} is ${lean} across ${o.formations.length} scouted formation${o.formations.length!==1?'s':''}.`);
+  if(o.notes&&o.notes!=='No scouting notes added.') L.push(o.notes);
+  L.push('','## Formation Tendencies');
+  o.formations.forEach(f=>{
+    const rec=f.recommendation||generateRecommendation(f);
+    const fl=f.passPct>=60?`${f.passPct}% pass`:f.runPct>=60?`${f.runPct}% run`:`${f.runPct}/${f.passPct}`;
+    L.push(`- ${f.name}${f.personnel?` (${f.personnel})`:''}: ${fl} → answer with ${rec.coverage}, ${rec.blitz}.`);
+  });
+  const tells=selfScoutTells(o);
+  if(tells.length){ L.push('','## Keys & Tells'); tells.slice(0,6).forEach(t=>L.push(`- ${t}`)); }
+  if(o.keyPlayers){ L.push('','## Key Players'); o.keyPlayers.split('\n').map(s=>s.trim()).filter(Boolean).forEach(p=>L.push(`- ${p}`)); }
+  const adj=_buildAdjustments(o);
+  if(adj.length){ L.push('','## How To Attack'); adj.forEach(a=>L.push(`- When ${a.trigger}: ${a.call} — ${a.detail}`)); }
+  return L.join('\n');
+}
+
+function _scoutDemoNote(){
+  return localStorage.getItem('blitziq_api_key')?''
+    :`<div style="margin-top:16px;padding:10px 12px;background:rgba(240,165,0,.08);border:1px solid rgba(240,165,0,.3);border-radius:8px;font-size:11px;color:var(--grayl);line-height:1.5">Built from your scouting data. <button onclick="closeModal('mScout');openModal('mApiKey')" style="background:none;border:none;color:var(--gold);text-decoration:underline;cursor:pointer;font-family:inherit;font-size:11px;padding:0">Add an Anthropic API key</button> for a deeper AI-written analysis.</div>`;
+}
+
+function copyScoutReport(){
+  if(!_scoutReportText) return;
+  navigator.clipboard.writeText(_scoutReportText).then(()=>showToast('Report copied')).catch(()=>showToast('Copy failed'));
+}
+
+async function generateScoutingReport(){
+  if(!st.opp) return;
+  const o=st.opp;
+  if(!o.formations.length){ alert('Add at least one formation before generating a scouting report.'); return; }
+  const key=localStorage.getItem('blitziq_api_key');
+
+  if(!key){
+    showLoad('Building scouting report…');
+    await new Promise(r=>setTimeout(r,650));
+    _scoutReportText=buildMockScoutReport(o);
+    document.getElementById('scoutBody').innerHTML=renderReportText(_scoutReportText)+_scoutDemoNote();
+    hideLoad(); openModal('mScout');
+    return;
+  }
+  if(!_anthropicSDK){ alert('AI service is still loading — please wait a moment and try again.'); return; }
+
+  showLoad('Asking AI to scout this opponent…');
+  try{
+    const client=new _anthropicSDK({apiKey:key,dangerouslyAllowBrowser:true});
+    const msg=await client.messages.create({
+      model:'claude-sonnet-4-6', max_tokens:1600,
+      messages:[{role:'user', content:buildScoutPrompt(o)}]
+    });
+    _scoutReportText=(msg.content[0]&&msg.content[0].text)||'';
+    if(!_scoutReportText.trim()) throw new Error('Empty response — try again.');
+    hideLoad();
+    document.getElementById('scoutBody').innerHTML=renderReportText(_scoutReportText);
+    openModal('mScout');
+  }catch(err){
+    hideLoad(); console.error('AI scouting error:',err);
+    if(err.status===401||String(err.message).includes('401')){
+      localStorage.removeItem('blitziq_api_key'); renderForms();
+      try{document.getElementById('apiKeyIn').value='';}catch(_){}
+      openModal('mApiKey');
+    } else {
+      alert(err.status===429?'Rate limit hit — wait a moment and try again.':'AI scouting failed: '+(err.message||'unknown error'));
+    }
+  }
+}
+
 // ── DEFENSIVE PRESET SELECTOR ─────────────────────────────────────────────────
 function getDefPreset(f){
   const nm=(f.name||'').toUpperCase();
@@ -6567,6 +6673,22 @@ function printScript(){
     <div class="modal-foot">
       <button class="btn-sec" onclick="clearScript()">Clear Script</button>
       <button class="btn-pri" onclick="printScript()">&#128438; Print Script</button>
+    </div>
+  </div>
+</div>
+
+<!-- AI SCOUTING REPORT MODAL -->
+<div class="modal-ov" id="mScout">
+  <div class="modal-sheet" style="max-height:90vh;overflow-y:auto">
+    <div class="modal-handle"></div>
+    <div class="modal-hdr">
+      <span class="modal-title">&#9889; AI Scouting Report</span>
+      <button class="modal-x" onclick="closeModal('mScout')">&#10005;</button>
+    </div>
+    <div class="modal-body" id="scoutBody"></div>
+    <div class="modal-foot">
+      <button class="btn-sec" onclick="copyScoutReport()">&#128203; Copy</button>
+      <button class="btn-pri" onclick="closeModal('mScout')">Done</button>
     </div>
   </div>
 </div>
