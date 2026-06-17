@@ -4552,6 +4552,11 @@ function buildPlayPolylines(f, offPreset, playName){
         || preset.find(p=>p.type==='FB') || preset.find(p=>p.type==='QB');
     }
     const sx = carrier?carrier.xf:0.6, sy = carrier?carrier.yd:72;
+    if(carrierType==='WR'){
+      // Slot jet sweep: cross behind the QB and attack the edge past the D gap
+      const edge=_clampF(0.5+dir*(dist+0.10));
+      return [{color:'#22c55e', pts:[ [sx,sy], [0.5,58], [_clampF(0.5+dir*0.20),44], [edge,16], [edge,-30] ]}];
+    }
     const hx = _clampF(0.5+dir*dist);                  // the gap the run hits
     return [{color:'#22c55e', pts:[ [sx,sy], [0.5,48], [hx,-6], [_clampF(hx+dir*0.03),-46] ]}];
   }
