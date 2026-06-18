@@ -3106,22 +3106,25 @@ function extractName(text,lines,filename){
     /([A-Z][A-Za-z\s\-']{2,35})\s+Tendency\s+Report/i,
     /Team[:\s]+([A-Za-z][A-Za-z\s\-']{2,35})(?:\n|\s{2,})/i,
   ];
-  for(const re of pats){const m=text.match(re);if(m){const n=m[1].trim();if(n.length>2&&n.length<40)return n;}}
+  // Generic labels (playlist names like "Offensive Play", section titles) are NOT
+  // opponent names — reject them so the coach gets a clean placeholder to fill in.
+  const generic=/^(offensive?\s*plays?|defensive?\s*plays?|offense|defense|off|def|scout(?:ing)?(?:\s*report)?|playlist|cut\s*ups?|film|all\s*plays?|formations?|down\s*(?:and|&)?\s*distance|tendenc(?:y|ies))$/i;
+  const good=n=>{ n=(n||'').trim().replace(/\s+/g,' '); return (n.length>2&&n.length<60&&!generic.test(n))?n:null; };
+  for(const re of pats){const m=text.match(re);if(m){const n=good(m[1]);if(n)return n;}}
 
   // Hudl header: "Created by Coach X based on these playlists: PLAYLIST NAME"
-  // The playlist name is the closest thing to an opponent/report label in many Hudl exports
   const plM=text.match(/playlists?[:\s]+([A-Za-z0-9][A-Za-z0-9\s\-'&]{2,60})(?:\n|$)/i);
-  if(plM){
-    const n=plM[1].trim().replace(/\s+/g,' ');
-    if(n.length>2&&n.length<60) return n;
-  }
+  if(plM){ const n=good(plM[1]); if(n) return n; }
 
   // Fall back to second non-empty line (often the report title)
   for(let i=1;i<Math.min(lines.length,8);i++){
     const l=lines[i];
-    if(l.length>2&&l.length<35&&/^[A-Z]/.test(l)&&!/^\d/.test(l)&&!l.includes('%')&&!l.includes(':'))return l;
+    if(l.length>2&&l.length<35&&/^[A-Z]/.test(l)&&!/^\d/.test(l)&&!l.includes('%')&&!l.includes(':')){const n=good(l);if(n)return n;}
   }
-  return filename.replace(/\.pdf$/i,'').replace(/[-_]/g,' ').trim()||'Imported Team';
+  // Filename fallback — but skip hudl-<id>-<hash> and PlaylistData exports (no real name)
+  const fn=filename.replace(/\.[^.]+$/i,'').replace(/[-_]/g,' ').trim();
+  if(fn && !/^hudl\s+\d/i.test(fn) && !/playlist\s*data/i.test(fn)){ const n=good(fn); if(n) return n; }
+  return 'Imported Opponent';
 }
 
 function extractOverall(text,lines){
