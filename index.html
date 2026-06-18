@@ -6792,8 +6792,31 @@ function renderPrediction(){
       <input id="predCov" value="${esc(cov)}" onchange="saveCoachCall()" placeholder="Coverage" spellcheck="false" style="width:100%;font-size:19px;font-weight:900;color:var(--gold);background:transparent;border:none;border-bottom:1px dashed rgba(240,165,0,.4);outline:none;font-family:inherit;padding:2px 0">
       <input id="predBlitz" value="${esc(blz)}" onchange="saveCoachCall()" placeholder="Blitz / front" spellcheck="false" style="width:100%;font-size:14px;font-weight:700;color:var(--white);background:transparent;border:none;border-bottom:1px dashed rgba(255,255,255,.18);outline:none;font-family:inherit;padding:4px 0;margin-bottom:5px">
       <div style="font-size:11px;color:var(--grayl);line-height:1.4">${saved?'Your saved call for this situation — edit, or clear both to use our suggestion.':esc(rec.reason)+' · Tap to set your own call (saved for game day).'}</div>
+    </div>
+    <div style="margin-top:12px;background:var(--navy2);border:1px solid rgba(255,255,255,.08);border-radius:14px;padding:14px">
+      <div style="font-size:10px;letter-spacing:1.5px;text-transform:uppercase;color:var(--gray);font-weight:800;margin-bottom:8px">After the snap — log what they ran <span style="color:var(--grayl);text-transform:none;letter-spacing:0;font-weight:600">(the app learns &amp; tracks accuracy)</span></div>
+      <div style="display:flex;gap:8px">
+        <button onclick="logActual('run')" style="flex:1;padding:13px;background:rgba(34,197,94,.16);border:1px solid rgba(34,197,94,.5);border-radius:10px;color:var(--green);font-size:15px;font-weight:800;cursor:pointer;font-family:inherit">&#127939; Run</button>
+        <button onclick="logActual('pass')" style="flex:1;padding:13px;background:rgba(29,78,216,.18);border:1px solid rgba(59,130,246,.5);border-radius:10px;color:#7eb0ff;font-size:15px;font-weight:800;cursor:pointer;font-family:inherit">&#9992; Pass</button>
+      </div>
+      ${(o.predLog&&o.predLog.length)?`<div style="margin-top:10px;text-align:center;font-size:13px;color:var(--white)">Predictor this game: <b style="color:var(--gold)">${o.predLog.filter(x=>x.hit).length}/${o.predLog.length}</b> correct (${Math.round(o.predLog.filter(x=>x.hit).length/o.predLog.length*100)}%) <button onclick="resetPredLog()" style="margin-left:8px;background:none;border:none;color:var(--gray);font-size:11px;cursor:pointer;text-decoration:underline;font-family:inherit">reset</button></div>`:''}
     </div>`;
 }
+// Feedback loop: coach logs the actual play → tracks accuracy AND appends a live
+// rep so the predictor learns during the game.
+function logActual(type){
+  const o=st.opp; if(!o||!st.pred) return;
+  const sit=st.pred, p=predictOffense(o,sit); if(!p) return;
+  const hit=(type==='run')===(p.runPct>=50);
+  o.predLog=o.predLog||[]; o.predLog.push({hit,predRunPct:p.runPct,actual:type});
+  const zy={BU:-5,OWN:-30,PLUS:35,RZ:13,GL:3};
+  o.snaps=o.snaps||[];
+  o.snaps.push({dn:sit.down||null, dist:(sit.dist!=null&&sit.dist!=='')?+sit.dist:null, hash:sit.hash||'',
+    yard:sit.zone?zy[sit.zone]:null, form:sit.form||(p.formations[0]?p.formations[0].key:'Live'), play:'(live rep)', type, gn:null});
+  saveDB(); renderPrediction();
+  showToast(hit?'✓ Predicted right' : '✗ They crossed us up — logged');
+}
+function resetPredLog(){ const o=st.opp; if(!o) return; o.predLog=[]; saveDB(); renderPrediction(); }
 // Save the coach's defensive call for the current predicted situation (persists per opponent).
 function saveCoachCall(){
   const o=st.opp; if(!o||!st.predKey) return;
