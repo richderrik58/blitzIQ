@@ -463,6 +463,7 @@
     <button class="act-sec" style="grid-column:1/-1" onclick="generateScoutingReport()">&#9889; AI Scouting Report</button>
     <button class="act-sec" style="grid-column:1/-1" onclick="printCallSheet()">&#128221; Call Sheet + Wristband</button>
     <button class="act-sec" style="grid-column:1/-1;font-size:14px" onclick="showPracticeScript()">&#127944; Practice Script Generator</button>
+    <button class="act-sec" style="grid-column:1/-1;font-size:14px;background:rgba(240,165,0,.14);border-color:rgba(240,165,0,.5);color:var(--gold)" onclick="openPredictor()">&#127919; Game Day Predictor &mdash; live in-game</button>
   </div>
   <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px">
     <p class="sec-lbl" style="margin:0">Offensive Formations</p>
@@ -540,6 +541,20 @@
     </div>
   </div>
   <div class="prev-body" id="scriptBody"></div>
+</div>
+
+<!-- IN-GAME PREDICTOR OVERLAY -->
+<div class="prev-ov" id="predictOv">
+  <div class="prev-hdr">
+    <div class="prev-hdr-l">
+      <div class="prev-title" id="predictTitle">Game Day Predictor</div>
+      <div class="prev-file" id="predictSub"></div>
+    </div>
+    <div style="display:flex;gap:6px;flex-shrink:0">
+      <button class="cbtn-close" onclick="closePredictor()">&#10005;</button>
+    </div>
+  </div>
+  <div class="prev-body" id="predictBody"></div>
 </div>
 
 <!-- BLITZ LIBRARY OVERLAY -->
@@ -1307,11 +1322,14 @@ function parsePlaylistRows(rows,filename){
     play: idxOf(['OFF PLAY','PLAY','PLAY NAME']),
     dn:   idxOf(['DN','DOWN']),
     dist: idxOf(['DIST','DISTANCE']),
+    hash: idxOf(['HASH','HASH MARK']),
+    yard: idxOf(['YARD LN','YARD LINE','YARDLN','YL','YARD']),
     odk:  idxOf(['ODK']),
   };
   if(ci.form<0||ci.type<0) return empty('Could not find OFF FORM / PLAY TYPE columns — is this a Hudl playlist export?');
 
   const groups=new Map();
+  const snaps=[];                       // raw per-snap rows for the in-game predictor
   let totRun=0,totPass=0,totSnaps=0;
   const rawLines=[];
   const intOf=v=>{ const n=parseInt(String(v).replace(/[^\d.\-]/g,''),10); return isFinite(n)?n:NaN; };
@@ -1326,6 +1344,11 @@ function parsePlaylistRows(rows,filename){
     const gn=ci.gnls>=0?intOf(row[ci.gnls]):NaN;
     const dn=ci.dn>=0?intOf(row[ci.dn]):NaN;
     const dist=ci.dist>=0?String(row[ci.dist]==null?'':row[ci.dist]).trim():'';
+    const distNum=ci.dist>=0?intOf(row[ci.dist]):NaN;
+    const hash=ci.hash>=0?norm(row[ci.hash]).charAt(0):'';   // L / M / R
+    if(type==='run'||type==='pass')
+      snaps.push({dn:isFinite(dn)?dn:null, dist:isFinite(distNum)?distNum:null, hash,
+        form, play, type, gn:isFinite(gn)?gn:null});
 
     let g=groups.get(form);
     if(!g){ g={snaps:0,run:0,pass:0,runPlays:new Map(),passPlays:new Map(),downs:new Map(),explosive:[]}; groups.set(form,g); }
@@ -1372,7 +1395,7 @@ function parsePlaylistRows(rows,filename){
     `✓ ${totExpl} explosive play(s) (run ≥${EXPLOSIVE_RUN_YDS} yds, pass ≥${EXPLOSIVE_PASS_YDS} yds)`];
 
   return {teamName,season:year,runPct:teamRun,passPct:100-teamRun,
-    formations:kept,rawLines,
+    formations:kept,rawLines,snaps,
     confidence:totSnaps>=20?90:totSnaps>=8?70:45,
     sourceFiles:[filename],extractionLog:log};
 }
@@ -3946,6 +3969,7 @@ function importPreview(){
     notes:document.getElementById('p_notes').value.trim()||'Imported from scouting report.',
     gameNotes:'',
     importLog:(prevData.extractionLog||[]).join('\n'), // save extraction log for review
+    snaps:prevData.snaps||[],          // raw per-snap rows for the in-game predictor
     formations};
   applyRecommendations(newOpp);      // generate formation-level recommendations
   autoFillSituationDC(newOpp);       // auto-fill defensive calls for each situation
@@ -6548,6 +6572,109 @@ function closePracticeScript(){
   document.getElementById('scriptOv').classList.remove('open');
   document.body.style.overflow='';
 }
+
+// ── IN-GAME PREDICTOR ─────────────────────────────────────────────────────────
+// Predict the offense's next play from the imported per-snap playlist, filtered to
+// the live situation (down / distance / hash / formation). A press-box game tool.
+function ordSuffix(n){ return n===1?'st':n===2?'nd':n===3?'rd':'th'; }
+function _tally(arr, keyFn){
+  const m=new Map(); arr.forEach(x=>{ const k=keyFn(x); if(k) m.set(k,(m.get(k)||0)+1); });
+  const tot=[...m.values()].reduce((a,b)=>a+b,0);
+  return [...m.entries()].sort((a,b)=>b[1]-a[1]).map(([key,count])=>({key,count,pct:tot?Math.round(count/tot*100):0}));
+}
+function predictOffense(o, sit){
+  const all=(o.snaps||[]).filter(s=>s.type==='run'||s.type==='pass');
+  if(!all.length) return null;
+  const bk=d=> d==null?null : d<=3?'S':d<=7?'M':'L';
+  const want={ down:sit.down||null, dist:(sit.dist!=null&&sit.dist!=='')?bk(+sit.dist):null, hash:sit.hash||null, form:sit.form||null };
+  const dims=[   // least → most predictive: dropped from the front when the sample is thin
+    {on:!!want.form, match:s=>s.form===want.form, label:want.form},
+    {on:!!want.hash, match:s=>s.hash===want.hash, label:({M:'Mid',L:'Left',R:'Right'}[want.hash]||want.hash)+' hash'},
+    {on:!!want.dist, match:s=>bk(s.dist)===want.dist, label:({S:'short ≤3',M:'med 4-7',L:'long 8+'}[want.dist])},
+    {on:!!want.down, match:s=>s.dn===want.down, label:want.down+ordSuffix(want.down)+' down'},
+  ];
+  const MIN=5;
+  let active=dims.filter(d=>d.on); const requested=active.slice();
+  let pool=all.filter(s=>active.every(d=>d.match(s)));
+  while(pool.length<MIN && active.length>0){ active=active.slice(1); pool=all.filter(s=>active.every(d=>d.match(s))); }
+  const run=pool.filter(s=>s.type==='run').length;
+  const runPct=pool.length?Math.round(run/pool.length*100):50;
+  const expl=pool.filter(s=>(s.type==='run'&&s.gn>=EXPLOSIVE_RUN_YDS)||(s.type==='pass'&&s.gn>=EXPLOSIVE_PASS_YDS)).length;
+  return { n:pool.length, runPct, passPct:100-runPct,
+    used:active.map(d=>d.label), dropped:requested.filter(d=>active.indexOf(d)<0).map(d=>d.label),
+    formations:_tally(pool,s=>s.form).slice(0,3),
+    runPlays:_tally(pool.filter(s=>s.type==='run'),s=>s.play).slice(0,3),
+    passPlays:_tally(pool.filter(s=>s.type==='pass'),s=>s.play).slice(0,3),
+    explosivePct: pool.length?Math.round(expl/pool.length*100):0 };
+}
+function openPredictor(){
+  if(!st.opp) return;
+  const o=st.opp;
+  if(!(o.snaps&&o.snaps.length)){ alert("The predictor needs per-snap data — import this opponent's Hudl playlist (Excel) first."); return; }
+  st.pred={down:null,dist:null,hash:null,form:null};
+  document.getElementById('predictTitle').textContent=`${o.name} — Game Day Predictor`;
+  document.getElementById('predictSub').textContent=`${o.snaps.length} scouted snaps · set the situation`;
+  const forms=[...new Set(o.snaps.map(s=>s.form))].filter(Boolean).sort();
+  const bs='flex:1;min-width:44px;padding:13px 6px;background:var(--navy2);color:var(--grayl);border:1px solid rgba(255,255,255,.12);border-radius:10px;font-size:16px;font-weight:800;cursor:pointer;font-family:inherit';
+  const lbl='font-size:10px;letter-spacing:1.5px;text-transform:uppercase;color:var(--gray);font-weight:800;margin-bottom:5px';
+  document.getElementById('predictBody').innerHTML=`
+    <div style="max-width:520px;margin:0 auto">
+      <div style="margin-bottom:12px"><div style="${lbl}">Down</div><div style="display:flex;gap:7px">
+        ${[1,2,3,4].map(n=>`<button style="${bs}" onclick="setPred('down',${n},this)">${n}${ordSuffix(n)}</button>`).join('')}
+      </div></div>
+      <div style="margin-bottom:12px"><div style="${lbl}">Distance (yds to go)</div>
+        <input id="predDist" type="number" min="1" max="40" inputmode="numeric" placeholder="e.g. 7" oninput="setPred('dist',this.value===''?null:+this.value)" style="width:100%;padding:12px 14px;background:var(--navy2);border:1px solid rgba(255,255,255,.12);border-radius:10px;color:var(--white);font-size:16px;font-family:inherit"></div>
+      <div style="margin-bottom:12px"><div style="${lbl}">Hash</div><div style="display:flex;gap:7px">
+        ${[['L','Left'],['M','Mid'],['R','Right']].map(([v,l])=>`<button style="${bs}" onclick="setPred('hash','${v}',this)">${l}</button>`).join('')}
+      </div></div>
+      <div style="margin-bottom:14px"><div style="${lbl}">Formation (optional — if you can read it pre-snap)</div>
+        <select onchange="setPred('form',this.value||null)" style="width:100%;padding:12px 14px;background:var(--navy2);border:1px solid rgba(255,255,255,.12);border-radius:10px;color:var(--white);font-size:15px;font-family:inherit">
+          <option value="">Any formation</option>${forms.map(f=>`<option value="${esc(f)}">${esc(f)}</option>`).join('')}
+        </select></div>
+      <div id="predictOut"></div>
+    </div>`;
+  renderPrediction();
+  document.getElementById('predictOv').classList.add('open');
+  document.body.style.overflow='hidden';
+}
+function setPred(key,val,btn){
+  st.pred=st.pred||{};
+  st.pred[key]=val;
+  if(btn){ [...btn.parentElement.children].forEach(c=>{ const on=c===btn; c.style.background=on?'var(--gold)':'var(--navy2)'; c.style.color=on?'var(--navy)':'var(--grayl)'; }); }
+  renderPrediction();
+}
+function renderPrediction(){
+  const o=st.opp, el=document.getElementById('predictOut'); if(!el) return;
+  const p=predictOffense(o, st.pred||{});
+  if(!p){ el.innerHTML=''; return; }
+  if(!p.n){ el.innerHTML=`<div style="background:var(--navy2);border:1px solid rgba(255,255,255,.08);border-radius:12px;padding:18px;text-align:center;color:var(--gray);font-size:13px">No matching snaps for that situation.</div>`; return; }
+  const lean=p.passPct>=58?['PASS','var(--blue)',p.passPct]:p.runPct>=58?['RUN','var(--green)',p.runPct]:['BALANCED','var(--gold)',Math.max(p.runPct,p.passPct)];
+  const conf=p.n>=12?'High':p.n>=5?'Medium':'Low';
+  const tf=p.formations[0];
+  const rec=generateRecommendation({name:tf?tf.key:'',runPct:p.runPct,passPct:p.passPct});
+  const plays=(arr,icon)=>arr.length?arr.map(x=>`<div style="font-size:12px;color:var(--grayl);padding:2px 0">${icon} ${esc(x.key)} <span style="color:var(--gray)">${x.pct}%</span></div>`).join(''):'<div style="font-size:12px;color:var(--gray)">—</div>';
+  el.innerHTML=`
+    <div style="background:var(--navy2);border:1px solid rgba(255,255,255,.1);border-radius:14px;padding:16px;margin-bottom:12px">
+      <div style="text-align:center;margin-bottom:10px">
+        <div style="font-size:30px;font-weight:900;color:${lean[1]}">${lean[0]} ${lean[2]}%</div>
+        <div style="font-size:11px;color:var(--gray)">${p.n} matching snap${p.n!==1?'s':''} · ${conf} confidence${p.dropped.length?` · widened (ignored ${p.dropped.join(', ')})`:''}</div>
+      </div>
+      ${sbar(p.runPct,p.passPct)}
+      <div style="margin-top:12px;font-size:13px">Most likely: <b>${tf?esc(tf.key):'—'}</b>${tf?` <span style="color:var(--gray)">(${tf.pct}%)</span>`:''}${p.formations.slice(1).map(f=>` <span style="color:var(--gray)">· ${esc(f.key)} ${f.pct}%</span>`).join('')}</div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:10px">
+        <div><div style="font-size:9px;letter-spacing:1px;text-transform:uppercase;color:var(--green);font-weight:800;margin-bottom:3px">Likely runs</div>${plays(p.runPlays,'&#127939;')}</div>
+        <div><div style="font-size:9px;letter-spacing:1px;text-transform:uppercase;color:var(--blue);font-weight:800;margin-bottom:3px">Likely passes</div>${plays(p.passPlays,'&#9992;')}</div>
+      </div>
+      ${p.explosivePct>=12?`<div style="margin-top:10px;font-size:12px;color:var(--amber);font-weight:700">&#128165; ${p.explosivePct}% explosive risk here — keep a lid on it</div>`:''}
+    </div>
+    <div style="background:linear-gradient(135deg,rgba(240,165,0,.14),rgba(240,165,0,.05));border:1.5px solid rgba(240,165,0,.4);border-radius:14px;padding:16px">
+      <div style="font-size:10px;letter-spacing:1.5px;text-transform:uppercase;color:var(--gold);font-weight:800;margin-bottom:4px">Recommended Call</div>
+      <div style="font-size:20px;font-weight:900;color:var(--gold)">${esc(rec.coverage)}</div>
+      <div style="font-size:14px;font-weight:700;color:var(--white);margin-bottom:5px">${esc(rec.blitz)}</div>
+      <div style="font-size:11px;color:var(--grayl);line-height:1.4">${esc(rec.reason)}</div>
+    </div>`;
+}
+function closePredictor(){ document.getElementById('predictOv').classList.remove('open'); document.body.style.overflow=''; }
 
 // Game-day call sheet: condensed situation→call reference, plus a cut-out
 // wristband insert. Built from the same recommendation engine as the game plan.
