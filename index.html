@@ -1361,9 +1361,10 @@ function parsePlaylistRows(rows,filename){
     const dist=ci.dist>=0?String(row[ci.dist]==null?'':row[ci.dist]).trim():'';
     const distNum=ci.dist>=0?intOf(row[ci.dist]):NaN;
     const hash=ci.hash>=0?norm(row[ci.hash]).charAt(0):'';   // L / M / R
+    const yard=ci.yard>=0?intOf(row[ci.yard]):NaN;           // Hudl yard line (neg = own side)
     if(type==='run'||type==='pass')
       snaps.push({dn:isFinite(dn)?dn:null, dist:isFinite(distNum)?distNum:null, hash,
-        form, play, type, gn:isFinite(gn)?gn:null});
+        yard:isFinite(yard)?yard:null, form, play, type, gn:isFinite(gn)?gn:null});
 
     let g=groups.get(form);
     if(!g){ g={snaps:0,run:0,pass:0,runPlays:new Map(),passPlays:new Map(),downs:new Map(),explosive:[]}; groups.set(form,g); }
@@ -6598,14 +6599,25 @@ function _tally(arr, keyFn){
   const tot=[...m.values()].reduce((a,b)=>a+b,0);
   return [...m.entries()].sort((a,b)=>b[1]-a[1]).map(([key,count])=>({key,count,pct:tot?Math.round(count/tot*100):0}));
 }
+// Field zone from a Hudl yard line (negative = own side, positive = opponent side).
+const FIELD_ZONES={BU:'Backed up',OWN:'Own/Mid',PLUS:'Plus terr.',RZ:'Red zone',GL:'Goal line'};
+function fieldZone(y){
+  if(y==null) return null;
+  if(y>=1&&y<=5) return 'GL';      // opp 1-5
+  if(y>=1&&y<=20) return 'RZ';     // opp 6-20
+  if(y>20) return 'PLUS';          // opponent side, outside red zone
+  if(y<=-1&&y>=-10) return 'BU';   // own 1-10
+  return 'OWN';                    // own 11-49 / midfield
+}
 function predictOffense(o, sit){
   const all=(o.snaps||[]).filter(s=>s.type==='run'||s.type==='pass');
   if(!all.length) return null;
   const bk=d=> d==null?null : d<=3?'S':d<=7?'M':'L';
-  const want={ down:sit.down||null, dist:(sit.dist!=null&&sit.dist!=='')?bk(+sit.dist):null, hash:sit.hash||null, form:sit.form||null };
+  const want={ down:sit.down||null, dist:(sit.dist!=null&&sit.dist!=='')?bk(+sit.dist):null, hash:sit.hash||null, zone:sit.zone||null, form:sit.form||null };
   const dims=[   // least → most predictive: dropped from the front when the sample is thin
     {on:!!want.form, match:s=>s.form===want.form, label:want.form},
     {on:!!want.hash, match:s=>s.hash===want.hash, label:({M:'Mid',L:'Left',R:'Right'}[want.hash]||want.hash)+' hash'},
+    {on:!!want.zone, match:s=>fieldZone(s.yard)===want.zone, label:FIELD_ZONES[want.zone]},
     {on:!!want.dist, match:s=>bk(s.dist)===want.dist, label:({S:'short ≤3',M:'med 4-7',L:'long 8+'}[want.dist])},
     {on:!!want.down, match:s=>s.dn===want.down, label:want.down+ordSuffix(want.down)+' down'},
   ];
@@ -6627,11 +6639,12 @@ function openPredictor(){
   if(!st.opp) return;
   const o=st.opp;
   if(!(o.snaps&&o.snaps.length)){ alert("The predictor needs per-snap data — import this opponent's Hudl playlist (Excel) first."); return; }
-  st.pred={down:null,dist:null,hash:null,form:null};
+  st.pred={down:null,dist:null,hash:null,zone:null,form:null};
   document.getElementById('predictTitle').textContent=`${o.name} — Game Day Predictor`;
   document.getElementById('predictSub').textContent=`${o.snaps.length} scouted snaps · set the situation`;
   const forms=[...new Set(o.snaps.map(s=>s.form))].filter(Boolean).sort();
   const bs='flex:1;min-width:44px;padding:13px 6px;background:var(--navy2);color:var(--grayl);border:1px solid rgba(255,255,255,.12);border-radius:10px;font-size:16px;font-weight:800;cursor:pointer;font-family:inherit';
+  const bz='flex:1;min-width:0;padding:11px 2px;background:var(--navy2);color:var(--grayl);border:1px solid rgba(255,255,255,.12);border-radius:9px;font-size:11px;font-weight:700;cursor:pointer;font-family:inherit';
   const lbl='font-size:10px;letter-spacing:1.5px;text-transform:uppercase;color:var(--gray);font-weight:800;margin-bottom:5px';
   document.getElementById('predictBody').innerHTML=`
     <div style="max-width:520px;margin:0 auto">
@@ -6642,6 +6655,9 @@ function openPredictor(){
         <input id="predDist" type="number" min="1" max="40" inputmode="numeric" placeholder="e.g. 7" oninput="setPred('dist',this.value===''?null:+this.value)" style="width:100%;padding:12px 14px;background:var(--navy2);border:1px solid rgba(255,255,255,.12);border-radius:10px;color:var(--white);font-size:16px;font-family:inherit"></div>
       <div style="margin-bottom:12px"><div style="${lbl}">Hash</div><div style="display:flex;gap:7px">
         ${[['L','Left'],['M','Mid'],['R','Right']].map(([v,l])=>`<button style="${bs}" onclick="setPred('hash','${v}',this)">${l}</button>`).join('')}
+      </div></div>
+      <div style="margin-bottom:12px"><div style="${lbl}">Field position (optional)</div><div style="display:flex;gap:5px">
+        ${[['BU','Backed up'],['OWN','Own/Mid'],['PLUS','Plus'],['RZ','Red zone'],['GL','Goal']].map(([v,l])=>`<button style="${bz}" onclick="setPred('zone','${v}',this)">${l}</button>`).join('')}
       </div></div>
       <div style="margin-bottom:14px"><div style="${lbl}">Formation (optional — if you can read it pre-snap)</div>
         <select onchange="setPred('form',this.value||null)" style="width:100%;padding:12px 14px;background:var(--navy2);border:1px solid rgba(255,255,255,.12);border-radius:10px;color:var(--white);font-size:15px;font-family:inherit">
@@ -6670,7 +6686,7 @@ function renderPrediction(){
   const rec=generateRecommendation({name:tf?tf.key:'',runPct:p.runPct,passPct:p.passPct});
   // Coach's own call for this situation (offense→defense pairing), saved per opponent
   const distBk=(st.pred.dist!=null&&st.pred.dist!=='')?(st.pred.dist<=3?'S':st.pred.dist<=7?'M':'L'):'-';
-  const callKey=`${st.pred.down||'-'}|${distBk}|${tf?tf.key:'-'}`;
+  const callKey=`${st.pred.down||'-'}|${distBk}|${st.pred.zone||'-'}|${tf?tf.key:'-'}`;
   st.predKey=callKey;
   o.calls=o.calls||{};
   const saved=o.calls[callKey];
