@@ -2730,27 +2730,33 @@ function parseHudlByPage(pages, filename, fullText) {
 
     // Build plays for one column: name items in [nameLo,nameHi); a "/N" item in
     // [statLo,statHi) marks a real play row, else the name row is a continuation.
-    const colPlays = (nameLo, nameHi, statLo, statHi) => {
+    // lo..hi spans the whole column; the play NAME is whatever sits left of that
+    // row's count/fraction (derived from the "/N" item's x), so it adapts to any
+    // column spacing instead of assuming a fixed name width.
+    const colPlays = (lo, hi) => {
       const rows = [];
       for (const it of items) {
         if (it.y >= headerY - 2 || it.y <= endY) continue;
+        if (it.x < lo || it.x >= hi) continue;
         let row = rows.find(r => Math.abs(r.y - it.y) <= 3);
-        if (!row) { row = { y: it.y, name: [], frac: false }; rows.push(row); }
-        if (it.x >= nameLo && it.x < nameHi) row.name.push(it);
-        if (it.x >= statLo && it.x < statHi && /^\/\d/.test(it.s)) row.frac = true;
+        if (!row) { row = { y: it.y, items: [] }; rows.push(row); }
+        row.items.push(it);
       }
       rows.sort((a, b) => b.y - a.y);
       const plays = [];
       for (const r of rows) {
-        const nm = r.name.sort((a, b) => a.x - b.x).map(i => i.s).join(' ').replace(/\s+/g, ' ').trim();
-        if (!nm) continue;                                  // stat-only row
-        if (r.frac) plays.push(nm);                          // new play
+        const frac = r.items.find(it => /^\/\d/.test(it.s));
+        const bx = frac ? frac.x - 15 : hi;                  // name boundary = just left of the count
+        const nameIts = r.items.filter(it => it.x < bx && (frac ? true : /[A-Za-z]/.test(it.s)));
+        const nm = nameIts.sort((a, b) => a.x - b.x).map(i => i.s).join(' ').replace(/\s+/g, ' ').trim();
+        if (!nm) continue;                                   // stat-only row
+        if (frac) plays.push(nm);                             // new play row
         else if (plays.length) plays[plays.length - 1] = (plays[plays.length - 1] + ' ' + nm).replace(/\s+/g, ' ').trim();
       }
       return plays;
     };
-    const runPlays  = colPlays(runX - 8,  runX + 85,  runX + 85,  passX - 8);
-    const passPlays = colPlays(passX - 8, passX + 85, passX + 85, strX - 8);
+    const runPlays  = colPlays(runX - 8,  passX - 8);
+    const passPlays = colPlays(passX - 8, strX - 8);
     if (!runPlays.length && !passPlays.length) return null;
     return { runPlays, passPlays };
   }
