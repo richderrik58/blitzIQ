@@ -1415,6 +1415,7 @@ function parsePlaylistRows(rows,filename){
     dist: idxOf(['DIST','DISTANCE']),
     hash: idxOf(['HASH','HASH MARK']),
     yard: idxOf(['YARD LN','YARD LINE','YARDLN','YL','YARD']),
+    qtr:  idxOf(['QTR','QUARTER','QTR.']),
     odk:  idxOf(['ODK']),
   };
   if(ci.form<0||ci.type<0) return empty('Could not find OFF FORM / PLAY TYPE columns — is this a Hudl playlist export?');
@@ -1438,9 +1439,10 @@ function parsePlaylistRows(rows,filename){
     const distNum=ci.dist>=0?intOf(row[ci.dist]):NaN;
     const hash=ci.hash>=0?norm(row[ci.hash]).charAt(0):'';   // L / M / R
     const yard=ci.yard>=0?intOf(row[ci.yard]):NaN;           // Hudl yard line (neg = own side)
+    const qtr=ci.qtr>=0?intOf(row[ci.qtr]):NaN;
     if(type==='run'||type==='pass')
       snaps.push({dn:isFinite(dn)?dn:null, dist:isFinite(distNum)?distNum:null, hash,
-        yard:isFinite(yard)?yard:null, form, play, type, gn:isFinite(gn)?gn:null});
+        yard:isFinite(yard)?yard:null, qtr:isFinite(qtr)?qtr:null, form, play, type, gn:isFinite(gn)?gn:null});
 
     let g=groups.get(form);
     if(!g){ g={snaps:0,run:0,pass:0,runPlays:new Map(),passPlays:new Map(),downs:new Map(),explosive:[]}; groups.set(form,g); }
@@ -6691,8 +6693,9 @@ function predictOffense(o, sit){
   const all=(o.snaps||[]).filter(s=>s.type==='run'||s.type==='pass');
   if(!all.length) return null;
   const bk=d=> d==null?null : d<=3?'S':d<=7?'M':'L';
-  const want={ down:sit.down||null, dist:(sit.dist!=null&&sit.dist!=='')?bk(+sit.dist):null, hash:sit.hash||null, zone:sit.zone||null, form:sit.form||null };
+  const want={ down:sit.down||null, dist:(sit.dist!=null&&sit.dist!=='')?bk(+sit.dist):null, hash:sit.hash||null, zone:sit.zone||null, qtr:sit.qtr||null, form:sit.form||null };
   const dims=[   // least → most predictive: dropped from the front when the sample is thin
+    {on:!!want.qtr, match:s=>s.qtr===want.qtr, label:'Q'+want.qtr},
     {on:!!want.form, match:s=>s.form===want.form, label:want.form},
     {on:!!want.hash, match:s=>s.hash===want.hash, label:({M:'Mid',L:'Left',R:'Right'}[want.hash]||want.hash)+' hash'},
     {on:!!want.zone, match:s=>fieldZone(s.yard)===want.zone, label:FIELD_ZONES[want.zone]},
@@ -6717,7 +6720,7 @@ function openPredictor(){
   if(!st.opp) return;
   const o=st.opp;
   if(!(o.snaps&&o.snaps.length)){ alert("The predictor needs per-snap data — import this opponent's Hudl playlist (Excel) first."); return; }
-  st.pred={down:null,dist:null,hash:null,zone:null,form:null};
+  st.pred={down:null,dist:null,hash:null,zone:null,qtr:null,form:null};
   document.getElementById('predictTitle').textContent=`${o.name} — Game Day Predictor`;
   document.getElementById('predictSub').textContent=`${o.snaps.length} scouted snaps · set the situation`;
   const forms=[...new Set(o.snaps.map(s=>s.form))].filter(Boolean).sort();
@@ -6736,6 +6739,9 @@ function openPredictor(){
       </div></div>
       <div style="margin-bottom:12px"><div style="${lbl}">Field position (optional)</div><div style="display:flex;gap:5px">
         ${[['BU','Backed up'],['OWN','Own/Mid'],['PLUS','Plus'],['RZ','Red zone'],['GL','Goal']].map(([v,l])=>`<button style="${bz}" onclick="setPred('zone','${v}',this)">${l}</button>`).join('')}
+      </div></div>
+      <div style="margin-bottom:12px"><div style="${lbl}">Quarter (optional)</div><div style="display:flex;gap:7px">
+        ${[1,2,3,4].map(q=>`<button style="${bs}" onclick="setPred('qtr',${q},this)">Q${q}</button>`).join('')}
       </div></div>
       <div style="margin-bottom:14px"><div style="${lbl}">Formation (optional — if you can read it pre-snap)</div>
         <select onchange="setPred('form',this.value||null)" style="width:100%;padding:12px 14px;background:var(--navy2);border:1px solid rgba(255,255,255,.12);border-radius:10px;color:var(--white);font-size:15px;font-family:inherit">
@@ -6896,6 +6902,7 @@ function buildSituationReportHTML(o, light){
     ${section('By Distance',split(s=>s.dist==null?null:(s.dist<=3?'S':s.dist<=7?'M':'L')),['S','M','L'],k=>({S:'Short ≤3',M:'Med 4-7',L:'Long 8+'}[k]))}
     ${section('By Field Position',split(s=>fieldZone(s.yard)),['BU','OWN','PLUS','RZ','GL'],k=>FIELD_ZONES[k])}
     ${section('By Hash',split(s=>s.hash||null),['L','M','R'],k=>({L:'Left',M:'Mid',R:'Right'}[k]||k))}
+    ${section('By Quarter',split(s=>s.qtr>=1&&s.qtr<=4?s.qtr:null),[1,2,3,4],k=>'Q'+k)}
     ${expl.length?`<div style="break-inside:avoid"><div style="font-size:10px;letter-spacing:1.5px;text-transform:uppercase;color:${c.amber};font-weight:800;margin-bottom:8px">&#128165; Explosive Plays (${expl.length})</div>${expl.map(s=>`<div style="font-size:11px;color:${c.mut};padding:2px 0">${s.type==='run'?'&#127939;':'&#9992;'} <b style="color:${c.amber}">${s.gn} yd</b> &mdash; ${esc(s.play||'(unnamed)')} <span style="color:${c.sub}">· ${esc(s.form)}${s.dn?` · ${s.dn}${ordSuffix(s.dn)} &amp; ${s.dist==null?'?':s.dist}`:''}</span></div>`).join('')}</div>`:''}`;
 }
 function showSituationReport(){
