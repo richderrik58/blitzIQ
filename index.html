@@ -6855,8 +6855,20 @@ function buildSituationReportHTML(o, light){
   const section=(title,m,order,lm)=>{ const keys=order?order.filter(k=>m.has(k)):[...m.keys()]; if(!keys.length)return '';
     return `<div style="margin-bottom:18px;break-inside:avoid"><div style="font-size:10px;letter-spacing:1.5px;text-transform:uppercase;color:${c.gold};font-weight:800;margin-bottom:8px">${title}</div>${keys.map(k=>row(lm?lm(k):k,m.get(k))).join('')}</div>`; };
   const expl=snaps.filter(s=>(s.type==='run'&&s.gn>=EXPLOSIVE_RUN_YDS)||(s.type==='pass'&&s.gn>=EXPLOSIVE_PASS_YDS)).sort((a,b)=>b.gn-a.gn);
+  // Down & Distance chart — every standard bucket with run/pass% and go-to play
+  const dndKey=s=>(s.dn>=1&&s.dn<=4&&s.dist!=null)?`${s.dn}|${s.dist<=3?'S':s.dist<=7?'M':'L'}`:null;
+  const dndG=new Map();
+  snaps.forEach(s=>{const k=dndKey(s); if(!k)return; let g=dndG.get(k); if(!g){g={run:0,pass:0,rP:new Map(),pP:new Map()};dndG.set(k,g);} g[s.type]++; if(s.play){const m=s.type==='run'?g.rP:g.pP; m.set(s.play,(m.get(s.play)||0)+1);}});
+  const topOf=m=>{let bk=null,bc=0; m.forEach((v,k)=>{if(v>bc){bc=v;bk=k;}}); return bk;};
+  const dndOrder=[]; for(let d=1;d<=4;d++) for(const z of ['S','M','L']) dndOrder.push(`${d}|${z}`);
+  const distLbl={S:'Short ≤3',M:'Med 4-7',L:'Long 8+'};
+  const dndRows=dndOrder.filter(k=>dndG.has(k)).map(k=>{ const g=dndG.get(k), n=g.run+g.pass, rp=n?Math.round(g.run/n*100):50;
+    const [d,z]=k.split('|'); const tr=topOf(g.rP), tp=topOf(g.pP);
+    return `<div style="margin-bottom:9px;break-inside:avoid"><div style="display:flex;align-items:center;gap:10px"><div style="width:118px;font-size:12px;font-weight:700;color:${c.txt};flex-shrink:0">${d}${ordSuffix(+d)} &amp; ${distLbl[z]}</div><div style="flex:1">${ibar(rp)}</div><div style="width:78px;text-align:right;font-size:11px;color:${c.mut};flex-shrink:0">${rp}% R · ${n}</div></div>${(tr||tp)?`<div style="font-size:10px;color:${c.sub};margin:2px 0 0 128px">${tr?`&#127939; ${esc(tr)}`:''}${tr&&tp?'  ·  ':''}${tp?`&#9992; ${esc(tp)}`:''}</div>`:''}</div>`;
+  }).join('');
   return `
     <div style="text-align:center;margin-bottom:18px"><div style="font-size:24px;font-weight:900;color:${c.txt}">${totRunPct}% RUN <span style="color:${c.sub};font-size:15px">/ ${100-totRunPct}% PASS</span></div><div style="font-size:11px;color:${c.sub}">${tot} offensive snaps scouted</div></div>
+    ${dndRows?`<div style="margin-bottom:18px;break-inside:avoid"><div style="font-size:10px;letter-spacing:1.5px;text-transform:uppercase;color:${c.gold};font-weight:800;margin-bottom:8px">By Down &amp; Distance</div>${dndRows}</div>`:''}
     ${section('By Down',split(s=>s.dn>=1&&s.dn<=4?s.dn:null),[1,2,3,4],k=>k+ordSuffix(k)+' down')}
     ${section('By Distance',split(s=>s.dist==null?null:(s.dist<=3?'S':s.dist<=7?'M':'L')),['S','M','L'],k=>({S:'Short ≤3',M:'Med 4-7',L:'Long 8+'}[k]))}
     ${section('By Field Position',split(s=>fieldZone(s.yard)),['BU','OWN','PLUS','RZ','GL'],k=>FIELD_ZONES[k])}
