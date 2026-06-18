@@ -465,6 +465,7 @@
     <button class="act-sec" style="grid-column:1/-1;font-size:14px" onclick="showPracticeScript()">&#127944; Practice Script Generator</button>
     <button class="act-sec" style="grid-column:1/-1;font-size:14px;background:rgba(240,165,0,.14);border-color:rgba(240,165,0,.5);color:var(--gold)" onclick="openPredictor()">&#127919; Game Day Predictor &mdash; live in-game</button>
     <button class="act-sec" style="grid-column:1/-1" onclick="showSituationReport()">&#128202; Situational Tendencies Report</button>
+    <button class="act-sec" style="grid-column:1/-1" onclick="document.getElementById('addGameIn').click()">&#10133; Add Game (Excel) &mdash; more games = sharper predictions</button>
   </div>
   <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px">
     <p class="sec-lbl" style="margin:0">Offensive Formations</p>
@@ -494,6 +495,7 @@
 <!-- HIDDEN FILE INPUT (multiple) -->
 <input type="file" id="pdfIn" accept=".pdf,application/pdf" multiple style="display:none" onchange="handlePDF(event)">
 <input type="file" id="xlsxIn" accept=".xlsx,.xls" style="display:none" onchange="handleXLSX(event)">
+<input type="file" id="addGameIn" accept=".xlsx,.xls" style="display:none" onchange="handleAddGameXLSX(event)">
 
 <!-- LOADING (single-file fallback spinner) -->
 <div class="load-ov" id="loadOv">
@@ -1325,6 +1327,64 @@ function handleXLSX(e){
         return;
       }
       openPreview(data);
+    }catch(err){ console.error(err); alert('Could not read this spreadsheet: '+((err&&err.message)||'unknown error')); }
+  };
+  reader.onerror=()=>alert('Could not read file');
+  reader.readAsArrayBuffer(file);
+}
+
+// Re-aggregate the formation cards from a combined snap pool (multi-game).
+function aggregateFromSnaps(snaps){
+  const groups=new Map(); let totRun=0,totPass=0,totSnaps=0;
+  for(const s of (snaps||[])){
+    if(s.type!=='run'&&s.type!=='pass') continue;
+    let g=groups.get(s.form); if(!g){g={snaps:0,run:0,pass:0,runPlays:new Map(),passPlays:new Map(),downs:new Map(),explosive:[]};groups.set(s.form,g);}
+    g.snaps++; totSnaps++;
+    if(s.type==='run'){g.run++;totRun++;if(s.play)g.runPlays.set(s.play,(g.runPlays.get(s.play)||0)+1);}
+    else {g.pass++;totPass++;if(s.play)g.passPlays.set(s.play,(g.passPlays.get(s.play)||0)+1);}
+    if(s.dn>=1&&s.dn<=4){let d=g.downs.get(s.dn);if(!d){d={run:0,pass:0};g.downs.set(s.dn,d);}d[s.type]++;}
+    if((s.type==='run'&&s.gn>=EXPLOSIVE_RUN_YDS)||(s.type==='pass'&&s.gn>=EXPLOSIVE_PASS_YDS))
+      g.explosive.push({type:s.type,yards:s.gn,play:s.play||'(unnamed)',down:s.dn,dist:s.dist!=null?String(s.dist):''});
+  }
+  const ord=dn=>({1:'1st',2:'2nd',3:'3rd',4:'4th'}[dn]||dn+'th');
+  const topPlays=m=>[...m.entries()].sort((a,b)=>b[1]-a[1]).map(e=>e[0]);
+  let formations=[...groups.entries()].map(([name,g])=>{
+    const denom=g.run+g.pass, runPct=denom?Math.round(g.run/denom*100):50;
+    const runPlays=topPlays(g.runPlays).slice(0,6), passPlays=topPlays(g.passPlays).slice(0,6);
+    const situations=[...g.downs.entries()].sort((a,b)=>a[0]-b[0]).map(([dn,d])=>{const dd=d.run+d.pass,rp=dd?Math.round(d.run/dd*100):50;
+      return {id:uid(),down:dn,distLabel:`${ord(dn)} Down`,runPct:rp,passPct:100-rp,notes:`From ${dd} snap${dd!==1?'s':''} in this formation.`,dc:{}};});
+    return {id:uid(),name,runPct,passPct:100-runPct,playCount:g.snaps,totalPlays:totSnaps,
+      favoriteRunPlay:runPlays[0]||'Not specified',favoritePassPlay:passPlays[0]||'Not specified',
+      runPlays,passPlays,situations,explosivePlays:g.explosive.sort((a,b)=>b.yards-a.yards),
+      downTendency:'Imported from playlist.'};
+  });
+  formations.sort((a,b)=>b.playCount-a.playCount);
+  const teamRun=(totRun+totPass)?Math.round(totRun/(totRun+totPass)*100):50;
+  return {formations:formations.slice(0,MAX_PLAYLIST_FORMATIONS), runPct:teamRun, totSnaps};
+}
+
+// Add another scouted game (playlist) to the current opponent — more games =
+// better in-game predictions. Appends snaps and re-aggregates the formations.
+function handleAddGameXLSX(e){
+  const file=e.target.files&&e.target.files[0]; if(e.target) e.target.value='';
+  if(!file||!st.opp) return;
+  if(typeof XLSX==='undefined'){ alert('Spreadsheet parser is still loading — try again.'); return; }
+  const reader=new FileReader();
+  reader.onload=()=>{
+    try{
+      const wb=XLSX.read(reader.result,{type:'array'});
+      const rows=XLSX.utils.sheet_to_json(wb.Sheets[wb.SheetNames[0]],{header:1,blankrows:false,defval:''});
+      const data=parsePlaylistRows(rows,file.name);
+      const add=data.snaps||[];
+      if(!add.length){ alert('No offensive snaps found — is this a Hudl playlist export?'); return; }
+      const o=st.opp;
+      o.snaps=(o.snaps||[]).concat(add);
+      const agg=aggregateFromSnaps(o.snaps);
+      o.formations=agg.formations; o.runPct=agg.runPct; o.passPct=100-agg.runPct;
+      applyRecommendations(o); autoFillSituationDC(o);
+      o.games=(o.games||1)+1;
+      saveDB(); renderForms();
+      showToast(`Added ${add.length} snaps — ${o.snaps.length} total across ${o.games} games`);
     }catch(err){ console.error(err); alert('Could not read this spreadsheet: '+((err&&err.message)||'unknown error')); }
   };
   reader.onerror=()=>alert('Could not read file');
