@@ -6652,6 +6652,13 @@ function renderPrediction(){
   const conf=p.n>=12?'High':p.n>=5?'Medium':'Low';
   const tf=p.formations[0];
   const rec=generateRecommendation({name:tf?tf.key:'',runPct:p.runPct,passPct:p.passPct});
+  // Coach's own call for this situation (offense→defense pairing), saved per opponent
+  const distBk=(st.pred.dist!=null&&st.pred.dist!=='')?(st.pred.dist<=3?'S':st.pred.dist<=7?'M':'L'):'-';
+  const callKey=`${st.pred.down||'-'}|${distBk}|${tf?tf.key:'-'}`;
+  st.predKey=callKey;
+  o.calls=o.calls||{};
+  const saved=o.calls[callKey];
+  const cov=saved?saved.cov:rec.coverage, blz=saved?saved.blitz:rec.blitz;
   const plays=(arr,icon)=>arr.length?arr.map(x=>`<div style="font-size:12px;color:var(--grayl);padding:2px 0">${icon} ${esc(x.key)} <span style="color:var(--gray)">${x.pct}%</span></div>`).join(''):'<div style="font-size:12px;color:var(--gray)">—</div>';
   el.innerHTML=`
     <div style="background:var(--navy2);border:1px solid rgba(255,255,255,.1);border-radius:14px;padding:16px;margin-bottom:12px">
@@ -6668,11 +6675,23 @@ function renderPrediction(){
       ${p.explosivePct>=12?`<div style="margin-top:10px;font-size:12px;color:var(--amber);font-weight:700">&#128165; ${p.explosivePct}% explosive risk here — keep a lid on it</div>`:''}
     </div>
     <div style="background:linear-gradient(135deg,rgba(240,165,0,.14),rgba(240,165,0,.05));border:1.5px solid rgba(240,165,0,.4);border-radius:14px;padding:16px">
-      <div style="font-size:10px;letter-spacing:1.5px;text-transform:uppercase;color:var(--gold);font-weight:800;margin-bottom:4px">Recommended Call</div>
-      <div style="font-size:20px;font-weight:900;color:var(--gold)">${esc(rec.coverage)}</div>
-      <div style="font-size:14px;font-weight:700;color:var(--white);margin-bottom:5px">${esc(rec.blitz)}</div>
-      <div style="font-size:11px;color:var(--grayl);line-height:1.4">${esc(rec.reason)}</div>
+      <div style="display:flex;align-items:center;gap:8px;margin-bottom:6px">
+        <div style="font-size:10px;letter-spacing:1.5px;text-transform:uppercase;color:var(--gold);font-weight:800">${saved?'Your Call':'Recommended Call'}</div>
+        ${saved?'<span style="font-size:9px;font-weight:800;background:rgba(34,197,94,.18);color:var(--green);border:1px solid rgba(34,197,94,.4);padding:1px 7px;border-radius:8px">SAVED</span>':''}
+      </div>
+      <input id="predCov" value="${esc(cov)}" onchange="saveCoachCall()" placeholder="Coverage" spellcheck="false" style="width:100%;font-size:19px;font-weight:900;color:var(--gold);background:transparent;border:none;border-bottom:1px dashed rgba(240,165,0,.4);outline:none;font-family:inherit;padding:2px 0">
+      <input id="predBlitz" value="${esc(blz)}" onchange="saveCoachCall()" placeholder="Blitz / front" spellcheck="false" style="width:100%;font-size:14px;font-weight:700;color:var(--white);background:transparent;border:none;border-bottom:1px dashed rgba(255,255,255,.18);outline:none;font-family:inherit;padding:4px 0;margin-bottom:5px">
+      <div style="font-size:11px;color:var(--grayl);line-height:1.4">${saved?'Your saved call for this situation — edit, or clear both to use our suggestion.':esc(rec.reason)+' · Tap to set your own call (saved for game day).'}</div>
     </div>`;
+}
+// Save the coach's defensive call for the current predicted situation (persists per opponent).
+function saveCoachCall(){
+  const o=st.opp; if(!o||!st.predKey) return;
+  const cov=(document.getElementById('predCov')?.value||'').trim();
+  const blitz=(document.getElementById('predBlitz')?.value||'').trim();
+  o.calls=o.calls||{};
+  if(cov||blitz) o.calls[st.predKey]={cov,blitz}; else delete o.calls[st.predKey];
+  saveDB(); renderPrediction();
 }
 function closePredictor(){ document.getElementById('predictOv').classList.remove('open'); document.body.style.overflow=''; }
 
