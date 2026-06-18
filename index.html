@@ -2365,6 +2365,12 @@ async function handlePDF(e) {
         ? parseHudlByPage(file._pdfPages, file.name, text)
         : parseHudl(text, file.name);
       parsed.filename=file.name;
+      // No formations? Try the Down/Distance report → synthetic situational snaps.
+      const realFormsPre=parsed.formations.filter(f=>f.name!=='Overall Tendency');
+      if(realFormsPre.length===0){
+        const dd=parseDDReport(text, text.split('\n'), file.name);
+        if(dd&&dd.snaps.length){ parsed.snaps=dd.snaps; parsed.ddSnaps=dd.snaps.length; }
+      }
       results.push(parsed);
       // Classify: a synthetic 'Overall Tendency' isn't a real formation card
       const realForms=parsed.formations.filter(f=>f.name!=='Overall Tendency');
@@ -2374,6 +2380,7 @@ async function handlePDF(e) {
       const hasOverall=(parsed.runPct!==50||parsed.passPct!==50);
       let status,reason='';
       if(forms>0){ status='ok'; }
+      else if(parsed.ddSnaps){ status='ok'; reason=`Down & Distance report — ${parsed.ddSnaps} situational snaps (down/distance/field-zone) for the predictor.`; }
       else if(hasOverall){ status='partial'; reason='Run/pass totals only — no formation names, so no formation cards or recommendations.'; }
       else { status='empty'; reason='No tendency data detected in this file.'; }
       reports.push({name:file.name,status,forms,sits,reason});
@@ -2389,7 +2396,7 @@ async function handlePDF(e) {
   await new Promise(r=>setTimeout(r,500)); // let coaches see all-done state
   hideProgress();
 
-  const valid=results.filter(r=>r.formations.length>0||r.situations.length>0);
+  const valid=results.filter(r=>r.formations.length>0||r.situations.length>0||(r.snaps&&r.snaps.length));
   if(!valid.length){
     const lines=reports.map(r=>`• ${r.name}: ${r.reason||'no data'}`).join('\n');
     alert(`No usable scouting data was imported.\n\n${lines}\n\nTip: export a text-based Formation Tendencies report (not a scan or screenshot).`);
@@ -2534,6 +2541,7 @@ function combineResults(results){
     teamName,season,runPct,passPct,
     notes:`Imported from ${results.length} scouting PDF${results.length>1?'s':''}.`,
     formations,situations:topSits,
+    snaps:results.flatMap(r=>r.snaps||[]),   // synthetic snaps from any Down/Distance reports
     rawLines:results.flatMap(r=>[`=== ${r.filename} ===`,...r.rawLines.slice(0,80)]),
     extractionLog:log,
     sourceFiles:results.map(r=>r.filename),
@@ -3125,6 +3133,46 @@ function extractName(text,lines,filename){
   const fn=filename.replace(/\.[^.]+$/i,'').replace(/[-_]/g,' ').trim();
   if(fn && !/^hudl\s+\d/i.test(fn) && !/playlist\s*data/i.test(fn)){ const n=good(fn); if(n) return n; }
   return 'Imported Opponent';
+}
+
+// Parse a Hudl "Down/Distance" report (RUN/PASS BREAKDOWN by field-zone × D&D)
+// into synthetic snaps so the snap-based predictor/reports work without an ODK.
+// Each cell's fraction (e.g. run 3/5, pass 2/5) becomes that many run/pass snaps.
+function parseDDReport(text, lines, filename){
+  if(!/down\s*\/?\s*distance/i.test(text.slice(0,500)) || !/RUN\s*\/?\s*PASS\s*BREAKDOWN/i.test(text)) return null;
+  const zoneYard=[-5,-35,35,13,3];   // 0-20(BU) 21-50(OWN) 50-21(PLUS) RedZone(RZ) GoalLine(GL)
+  const distRep=t=>{ t=(t||'').replace(/\s+/g,'');
+    if(/\+$/.test(t)) return parseInt(t)||10;                 // "10+"
+    if(/^</.test(t)) return Math.max(1,(parseInt(t.replace('<',''))||5)-3); // "<10"→7
+    const m=t.match(/(\d+)-(\d+)/); if(m) return Math.round((+m[1]+ +m[2])/2); // "4-7"
+    return parseInt(t)||10;
+  };
+  const snaps=[];
+  for(let i=0;i<lines.length;i++){
+    const L=lines[i].trim();
+    const dm=L.match(/^([1-4])\s*(?:st|nd|rd|th)\s*&\s*(\d+\s*\+|<\s*\d+|\d+\s*-\s*\d+)/i);
+    if(!dm) continue;
+    const down=+dm[1], dist=distRep(dm[2]);
+    const rest=L.slice(dm.index+dm[0].length);
+    const pcts=[...rest.matchAll(/(\d{1,3})\s*%|(-)/g)].map(m=>m[1]!==undefined?+m[1]:null);
+    let fracs=[];
+    for(let j=i+1;j<Math.min(i+3,lines.length);j++){
+      const fl=lines[j].trim();
+      const fm=[...fl.matchAll(/(\d{1,3})\s*\/\s*(\d{1,3})/g)];
+      if(fm.length){ fracs=fm.map(m=>+m[1]); break; }
+      if(/^[1-4]\s*(?:st|nd|rd|th)\s*&/i.test(fl)) break;     // hit the next D&D row
+    }
+    let fi=0;
+    for(let z=0;z<5;z++){
+      const rp=pcts[z*2], pp=pcts[z*2+1];
+      if(rp==null && pp==null) continue;                      // empty zone
+      const runCount=(rp!=null)?(fracs[fi++]||0):0;
+      const passCount=(pp!=null)?(fracs[fi++]||0):0;
+      for(let k=0;k<runCount;k++)  snaps.push({dn:down,dist,hash:'',yard:zoneYard[z],qtr:null,form:'',play:'',type:'run',gn:null});
+      for(let k=0;k<passCount;k++) snaps.push({dn:down,dist,hash:'',yard:zoneYard[z],qtr:null,form:'',play:'',type:'pass',gn:null});
+    }
+  }
+  return snaps.length>=4 ? {snaps} : null;
 }
 
 function extractOverall(text,lines){
@@ -3943,12 +3991,18 @@ function openPreview(data,results){
         </span>
       </div>
       ${data.formations.length===0
-        ?`<div class="conf-msg lo">
+        ?(data.snaps&&data.snaps.length
+          ?`<div class="conf-msg mid">
+              <strong>&#128202; Down &amp; Distance report — ${data.snaps.length} situational snaps imported.</strong><br>
+              This report has no formation diagrams, but its run/pass tendencies by down, distance, and field position power the
+              <strong>Game Day Predictor</strong> and <strong>Situational report</strong>. Add the Formation PDF (or the ODK playlist) too for formation diagrams.
+            </div>`
+          :`<div class="conf-msg lo">
             <strong>No formations detected in this PDF.</strong><br>
             This is usually a <strong>Run/Pass Breakdown</strong> report — it only contains overall totals, not formation names.<br><br>
             To get formations, re-export from your platform using <strong>Tendencies → Formation → Export PDF</strong> and upload that file instead.
             You can upload multiple PDFs together (formation report + down-distance report).
-          </div>`
+          </div>`)
         :data.formations.map((f,i)=>`
           <div class="pfc" id="pfc_${i}">
             <button class="pfc-del" onclick="removePF(${i})">✕</button>
