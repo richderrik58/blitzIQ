@@ -407,6 +407,7 @@
   </div>
   <button class="act-sec" style="width:100%;margin-bottom:14px" onclick="document.getElementById('xlsxIn').click()">&#128202; Import Playlist (Excel) &mdash; with Explosive Plays</button>
   <button class="act-sec" style="width:100%;margin-bottom:14px" onclick="showBlitzLib()">&#9889; Blitz Library — 12 Packages</button>
+  <button class="act-sec" style="width:100%;margin-bottom:14px;background:rgba(240,165,0,.12);border-color:rgba(240,165,0,.45);color:var(--gold)" onclick="showHandoff()">&#128241; Game-Day iPad Setup</button>
   <button class="act-sec" id="compareBtn" style="width:100%;margin-bottom:14px;display:none" onclick="openCompare()">&#9878; Compare Two Teams</button>
   <!-- Hudl export guide -->
   <div style="background:var(--navy2);border:1px solid rgba(240,165,0,.2);border-radius:12px;margin-bottom:18px;overflow:hidden">
@@ -588,6 +589,20 @@
     </div>
   </div>
   <div class="prev-body" id="sitBody"></div>
+</div>
+
+<!-- GAME-DAY HANDOFF OVERLAY -->
+<div class="prev-ov" id="handoffOv">
+  <div class="prev-hdr">
+    <div class="prev-hdr-l">
+      <div class="prev-title">&#128241; Game-Day Handoff</div>
+      <div class="prev-file">Scout on a computer &middot; run the game on your iPad</div>
+    </div>
+    <div style="display:flex;gap:6px;flex-shrink:0">
+      <button class="cbtn-close" onclick="closeHandoff()">&#10005;</button>
+    </div>
+  </div>
+  <div class="prev-body" id="handoffBody"></div>
 </div>
 
 <!-- BLITZ LIBRARY OVERLAY -->
@@ -1252,6 +1267,7 @@ function importBackupFile(input) {
       });
       if (incoming.scheme && !DB.scheme) DB.scheme = incoming.scheme;
       saveDB(); renderOpps();
+      if (typeof closeHandoff === 'function' && document.getElementById('handoffOv')?.classList.contains('open')) closeHandoff();
       showToast(`Imported — ${added} added, ${updated} updated`);
     } catch (e) {
       showToast('Import failed — ' + (e.message || 'invalid file'));
@@ -1262,6 +1278,39 @@ function importBackupFile(input) {
   reader.onerror = () => { showToast('Could not read file'); input.value = ''; };
   reader.readAsText(file);
 }
+
+// ── GAME-DAY HANDOFF (computer → iPad via iCloud Drive, no backend) ───────────
+function showHandoff(){
+  const touch = !!(window.matchMedia && matchMedia('(pointer:coarse)').matches);
+  const oppN=(DB.opponents||[]).length;
+  const stepWrap='background:var(--navy2);border:1px solid rgba(255,255,255,.08);border-radius:14px;padding:14px;margin-bottom:12px';
+  const badge='display:inline-flex;align-items:center;justify-content:center;width:24px;height:24px;border-radius:50%;background:var(--gold);color:var(--navy);font-weight:900;font-size:13px;margin-right:8px;flex-shrink:0';
+  const btn='width:100%;padding:13px;margin-top:10px;border-radius:10px;font-size:15px;font-weight:800;cursor:pointer;font-family:inherit;background:var(--gold);color:var(--navy);border:none';
+  const hint='font-size:11px;color:var(--gray);margin-top:7px;line-height:1.4';
+  document.getElementById('handoffBody').innerHTML=`
+    <div style="max-width:540px;margin:0 auto">
+      <div style="background:rgba(240,165,0,.1);border:1px solid rgba(240,165,0,.35);border-radius:12px;padding:12px 14px;margin-bottom:16px;font-size:12px;color:var(--grayl);line-height:1.5">
+        Move all your scouting to the iPad via <b>iCloud Drive</b> — no AirDrop, and it works fully offline once it's on the iPad.
+        <div style="margin-top:6px;color:var(--gold);font-weight:700">${touch?'You&rsquo;re on a touch device &rarr; do <b>Step 3</b>.':'You&rsquo;re on a computer &rarr; start at <b>Step 1</b>.'}</div>
+      </div>
+      <div style="${stepWrap}">
+        <div style="display:flex;align-items:flex-start"><span style="${badge}">1</span><div><b style="color:var(--white)">On your computer</b> <span style="color:var(--gray);font-size:12px">— ${oppN} opponent${oppN===1?'':'s'} loaded</span><div style="font-size:12px;color:var(--grayl);margin-top:3px">Import your opponents, then export the game-day file.</div></div></div>
+        <button style="${btn}" onclick="exportBackup()">&#8681; Export Game-Day File</button>
+        <div style="${hint}">When it downloads, move it into <b>iCloud Drive</b> (drag from Downloads, or choose iCloud in the save dialog).</div>
+      </div>
+      <div style="${stepWrap}">
+        <div style="display:flex;align-items:flex-start"><span style="${badge}">2</span><div><b style="color:var(--white)">It syncs to your iPad</b><div style="font-size:12px;color:var(--grayl);margin-top:3px">The file appears automatically in the iPad&rsquo;s <b>Files &rarr; iCloud Drive</b> — give it a few seconds.</div></div></div>
+      </div>
+      <div style="${stepWrap}">
+        <div style="display:flex;align-items:flex-start"><span style="${badge}">3</span><div><b style="color:var(--white)">On your iPad (game day)</b><div style="font-size:12px;color:var(--grayl);margin-top:3px">Load the file — then use the Game Day Predictor offline in the box.</div></div></div>
+        <button style="${btn}" onclick="document.getElementById('importIn').click()">&#8679; Load Game-Day File</button>
+        <div style="${hint}">Pick <code>blitziq-backup&hellip;.json</code> from <b>iCloud Drive</b>. Matching teams update; new ones add.</div>
+      </div>
+      <div style="font-size:11px;color:var(--gray);text-align:center;margin-top:4px;line-height:1.5">Re-export &amp; re-load whenever you scout a new opponent. Exporting is also your <b>backup</b> — a browser/storage reset can&rsquo;t lose work you&rsquo;ve exported.</div>
+    </div>`;
+  document.getElementById('handoffOv').classList.add('open'); document.body.style.overflow='hidden';
+}
+function closeHandoff(){ document.getElementById('handoffOv').classList.remove('open'); document.body.style.overflow=''; }
 
 // ── CSV / SPREADSHEET IMPORT (formations into current opponent) ────────────────
 // Lenient: comma or tab; recognizes header columns by name, else assumes a
