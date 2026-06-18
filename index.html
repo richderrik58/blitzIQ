@@ -557,6 +557,21 @@
   <div class="prev-body" id="predictBody"></div>
 </div>
 
+<!-- HIGH-ZOOM PLAY VIEW OVERLAY -->
+<div class="prev-ov" id="zoomOv">
+  <div class="prev-hdr">
+    <div class="prev-hdr-l">
+      <div class="prev-title" id="zoomTitle">Play</div>
+      <div class="prev-file" id="zoomSub"></div>
+    </div>
+    <div style="display:flex;gap:6px;flex-shrink:0">
+      <button class="cbtn-save" onclick="printPlayZoom()" style="font-size:11px">&#128438; Print</button>
+      <button class="cbtn-close" onclick="closePlayZoom()">&#10005;</button>
+    </div>
+  </div>
+  <div class="prev-body" id="zoomBody"></div>
+</div>
+
 <!-- BLITZ LIBRARY OVERLAY -->
 <div class="prev-ov" id="blitzLibOv">
   <div class="prev-hdr">
@@ -6378,6 +6393,7 @@ function _practiceCard(p, idx){
       <span style="background:var(--gold);color:var(--navy);font-weight:900;font-size:11px;border-radius:6px;padding:2px 7px">${p.n}</span>
       <span style="font-weight:800;font-size:12px;color:var(--white)">${esc(p.form)}</span>
       <span style="font-size:10px;color:var(--grayl);margin-left:auto;white-space:nowrap">${esc(p.sit)} · ${esc(p.hash)}</span>
+      <button onclick="event.stopPropagation();showPlayZoom(${idx})" title="Zoom for wristband / teaching" style="background:none;border:none;color:var(--gold);cursor:pointer;font-size:13px;padding:0 2px;flex-shrink:0">&#128269;</button>
     </div>
     ${playDiagramSVG(p.f, p.play, p.isRun)}
     <div style="padding:8px 10px;font-size:11px;color:#1b2a3a">
@@ -6694,6 +6710,39 @@ function saveCoachCall(){
   saveDB(); renderPrediction();
 }
 function closePredictor(){ document.getElementById('predictOv').classList.remove('open'); document.body.style.overflow=''; }
+
+// ── HIGH-ZOOM PLAY VIEW (wristband / teaching clarity) ────────────────────────
+let _zoomPlay=null;
+function showPlayZoom(idx){
+  const p=(window._psRows||[])[idx]; if(!p) return;
+  _zoomPlay=p;
+  document.getElementById('zoomTitle').textContent=`#${p.n} · ${p.form}`;
+  document.getElementById('zoomSub').textContent=`${p.sit} · ${p.hash}`;
+  document.getElementById('zoomBody').innerHTML=`
+    <div style="max-width:680px;margin:0 auto">
+      <div style="background:#fff;border-radius:12px;overflow:hidden;border:1px solid rgba(0,0,0,.12)">${playDiagramSVG(p.f, p.play, p.isRun)}</div>
+      <div style="margin-top:14px;text-align:center">
+        <div style="font-size:15px;font-weight:800;color:${p.isRun?'var(--green)':'var(--blue)'}">${p.isRun?'&#127939; RUN':'&#9992; PASS'}: <span style="color:var(--white)">${esc(p.play)}</span></div>
+        <div style="font-size:15px;font-weight:800;color:var(--gold);margin-top:5px">DEF: ${esc(p.cov)} <span style="color:var(--grayl);font-weight:600">· ${esc(p.blitz)}</span></div>
+      </div>
+    </div>`;
+  document.getElementById('zoomOv').classList.add('open');
+  document.body.style.overflow='hidden';
+}
+function closePlayZoom(){ document.getElementById('zoomOv').classList.remove('open'); document.body.style.overflow=''; }
+function printPlayZoom(){
+  const p=_zoomPlay; if(!p) return;
+  const html=`<!DOCTYPE html><html><head><meta charset="UTF-8"><title>${esc(p.form)} — ${esc(p.play)}</title>
+  <style>@page{margin:.5in}*{box-sizing:border-box}body{font-family:Arial,Helvetica,sans-serif;color:#111;text-align:center}
+  h2{font-size:15pt;margin:0 0 2px}.s{font-size:9pt;color:#555;margin-bottom:12px}.d{max-width:6.6in;margin:0 auto}
+  .call{margin-top:12px;font-size:12pt}.call b{color:#92400e}</style></head><body>
+  <h2>#${p.n} — ${esc(p.form)}</h2><div class="s">${esc(p.sit)} &middot; ${esc(p.hash)} hash</div>
+  <div class="d">${playDiagramSVG(p.f,p.play,p.isRun)}</div>
+  <div class="call"><b>${p.isRun?'RUN':'PASS'}:</b> ${esc(p.play)} &nbsp;&middot;&nbsp; <b>DEF:</b> ${esc(p.cov)} &middot; ${esc(p.blitz)}</div>
+  </body></html>`;
+  const w=window.open('','_blank','width=820,height=1000'); if(!w){alert('Allow pop-ups to print.');return;}
+  w.document.write(html); w.document.close(); w.focus(); setTimeout(()=>w.print(),300);
+}
 
 // Game-day call sheet: condensed situation→call reference, plus a cut-out
 // wristband insert. Built from the same recommendation engine as the game plan.
