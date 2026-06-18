@@ -464,6 +464,7 @@
     <button class="act-sec" style="grid-column:1/-1" onclick="printCallSheet()">&#128221; Call Sheet + Wristband</button>
     <button class="act-sec" style="grid-column:1/-1;font-size:14px" onclick="showPracticeScript()">&#127944; Practice Script Generator</button>
     <button class="act-sec" style="grid-column:1/-1;font-size:14px;background:rgba(240,165,0,.14);border-color:rgba(240,165,0,.5);color:var(--gold)" onclick="openPredictor()">&#127919; Game Day Predictor &mdash; live in-game</button>
+    <button class="act-sec" style="grid-column:1/-1" onclick="showSituationReport()">&#128202; Situational Tendencies Report</button>
   </div>
   <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px">
     <p class="sec-lbl" style="margin:0">Offensive Formations</p>
@@ -570,6 +571,21 @@
     </div>
   </div>
   <div class="prev-body" id="zoomBody"></div>
+</div>
+
+<!-- SITUATIONAL TENDENCIES REPORT OVERLAY -->
+<div class="prev-ov" id="sitRepOv">
+  <div class="prev-hdr">
+    <div class="prev-hdr-l">
+      <div class="prev-title" id="sitTitle">Situational Tendencies</div>
+      <div class="prev-file" id="sitSub"></div>
+    </div>
+    <div style="display:flex;gap:6px;flex-shrink:0">
+      <button class="cbtn-save" onclick="printSituationReport()" style="font-size:11px">&#128438; Print</button>
+      <button class="cbtn-close" onclick="closeSituationReport()">&#10005;</button>
+    </div>
+  </div>
+  <div class="prev-body" id="sitBody"></div>
 </div>
 
 <!-- BLITZ LIBRARY OVERLAY -->
@@ -6757,6 +6773,49 @@ function printPlayZoom(){
   <div class="call"><b>${p.isRun?'RUN':'PASS'}:</b> ${esc(p.play)} &nbsp;&middot;&nbsp; <b>DEF:</b> ${esc(p.cov)} &middot; ${esc(p.blitz)}</div>
   </body></html>`;
   const w=window.open('','_blank','width=820,height=1000'); if(!w){alert('Allow pop-ups to print.');return;}
+  w.document.write(html); w.document.close(); w.focus(); setTimeout(()=>w.print(),300);
+}
+
+// ── SITUATIONAL TENDENCIES REPORT (from per-snap data) ────────────────────────
+// One-glance defensive prep: opponent run/pass split by down, distance, field
+// position, and hash, plus their explosive plays. `light` swaps colors for print.
+function buildSituationReportHTML(o, light){
+  const c = light
+    ? {txt:'#111',mut:'#555',sub:'#888',gold:'#92400e',amber:'#b45309'}
+    : {txt:'var(--white)',mut:'var(--grayl)',sub:'var(--gray)',gold:'var(--gold)',amber:'var(--amber)'};
+  const snaps=(o.snaps||[]).filter(s=>s.type==='run'||s.type==='pass');
+  if(!snaps.length) return `<div style="color:${c.sub}">No per-snap data — import a Hudl playlist (Excel) for this opponent.</div>`;
+  const tot=snaps.length, totRunPct=Math.round(snaps.filter(s=>s.type==='run').length/tot*100);
+  const split=keyFn=>{ const m=new Map(); snaps.forEach(s=>{const k=keyFn(s); if(k==null||k==='')return; const g=m.get(k)||{run:0,pass:0}; g[s.type]++; m.set(k,g);}); return m; };
+  const ibar=rp=>`<div style="display:flex;height:9px;border-radius:5px;overflow:hidden;background:#1d4ed8"><div style="width:${rp}%;background:#15803d"></div></div>`;
+  const row=(label,g)=>{ const n=g.run+g.pass, rp=n?Math.round(g.run/n*100):50;
+    return `<div style="display:flex;align-items:center;gap:10px;margin-bottom:7px"><div style="width:84px;font-size:12px;font-weight:700;color:${c.txt};flex-shrink:0">${esc(label)}</div><div style="flex:1">${ibar(rp)}</div><div style="width:108px;text-align:right;font-size:11px;color:${c.mut};flex-shrink:0">${rp}% R · ${n} snap${n!==1?'s':''}</div></div>`; };
+  const section=(title,m,order,lm)=>{ const keys=order?order.filter(k=>m.has(k)):[...m.keys()]; if(!keys.length)return '';
+    return `<div style="margin-bottom:18px;break-inside:avoid"><div style="font-size:10px;letter-spacing:1.5px;text-transform:uppercase;color:${c.gold};font-weight:800;margin-bottom:8px">${title}</div>${keys.map(k=>row(lm?lm(k):k,m.get(k))).join('')}</div>`; };
+  const expl=snaps.filter(s=>(s.type==='run'&&s.gn>=EXPLOSIVE_RUN_YDS)||(s.type==='pass'&&s.gn>=EXPLOSIVE_PASS_YDS)).sort((a,b)=>b.gn-a.gn);
+  return `
+    <div style="text-align:center;margin-bottom:18px"><div style="font-size:24px;font-weight:900;color:${c.txt}">${totRunPct}% RUN <span style="color:${c.sub};font-size:15px">/ ${100-totRunPct}% PASS</span></div><div style="font-size:11px;color:${c.sub}">${tot} offensive snaps scouted</div></div>
+    ${section('By Down',split(s=>s.dn>=1&&s.dn<=4?s.dn:null),[1,2,3,4],k=>k+ordSuffix(k)+' down')}
+    ${section('By Distance',split(s=>s.dist==null?null:(s.dist<=3?'S':s.dist<=7?'M':'L')),['S','M','L'],k=>({S:'Short ≤3',M:'Med 4-7',L:'Long 8+'}[k]))}
+    ${section('By Field Position',split(s=>fieldZone(s.yard)),['BU','OWN','PLUS','RZ','GL'],k=>FIELD_ZONES[k])}
+    ${section('By Hash',split(s=>s.hash||null),['L','M','R'],k=>({L:'Left',M:'Mid',R:'Right'}[k]||k))}
+    ${expl.length?`<div style="break-inside:avoid"><div style="font-size:10px;letter-spacing:1.5px;text-transform:uppercase;color:${c.amber};font-weight:800;margin-bottom:8px">&#128165; Explosive Plays (${expl.length})</div>${expl.map(s=>`<div style="font-size:11px;color:${c.mut};padding:2px 0">${s.type==='run'?'&#127939;':'&#9992;'} <b style="color:${c.amber}">${s.gn} yd</b> &mdash; ${esc(s.play||'(unnamed)')} <span style="color:${c.sub}">· ${esc(s.form)}${s.dn?` · ${s.dn}${ordSuffix(s.dn)} &amp; ${s.dist==null?'?':s.dist}`:''}</span></div>`).join('')}</div>`:''}`;
+}
+function showSituationReport(){
+  if(!st.opp) return; const o=st.opp;
+  if(!(o.snaps&&o.snaps.length)){ alert("Import this opponent's Hudl playlist (Excel) first — the situational report needs per-snap data."); return; }
+  document.getElementById('sitTitle').textContent=`${o.name} — Situational Tendencies`;
+  document.getElementById('sitSub').textContent=`${o.season} · ${o.snaps.length} scouted snaps`;
+  document.getElementById('sitBody').innerHTML=`<div style="max-width:560px;margin:0 auto">${buildSituationReportHTML(o,false)}</div>`;
+  document.getElementById('sitRepOv').classList.add('open'); document.body.style.overflow='hidden';
+}
+function closeSituationReport(){ document.getElementById('sitRepOv').classList.remove('open'); document.body.style.overflow=''; }
+function printSituationReport(){
+  const o=st.opp; if(!o) return;
+  const html=`<!DOCTYPE html><html><head><meta charset="UTF-8"><title>${esc(o.name)} — Situational Tendencies</title>
+  <style>@page{margin:.5in}body{font-family:Arial,Helvetica,sans-serif;color:#111;max-width:7in;margin:0 auto}h1{font-size:16pt;margin:0 0 2px}.sub{font-size:9pt;color:#666;margin-bottom:14px;border-bottom:2px solid #111;padding-bottom:6px}</style></head>
+  <body><h1>${esc(o.name)} — Situational Tendencies</h1><div class="sub">${esc(o.season)} &middot; defensive scouting prep</div>${buildSituationReportHTML(o,true)}</body></html>`;
+  const w=window.open('','_blank','width=820,height=1100'); if(!w){alert('Allow pop-ups to print.');return;}
   w.document.write(html); w.document.close(); w.focus(); setTimeout(()=>w.print(),300);
 }
 
