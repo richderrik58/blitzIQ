@@ -605,6 +605,18 @@
   <div class="prev-body" id="handoffBody"></div>
 </div>
 
+<!-- SEASON PASS UNLOCK OVERLAY -->
+<div class="prev-ov" id="unlockOv">
+  <div class="prev-hdr">
+    <div class="prev-hdr-l">
+      <div class="prev-title">&#11088; blitzIQ Season Pass</div>
+      <div class="prev-file">Unlock the full game-day toolkit</div>
+    </div>
+    <div style="display:flex;gap:6px;flex-shrink:0"><button class="cbtn-close" onclick="closeUnlock()">&#10005;</button></div>
+  </div>
+  <div class="prev-body" id="unlockBody"></div>
+</div>
+
 <!-- BLITZ LIBRARY OVERLAY -->
 <div class="prev-ov" id="blitzLibOv">
   <div class="prev-hdr">
@@ -1311,6 +1323,53 @@ function showHandoff(){
   document.getElementById('handoffOv').classList.add('open'); document.body.style.overflow='hidden';
 }
 function closeHandoff(){ document.getElementById('handoffOv').classList.remove('open'); document.body.style.overflow=''; }
+
+// ── SEASON PASS PAYWALL (Gumroad license keys) ───────────────────────────────
+// Ships OFF. At launch: set PAYWALL_ENABLED=true, GUMROAD_BUY_URL, GUMROAD_PERMALINK.
+const PAYWALL_ENABLED=false;
+const GUMROAD_BUY_URL='';        // e.g. https://yourname.gumroad.com/l/blitziq
+const GUMROAD_PERMALINK='';      // the product permalink slug, e.g. 'blitziq'
+const FREE_OPP_LIMIT=1;
+const LIC_KEY='blitziq_license';
+function loadLicense(){ try{return JSON.parse(localStorage.getItem(LIC_KEY)||'null');}catch(e){return null;} }
+function isPro(){ return !PAYWALL_ENABLED || !!loadLicense(); }
+function requirePro(feature){ if(isPro()) return true; showUnlock(feature); return false; }
+function canAddOpponent(){ if(isPro()) return true; if((DB.opponents||[]).length<FREE_OPP_LIMIT) return true; showUnlock('Scouting more than one opponent'); return false; }
+async function verifyLicense(){
+  const inp=document.getElementById('licInput'); const key=(inp?inp.value:'').trim();
+  if(!key){ showToast('Paste your license key first'); return; }
+  if(!GUMROAD_PERMALINK){ showToast('Purchases open at launch — hang tight!'); return; }
+  const btn=document.getElementById('licBtn'); if(btn){btn.disabled=true;btn.textContent='Checking…';}
+  try{
+    const body=new URLSearchParams({product_permalink:GUMROAD_PERMALINK, license_key:key, increment_uses_count:'false'});
+    const res=await fetch('https://api.gumroad.com/v2/licenses/verify',{method:'POST',body});
+    const data=await res.json().catch(()=>({}));
+    if(data&&data.success){ localStorage.setItem(LIC_KEY, JSON.stringify({key, at:new Date().toISOString()}));
+      closeUnlock(); showToast('✓ Season Pass unlocked — thanks, Coach!'); renderOpps(); }
+    else showToast('That key didn’t verify — double-check it, or email support.');
+  }catch(e){ showToast('Couldn’t reach the license server — check your connection.'); }
+  finally{ if(btn){btn.disabled=false;btn.textContent='Unlock';} }
+}
+function showUnlock(feature){
+  const buy=GUMROAD_BUY_URL||'#';
+  document.getElementById('unlockBody').innerHTML=`
+    <div style="max-width:460px;margin:0 auto;text-align:center">
+      <div style="font-size:40px;margin:6px 0 4px">&#11088;</div>
+      <div style="font-size:13px;color:var(--grayl);margin-bottom:4px">${feature?`<b style="color:var(--gold)">${feature}</b> is part of the`:'Unlock the'} blitzIQ <b>Season Pass</b>.</div>
+      <div style="font-size:34px;font-weight:900;color:var(--white);margin:10px 0 2px"><span style="font-size:18px;color:var(--gray);text-decoration:line-through;margin-right:8px">$49</span>$29<span style="font-size:14px;color:var(--gray);font-weight:600"> / season</span></div>
+      <div style="text-align:left;background:var(--navy2);border:1px solid rgba(255,255,255,.08);border-radius:12px;padding:14px 16px;margin:16px 0;font-size:13px;color:var(--grayl);line-height:1.9">
+        &#127919; Game Day Predictor + live feedback loop<br>&#128193; Unlimited opponents &amp; multi-game<br>&#128241; iPad game-day handoff (offline)<br>&#9999;&#65039; Play diagrams &amp; practice scripts<br>&#128438;&#65039; Print / PDF everything</div>
+      <a href="${buy}" ${buy!=='#'?'target="_blank" rel="noopener"':''} style="display:block;width:100%;padding:14px;background:var(--gold);color:var(--navy);font-size:16px;font-weight:800;border-radius:11px;text-decoration:none;font-family:inherit">Get the Season Pass &rarr;</a>
+      <div style="font-size:11px;color:var(--gray);margin:8px 0 16px">30-day money-back guarantee · one purchase covers your season</div>
+      <div style="border-top:1px solid rgba(255,255,255,.08);padding-top:14px">
+        <div style="font-size:11px;color:var(--gray);margin-bottom:7px">Already bought? Paste your license key:</div>
+        <div style="display:flex;gap:7px"><input id="licInput" placeholder="XXXX-XXXX-XXXX-XXXX" spellcheck="false" style="flex:1;padding:11px;border-radius:9px;border:1px solid rgba(255,255,255,.18);background:var(--navy);color:var(--white);font-family:inherit;font-size:13px;outline:none">
+        <button id="licBtn" onclick="verifyLicense()" style="padding:11px 18px;border-radius:9px;border:none;background:rgba(240,165,0,.15);color:var(--gold);font-weight:800;cursor:pointer;font-family:inherit">Unlock</button></div>
+      </div>
+    </div>`;
+  document.getElementById('unlockOv').classList.add('open'); document.body.style.overflow='hidden';
+}
+function closeUnlock(){ document.getElementById('unlockOv').classList.remove('open'); document.body.style.overflow=''; }
 
 // ── CSV / SPREADSHEET IMPORT (formations into current opponent) ────────────────
 // Lenient: comma or tab; recognizes header columns by name, else assumes a
@@ -2283,6 +2342,7 @@ function fillFld(id,val){ document.getElementById(id).value=val; }
 
 // ── SAVE ──────────────────────────────────────────────────────────────────────
 function saveOpp(){
+  if(!canAddOpponent()) return;
   const name=document.getElementById('o_name').value.trim();
   const season=document.getElementById('o_season').value.trim();
   if(!name){document.getElementById('o_name').classList.add('err');return;}
@@ -4149,6 +4209,7 @@ function syncFPct(aId,bId){syncPct(aId,bId);}
 function removePF(i){const el=document.getElementById('pfc_'+i);if(el){el.style.opacity='.3';el.style.pointerEvents='none';el.dataset.removed='1';}}
 
 function importPreview(){
+  if(!canAddOpponent()) return;
   const name=document.getElementById('p_name').value.trim();
   if(!name){document.getElementById('p_name').classList.add('err');return;}
   const season=document.getElementById('p_season').value.trim();
@@ -6830,6 +6891,7 @@ function predictOffense(o, sit){
 }
 function openPredictor(){
   if(!st.opp) return;
+  if(!requirePro('The Game Day Predictor')) return;
   const o=st.opp;
   if(!(o.snaps&&o.snaps.length)){ alert("The predictor needs per-snap data — import this opponent's Hudl playlist (Excel) first."); return; }
   st.pred={down:null,dist:null,hash:null,zone:null,qtr:null,form:null};
