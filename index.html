@@ -7059,15 +7059,22 @@ function buildSituationReportHTML(o, light){
     return `<div style="margin-bottom:18px;break-inside:avoid"><div style="font-size:10px;letter-spacing:1.5px;text-transform:uppercase;color:${c.gold};font-weight:800;margin-bottom:8px">${title}</div>${keys.map(k=>row(lm?lm(k):k,m.get(k))).join('')}</div>`; };
   const expl=snaps.filter(s=>(s.type==='run'&&s.gn>=EXPLOSIVE_RUN_YDS)||(s.type==='pass'&&s.gn>=EXPLOSIVE_PASS_YDS)).sort((a,b)=>b.gn-a.gn);
   // Down & Distance chart — every standard bucket with run/pass% and go-to play
-  const dndKey=s=>(s.dn>=1&&s.dn<=4&&s.dist!=null)?`${s.dn}|${s.dist<=3?'S':s.dist<=7?'M':'L'}`:null;
+  // 1st down is essentially always 1st & 10 — a generic Short/Med/Long split there
+  // is just penalty noise. So bucket 1st down as 10 / 15+ and only split 2nd–4th.
+  const dndKey=s=>{
+    if(s.dn==null||s.dn<1||s.dn>4||s.dist==null) return null;
+    if(s.dn===1) return s.dist>=15?'1|XL':'1|10';
+    return `${s.dn}|${s.dist<=3?'S':s.dist<=7?'M':'L'}`;
+  };
   const dndG=new Map();
   snaps.forEach(s=>{const k=dndKey(s); if(!k)return; let g=dndG.get(k); if(!g){g={run:0,pass:0,rP:new Map(),pP:new Map()};dndG.set(k,g);} g[s.type]++; if(s.play){const m=s.type==='run'?g.rP:g.pP; m.set(s.play,(m.get(s.play)||0)+1);}});
   const topOf=m=>{let bk=null,bc=0; m.forEach((v,k)=>{if(v>bc){bc=v;bk=k;}}); return bk;};
-  const dndOrder=[]; for(let d=1;d<=4;d++) for(const z of ['S','M','L']) dndOrder.push(`${d}|${z}`);
+  const dndOrder=['1|10','1|XL']; for(let d=2;d<=4;d++) for(const z of ['S','M','L']) dndOrder.push(`${d}|${z}`);
   const distLbl={S:'Short ≤3',M:'Med 4-7',L:'Long 8+'};
+  const dndLabel=k=>{ const [d,z]=k.split('|'); if(z==='10') return '1st &amp; 10'; if(z==='XL') return '1st &amp; 15+ (backed up)'; return `${d}${ordSuffix(+d)} &amp; ${distLbl[z]}`; };
   const dndRows=dndOrder.filter(k=>dndG.has(k)).map(k=>{ const g=dndG.get(k), n=g.run+g.pass, rp=n?Math.round(g.run/n*100):50;
-    const [d,z]=k.split('|'); const tr=topOf(g.rP), tp=topOf(g.pP);
-    return `<div style="margin-bottom:9px;break-inside:avoid"><div style="display:flex;align-items:center;gap:10px"><div style="width:118px;font-size:12px;font-weight:700;color:${c.txt};flex-shrink:0">${d}${ordSuffix(+d)} &amp; ${distLbl[z]}</div><div style="flex:1">${ibar(rp)}</div><div style="width:78px;text-align:right;font-size:11px;color:${c.mut};flex-shrink:0">${rp}% R · ${n}</div></div>${(tr||tp)?`<div style="font-size:10px;color:${c.sub};margin:2px 0 0 128px">${tr?`&#127939; ${esc(tr)}`:''}${tr&&tp?'  ·  ':''}${tp?`&#9992; ${esc(tp)}`:''}</div>`:''}</div>`;
+    const tr=topOf(g.rP), tp=topOf(g.pP);
+    return `<div style="margin-bottom:9px;break-inside:avoid"><div style="display:flex;align-items:center;gap:10px"><div style="width:118px;font-size:12px;font-weight:700;color:${c.txt};flex-shrink:0">${dndLabel(k)}</div><div style="flex:1">${ibar(rp)}</div><div style="width:78px;text-align:right;font-size:11px;color:${c.mut};flex-shrink:0">${rp}% R · ${n}</div></div>${(tr||tp)?`<div style="font-size:10px;color:${c.sub};margin:2px 0 0 128px">${tr?`&#127939; ${esc(tr)}`:''}${tr&&tp?'  ·  ':''}${tp?`&#9992; ${esc(tp)}`:''}</div>`:''}</div>`;
   }).join('');
   return `
     <div style="text-align:center;margin-bottom:18px"><div style="font-size:24px;font-weight:900;color:${c.txt}">${totRunPct}% RUN <span style="color:${c.sub};font-size:15px">/ ${100-totRunPct}% PASS</span></div><div style="font-size:11px;color:${c.sub}">${tot} offensive snaps scouted</div></div>
