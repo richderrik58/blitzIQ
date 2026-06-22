@@ -1392,9 +1392,9 @@ function closeHandoff(){ document.getElementById('handoffOv').classList.remove('
 
 // ── SEASON PASS PAYWALL (Gumroad license keys) ───────────────────────────────
 // Ships OFF. At launch: set PAYWALL_ENABLED=true, GUMROAD_BUY_URL, GUMROAD_PERMALINK.
-const PAYWALL_ENABLED=false;
-const GUMROAD_BUY_URL='';        // e.g. https://yourname.gumroad.com/l/defwise
-const GUMROAD_PERMALINK='';      // the product permalink slug, e.g. 'defwise'
+const PAYWALL_ENABLED=false;     // flip true at deploy to gate paid features publicly
+const GUMROAD_BUY_URL='https://richderrik.gumroad.com/l/oyvvj';
+const GUMROAD_PERMALINK='oyvvj'; // product permalink for license verification
 const FREE_OPP_LIMIT=1;
 const LIC_KEY='blitziq_license';
 function loadLicense(){ try{return JSON.parse(localStorage.getItem(LIC_KEY)||'null');}catch(e){return null;} }
