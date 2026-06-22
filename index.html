@@ -4794,7 +4794,8 @@ const _clampF = v => Math.max(0.02, Math.min(0.98, v));
 // generator and the practice-script diagram renderer).
 function offPresetFor(name){
   const nm=(name||'').toUpperCase();
-  if(/SINGLE\s*WING|WING\s+PISTOL|WING\s+R\s+REDUCE/.test(nm)) return 'single-wing';
+  if(/SINGLE\s*WING|WING\s+PISTOL|WING\s+[LR]\s+REDUCE/.test(nm)) return 'single-wing';
+  if(/FLEXBONE|FLEX\s*BONE|WISHBONE/.test(nm)) return 'flexbone';
   if(/TREY\s+R\s+WEAK/.test(nm)) return 'trey-r-weak';
   if(/TRIPS\s+L\s+STRONG/.test(nm)) return 'trips-l-strong';
   if(/PRO\s+L\s+TWINS\s+R\s+STRONG/.test(nm)) return 'pro-l-twins-r-strong';
@@ -6078,6 +6079,19 @@ const CV_PRESETS = {
     {type:'WR', team:'off', xf:0.96, yd:30},
     {type:'QB', team:'off', xf:0.50, yd:72},
     {type:'RB', team:'off', xf:0.60, yd:72},
+  ],
+  'flexbone':[
+    {type:'WR', team:'off', xf:0.05, yd:30},   // split end (left)
+    {type:'OL', team:'off', xf:0.436,yd:30},
+    {type:'OL', team:'off', xf:0.468,yd:30},
+    {type:'C',  team:'off', xf:0.50, yd:30},
+    {type:'OL', team:'off', xf:0.532,yd:30},
+    {type:'OL', team:'off', xf:0.564,yd:30},
+    {type:'WR', team:'off', xf:0.95, yd:30},   // split end (right)
+    {type:'RB', team:'off', xf:0.35, yd:40},   // left slotback (A-back) — flexed off the tackle
+    {type:'RB', team:'off', xf:0.65, yd:40},   // right slotback (A-back)
+    {type:'QB', team:'off', xf:0.50, yd:46},
+    {type:'FB', team:'off', xf:0.50, yd:66},   // fullback (B-back) directly behind the QB
   ],
   'single-wing':[
     {type:'WR', team:'off', xf:0.08, yd:30},   // split end (weak side)
