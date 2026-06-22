@@ -408,6 +408,10 @@
   <button class="act-sec" style="width:100%;margin-bottom:14px" onclick="document.getElementById('xlsxIn').click()">&#128202; Import Playlist (Excel) &mdash; with Explosive Plays</button>
   <button class="act-sec" style="width:100%;margin-bottom:14px" onclick="showBlitzLib()">&#9889; Blitz Library — 12 Packages</button>
   <button class="act-sec" style="width:100%;margin-bottom:14px;background:rgba(240,165,0,.12);border-color:rgba(240,165,0,.45);color:var(--gold)" onclick="showHandoff()">&#128241; Game-Day iPad Setup</button>
+  <div style="display:flex;gap:10px;margin-bottom:14px">
+    <button class="act-sec" style="flex:1;background:rgba(124,92,255,.12);border-color:rgba(124,92,255,.45);color:#b9a6ff" onclick="showPlaybook()">&#128210; My Playbook</button>
+    <button class="act-sec" style="flex:1;background:rgba(124,92,255,.12);border-color:rgba(124,92,255,.45);color:#b9a6ff" onclick="drawAPlay()">&#9998; Draw a Play</button>
+  </div>
   <button class="act-sec" id="compareBtn" style="width:100%;margin-bottom:14px;display:none" onclick="openCompare()">&#9878; Compare Two Teams</button>
   <!-- Hudl export guide -->
   <div style="background:var(--navy2);border:1px solid rgba(240,165,0,.2);border-radius:12px;margin-bottom:18px;overflow:hidden">
@@ -617,6 +621,36 @@
   <div class="prev-body" id="unlockBody"></div>
 </div>
 
+<!-- MY PLAYBOOK GALLERY -->
+<div class="prev-ov" id="pbOv">
+  <div class="prev-hdr">
+    <div class="prev-hdr-l">
+      <div class="prev-title">&#128210; My Playbook</div>
+      <div class="prev-file">Your saved plays</div>
+    </div>
+    <div style="display:flex;gap:6px;flex-shrink:0">
+      <button class="cbtn-save" onclick="drawAPlay()" style="font-size:11px">&#9998; New Play</button>
+      <button class="cbtn-close" onclick="closePlaybook()">&#10005;</button>
+    </div>
+  </div>
+  <div class="prev-body" id="pbBody"></div>
+</div>
+
+<!-- SAVE-TO-PLAYBOOK DIALOG (sits above the canvas) -->
+<div id="pbSaveOv" style="display:none;position:fixed;inset:0;z-index:6000;background:rgba(0,0,0,.6);align-items:center;justify-content:center;padding:20px">
+  <div style="width:100%;max-width:380px;background:var(--navy);border:1px solid rgba(255,255,255,.12);border-radius:16px;padding:20px">
+    <div style="font-size:17px;font-weight:900;color:var(--white);margin-bottom:14px">&#128210; Save to Playbook</div>
+    <input id="pbName" placeholder="Play name (e.g. Cover 3 Buzz)" spellcheck="false" style="width:100%;padding:11px;border-radius:9px;border:1px solid rgba(255,255,255,.18);background:var(--navy2);color:var(--white);font-family:inherit;font-size:14px;outline:none;margin-bottom:12px">
+    <div style="font-size:10px;letter-spacing:1px;text-transform:uppercase;color:var(--gray);font-weight:700;margin-bottom:6px">Category</div>
+    <div id="pbCatChips" style="display:flex;gap:7px;flex-wrap:wrap;margin-bottom:12px"></div>
+    <textarea id="pbNotes" placeholder="Coaching notes (optional)" rows="2" style="width:100%;padding:11px;border-radius:9px;border:1px solid rgba(255,255,255,.18);background:var(--navy2);color:var(--white);font-family:inherit;font-size:13px;outline:none;resize:vertical;margin-bottom:14px"></textarea>
+    <div style="display:flex;gap:9px">
+      <button onclick="closePbSave()" style="flex:1;padding:12px;border-radius:9px;border:1px solid rgba(255,255,255,.2);background:transparent;color:var(--grayl);font-weight:700;cursor:pointer;font-family:inherit">Cancel</button>
+      <button onclick="pbSaveConfirm()" style="flex:2;padding:12px;border-radius:9px;border:none;background:var(--gold);color:var(--navy);font-weight:800;cursor:pointer;font-family:inherit">Save Play</button>
+    </div>
+  </div>
+</div>
+
 <!-- BLITZ LIBRARY OVERLAY -->
 <div class="prev-ov" id="blitzLibOv">
   <div class="prev-hdr">
@@ -640,6 +674,7 @@
       <button class="cbtn-clear" onclick="flipCanvas()" title="Mirror play left/right">&#8596; Flip</button>
       <button class="cbtn-clear" onclick="clearCanvas()">Clear</button>
       <button class="cbtn-save" onclick="saveCanvas()">Save</button>
+      <button class="cbtn-save" onclick="saveToPlaybook()" style="background:rgba(124,92,255,.18);border:1.5px solid rgba(124,92,255,.5);color:#b9a6ff" title="Save this play to My Playbook">&#128210; Playbook</button>
       <button class="cbtn-save" onclick="addToScript()" style="background:rgba(34,197,94,.18);border:1.5px solid rgba(34,197,94,.5);color:#4ade80" title="Add to install script">+ Script</button>
       <button class="cbtn-close" onclick="printPlayCard()" title="Print play card">&#128438;</button>
       <button class="cbtn-save" onclick="sharePlayCard()" style="background:rgba(240,165,0,.18);border:1.5px solid rgba(240,165,0,.5);color:var(--gold)">&#11014; Share</button>
@@ -6307,12 +6342,11 @@ function openCanvas(onReady){
     const rCtx=cvRouteCanvas.getContext('2d');
     rCtx.scale(dpr,dpr);
 
-    // Load saved player positions
-    cvPlayers=(st.sit?.dc?.cvPlayers||[]).map(p=>({...p}));
-
-    // Load saved routes (separate from players for clean editing)
-    const routeSrc=st.sit?.dc?.cvRoutes;
-    const legacySrc=st.sit?.dc?.playCanvas;
+    // Source: a saved playbook entry (My Playbook / Draw a Play) or the scouted situation's DC
+    const _pb=window._pbEntry, _blank=window._pbBlank;
+    cvPlayers=((_pb?_pb.players:(_blank?[]:st.sit?.dc?.cvPlayers))||[]).map(p=>({...p}));
+    const routeSrc=_pb?_pb.routes:(_blank?null:st.sit?.dc?.cvRoutes);
+    const legacySrc=(_pb||_blank)?null:st.sit?.dc?.playCanvas;
     if(routeSrc){
       const img=new Image();
       img.onload=()=>{ rCtx.drawImage(img,0,0,cw,ch); redrawAll(); };
@@ -6326,7 +6360,9 @@ function openCanvas(onReady){
       redrawAll();
     }
 
-    if(st.sit) document.getElementById('canvasSubTitle').textContent=
+    if(_pb) document.getElementById('canvasSubTitle').textContent=_pb.name||'Playbook play';
+    else if(_blank) document.getElementById('canvasSubTitle').textContent='New play — draw it up';
+    else if(st.sit) document.getElementById('canvasSubTitle').textContent=
       `${st.form?.name||''} — ${st.sit.distLabel}`;
     window._cvFormName=st.form?.name||'';
     window._cvPresetType=st.sit?.dc?.cvPresetType||null;
@@ -6351,8 +6387,68 @@ function closeCanvas(){
   window._cvDefCall=null; window._cvStrength=null;
   window._cvFormName=null; window._cvPresetType=null;
   window._cvTeDetected=false; window._cvGapMap=null;
+  window._pbEntry=null; window._pbBlank=false;   // clear playbook context
   document.body.style.overflow='';
 }
+
+// ── MY PLAYBOOK — persistent, reusable saved plays (DB.playbook) ──────────────
+const PB_CATS=['Defense','Run','Pass','Special'];
+let _pbFilter='all', _pbCat='Defense';
+function drawAPlay(){ window._pbEntry=null; window._pbBlank=true; openCanvas(); }
+function saveToPlaybook(){
+  if(!cvCtx){ showToast('Open or draw a play first'); return; }
+  const canvas=document.getElementById('playCanvas');
+  window._pbDraft={ players:cvPlayers.map(p=>({...p})),
+    routes:cvRouteCanvas?cvRouteCanvas.toDataURL('image/png'):null,
+    thumb:canvas.toDataURL('image/jpeg',0.55) };
+  _pbCat='Defense';
+  document.getElementById('pbName').value='';
+  document.getElementById('pbNotes').value='';
+  renderPbCatChips();
+  document.getElementById('pbSaveOv').style.display='flex';
+}
+function renderPbCatChips(){
+  document.getElementById('pbCatChips').innerHTML=PB_CATS.map(c=>
+    `<button onclick="_pbCat='${c}';renderPbCatChips()" style="padding:7px 13px;border-radius:8px;font-size:12px;font-weight:700;cursor:pointer;font-family:inherit;border:1px solid ${c===_pbCat?'var(--gold)':'rgba(255,255,255,.18)'};background:${c===_pbCat?'rgba(240,165,0,.18)':'transparent'};color:${c===_pbCat?'var(--gold)':'var(--grayl)'}">${c}</button>`).join('');
+}
+function pbSaveConfirm(){
+  const name=document.getElementById('pbName').value.trim();
+  if(!name){ document.getElementById('pbName').focus(); showToast('Give the play a name'); return; }
+  DB.playbook=DB.playbook||[];
+  DB.playbook.unshift({ id:uid(), name, category:_pbCat, notes:document.getElementById('pbNotes').value.trim(),
+    players:_pbDraft.players, routes:_pbDraft.routes, thumb:_pbDraft.thumb, created:new Date().toISOString() });
+  saveDB();
+  document.getElementById('pbSaveOv').style.display='none';
+  showToast('✅ Saved to My Playbook — '+name);
+}
+function closePbSave(){ document.getElementById('pbSaveOv').style.display='none'; }
+function showPlaybook(){
+  const pb=DB.playbook||[];
+  const cnt=c=> c==='all'?pb.length:pb.filter(p=>p.category===c).length;
+  const chips=['all',...PB_CATS].map(c=>`<button onclick="_pbFilter='${c}';showPlaybook()" style="padding:6px 12px;border-radius:20px;font-size:12px;font-weight:700;cursor:pointer;font-family:inherit;border:1px solid ${c===_pbFilter?'var(--gold)':'rgba(255,255,255,.15)'};background:${c===_pbFilter?'rgba(240,165,0,.18)':'transparent'};color:${c===_pbFilter?'var(--gold)':'var(--grayl)'};${cnt(c)===0&&c!=='all'?'opacity:.4':''}">${c==='all'?'All':c} (${cnt(c)})</button>`).join('');
+  const items=pb.filter(p=>_pbFilter==='all'||p.category===_pbFilter);
+  const cards=items.length? items.map(p=>`
+    <div style="position:relative;background:var(--navy2);border:1px solid rgba(255,255,255,.08);border-radius:12px;overflow:hidden;break-inside:avoid">
+      <div onclick="loadPlaybookPlay('${p.id}')" style="cursor:pointer">
+        <img src="${p.thumb}" style="width:100%;display:block;background:#f4f7f4" alt="${esc(p.name)}">
+        <div style="padding:9px 11px">
+          <div style="font-size:13px;font-weight:800;color:var(--white)">${esc(p.name)}</div>
+          <div style="font-size:11px;color:var(--gold);margin-top:2px">${esc(p.category)}${p.notes?` <span style="color:var(--gray)">· ${esc(p.notes)}</span>`:''}</div>
+        </div>
+      </div>
+      <button onclick="deletePlaybookPlay('${p.id}')" title="Delete" style="position:absolute;top:6px;right:6px;width:24px;height:24px;border-radius:50%;border:none;background:rgba(0,0,0,.55);color:#fff;font-size:13px;cursor:pointer;font-family:inherit">&#10005;</button>
+    </div>`).join('')
+    : `<div style="grid-column:1/-1;text-align:center;color:var(--gray);padding:50px 20px;font-size:14px">No plays saved yet.<br><br>Tap <b style="color:#b9a6ff">&#9998; Draw a Play</b>, draw it up, then hit <b style="color:#b9a6ff">&#128210; Playbook</b> to save it here.</div>`;
+  document.getElementById('pbBody').innerHTML=`
+    <div style="display:flex;gap:7px;flex-wrap:wrap;margin-bottom:16px">${chips}</div>
+    <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:12px">${cards}</div>`;
+  document.getElementById('pbOv').classList.add('open'); document.body.style.overflow='hidden';
+}
+function loadPlaybookPlay(id){ const e=(DB.playbook||[]).find(p=>p.id===id); if(!e) return;
+  closePlaybook(); window._pbEntry=e; window._pbBlank=false; openCanvas(); }
+function deletePlaybookPlay(id){ if(!confirm('Delete this play from your playbook?')) return;
+  DB.playbook=(DB.playbook||[]).filter(p=>p.id!==id); saveDB(); showPlaybook(); }
+function closePlaybook(){ document.getElementById('pbOv').classList.remove('open'); document.body.style.overflow=''; }
 
 function flipCanvas(){
   if(!cvCtx) return;
