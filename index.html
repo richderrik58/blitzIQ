@@ -1525,9 +1525,9 @@ function handleAddGameXLSX(e){
       const agg=aggregateFromSnaps(o.snaps);
       o.formations=agg.formations; o.runPct=agg.runPct; o.passPct=100-agg.runPct;
       applyRecommendations(o); autoFillSituationDC(o);
-      o.games=(o.games||1)+1;
+      o.gameCount=(o.gameCount||1)+1;   // ODK games combined (distinct from the Season-Trend games[] list)
       saveDB(); renderForms();
-      showToast(`Added ${add.length} snaps — ${o.snaps.length} total across ${o.games} games`);
+      showToast(`Added ${add.length} snaps — ${o.snaps.length} total across ${o.gameCount} games`);
     }catch(err){ console.error(err); alert('Could not read this spreadsheet: '+((err&&err.message)||'unknown error')); }
   };
   reader.onerror=()=>alert('Could not read file');
