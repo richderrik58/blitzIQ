@@ -412,6 +412,7 @@
     <button class="act-sec" style="flex:1;background:rgba(124,92,255,.12);border-color:rgba(124,92,255,.45);color:#b9a6ff" onclick="showPlaybook()">&#128210; My Playbook</button>
     <button class="act-sec" style="flex:1;background:rgba(124,92,255,.12);border-color:rgba(124,92,255,.45);color:#b9a6ff" onclick="drawAPlay()">&#9998; Draw a Play</button>
   </div>
+  <button class="act-sec" style="width:100%;margin-bottom:14px;background:rgba(34,197,94,.1);border-color:rgba(34,197,94,.4);color:#4ade80" onclick="showSelfScout()">&#128737;&#65039; Self-Scout — Log My Defense</button>
   <button class="act-sec" id="compareBtn" style="width:100%;margin-bottom:14px;display:none" onclick="openCompare()">&#9878; Compare Two Teams</button>
   <!-- Hudl export guide -->
   <div style="background:var(--navy2);border:1px solid rgba(240,165,0,.2);border-radius:12px;margin-bottom:18px;overflow:hidden">
@@ -634,6 +635,36 @@
     </div>
   </div>
   <div class="prev-body" id="pbBody"></div>
+</div>
+
+<!-- SELF-SCOUT VIEW -->
+<div class="prev-ov" id="selfScoutOv">
+  <div class="prev-hdr">
+    <div class="prev-hdr-l">
+      <div class="prev-title">&#128737;&#65039; Self-Scout — My Defense</div>
+      <div class="prev-file">Your tendencies across the season</div>
+    </div>
+    <div style="display:flex;gap:6px;flex-shrink:0">
+      <button class="cbtn-save" onclick="openLogger()" style="font-size:11px">&#9998; Log</button>
+      <button class="cbtn-close" onclick="closeSelfScout()">&#10005;</button>
+    </div>
+  </div>
+  <div class="prev-body" id="ssBody"></div>
+</div>
+
+<!-- DEFENSE PLAY LOGGER -->
+<div class="prev-ov" id="loggerOv">
+  <div class="prev-hdr">
+    <div class="prev-hdr-l">
+      <div class="prev-title">&#9998; Log a Play</div>
+      <div class="prev-file">Tap RUN or PASS to log — set your call first</div>
+    </div>
+    <div style="display:flex;gap:6px;flex-shrink:0">
+      <button class="cbtn-save" onclick="closeLogger();showSelfScout()" style="font-size:11px">&#128202; Report</button>
+      <button class="cbtn-close" onclick="closeLogger()">&#10005;</button>
+    </div>
+  </div>
+  <div class="prev-body" id="loggerBody"></div>
 </div>
 
 <!-- SAVE-TO-PLAYBOOK DIALOG (sits above the canvas) -->
@@ -1369,7 +1400,7 @@ const LIC_KEY='blitziq_license';
 function loadLicense(){ try{return JSON.parse(localStorage.getItem(LIC_KEY)||'null');}catch(e){return null;} }
 function isPro(){ return !PAYWALL_ENABLED || !!loadLicense(); }
 function requirePro(feature){ if(isPro()) return true; showUnlock(feature); return false; }
-function canAddOpponent(){ if(isPro()) return true; if((DB.opponents||[]).filter(o=>!o._demo).length<FREE_OPP_LIMIT) return true; showUnlock('Scouting more than one opponent'); return false; }
+function canAddOpponent(){ if(isPro()) return true; if((DB.opponents||[]).filter(o=>!o._demo&&!o._self).length<FREE_OPP_LIMIT) return true; showUnlock('Scouting more than one opponent'); return false; }
 async function verifyLicense(){
   const inp=document.getElementById('licInput'); const key=(inp?inp.value:'').trim();
   if(!key){ showToast('Paste your license key first'); return; }
@@ -6479,6 +6510,88 @@ function loadPlaybookPlay(id){ const e=(DB.playbook||[]).find(p=>p.id===id); if(
 function deletePlaybookPlay(id){ if(!confirm('Delete this play from your playbook?')) return;
   DB.playbook=(DB.playbook||[]).filter(p=>p.id!==id); saveDB(); showPlaybook(); }
 function closePlaybook(){ document.getElementById('pbOv').classList.remove('open'); document.body.style.overflow=''; }
+
+// ── SELF-SCOUT — log your own defense during the game (replaces paper + re-entry) ──
+const SS_COV=['Cover 0','Cover 1','Cover 2','Cover 3','Cover 4','2-Man'];
+const SS_BLZ=['None','Edge','A-Gap','Fire Zone','Corner','DB'];
+let _ssDraft={game:'',cov:'Cover 3',blitz:'None',dn:1,qtr:1};
+function selfTeam(){ return (DB.opponents||[]).find(o=>o._self); }
+function ensureSelfTeam(){
+  let o=selfTeam();
+  if(!o){ o={id:uid(),_self:true,self:true,name:'My Defense (Self-Scout)',season:String(new Date().getFullYear()),
+    snaps:[],formations:[],situations:[],runPct:50,passPct:50,notes:'Self-scout — log your defense during games to see your tendencies.'};
+    DB.opponents.unshift(o); saveDB(); }
+  return o;
+}
+function openLogger(){ ensureSelfTeam(); renderLogger(); document.getElementById('loggerOv').classList.add('open'); document.body.style.overflow='hidden'; }
+function closeLogger(){ document.getElementById('loggerOv').classList.remove('open'); document.body.style.overflow=''; }
+function renderLogger(){
+  const d=_ssDraft, o=selfTeam();
+  const SL='font-size:10px;letter-spacing:1px;text-transform:uppercase;color:var(--gray);font-weight:800;margin:13px 0 6px';
+  const chip=(label,active,onclick)=>`<button onclick="${onclick}" style="padding:8px 12px;border-radius:8px;font-size:12px;font-weight:700;cursor:pointer;font-family:inherit;border:1px solid ${active?'var(--gold)':'rgba(255,255,255,.18)'};background:${active?'rgba(240,165,0,.18)':'transparent'};color:${active?'var(--gold)':'var(--grayl)'}">${label}</button>`;
+  const ipt='padding:9px;border-radius:8px;border:1px solid rgba(255,255,255,.18);background:var(--navy2);color:var(--white);font-family:inherit;font-size:13px;outline:none';
+  document.getElementById('loggerBody').innerHTML=`
+   <div style="max-width:520px;margin:0 auto">
+     <input id="ssGame" value="${esc(d.game)}" placeholder="Game label (e.g. vs Central — Wk 3)" onchange="_ssDraft.game=this.value" style="width:100%;${ipt};margin-bottom:2px">
+     <div style="display:flex;gap:14px;align-items:flex-end">
+       <div style="flex:1"><div style="${SL}">Down</div><div style="display:flex;gap:5px">${[1,2,3,4].map(x=>chip(['1st','2nd','3rd','4th'][x-1],d.dn===x,`_ssDraft.dn=${x};renderLogger()`)).join('')}</div></div>
+       <div style="width:92px"><div style="${SL}">Dist</div><input id="ssDist" type="number" value="10" style="width:100%;${ipt}"></div>
+     </div>
+     <div style="${SL}">Quarter</div><div style="display:flex;gap:5px">${[1,2,3,4].map(x=>chip('Q'+x,d.qtr===x,`_ssDraft.qtr=${x};renderLogger()`)).join('')}</div>
+     <div style="${SL}">My coverage</div><div style="display:flex;gap:5px;flex-wrap:wrap">${SS_COV.map(c=>chip(c,d.cov===c,`_ssDraft.cov='${c}';renderLogger()`)).join('')}</div>
+     <div style="${SL}">My blitz / front</div><div style="display:flex;gap:5px;flex-wrap:wrap">${SS_BLZ.map(x=>chip(x,d.blitz===x,`_ssDraft.blitz='${x}';renderLogger()`)).join('')}</div>
+     <div style="${SL}">Yards allowed (optional)</div><input id="ssYds" type="number" placeholder="gain / loss" style="width:130px;${ipt}">
+     <div style="${SL}">What did the offense run? — tap to log the play</div>
+     <div style="display:flex;gap:10px">
+       <button onclick="logDefPlay('run')" style="flex:1;padding:15px;border-radius:11px;border:1px solid rgba(34,197,94,.5);background:rgba(34,197,94,.16);color:var(--green);font-size:16px;font-weight:800;cursor:pointer;font-family:inherit">&#127939; RUN</button>
+       <button onclick="logDefPlay('pass')" style="flex:1;padding:15px;border-radius:11px;border:1px solid rgba(59,130,246,.5);background:rgba(29,78,216,.18);color:#7eb0ff;font-size:16px;font-weight:800;cursor:pointer;font-family:inherit">&#9992; PASS</button>
+     </div>
+     <div style="text-align:center;margin-top:14px;font-size:12px;color:var(--gray)">${(o?.snaps||[]).length} plays logged${d.game?` · this game: ${(o.snaps.filter(s=>s.game===d.game).length)}`:''} <button onclick="undoLastLog()" style="margin-left:8px;background:none;border:none;color:var(--gold);font-size:11px;cursor:pointer;text-decoration:underline;font-family:inherit">undo last</button></div>
+   </div>`;
+}
+function logDefPlay(type){
+  const o=ensureSelfTeam(), d=_ssDraft;
+  const dist=parseInt(document.getElementById('ssDist')?.value)||10;
+  const gv=document.getElementById('ssYds')?.value, gn=(gv==null||gv==='')?null:parseInt(gv);
+  o.snaps.push({dn:d.dn,dist,hash:'',yard:null,qtr:d.qtr,type,gn:(gn==null||isNaN(gn))?null:gn,form:'',play:'',cov:d.cov,blitz:d.blitz,game:d.game||'Game 1'});
+  saveDB();
+  if(document.getElementById('ssYds')) document.getElementById('ssYds').value='';
+  renderLogger();
+  showToast(`Logged ${type.toUpperCase()} — ${d.cov}${d.blitz!=='None'?' / '+d.blitz:''}`);
+}
+function undoLastLog(){ const o=selfTeam(); if(o&&o.snaps.length){ o.snaps.pop(); saveDB(); renderLogger(); showToast('Removed last play'); } }
+function showSelfScout(){
+  const o=selfTeam();
+  if(!o||!o.snaps.length){
+    document.getElementById('ssBody').innerHTML=`<div style="text-align:center;padding:44px 20px;color:var(--grayl);max-width:360px;margin:0 auto">
+      <div style="font-size:42px;margin-bottom:10px">&#128737;&#65039;</div>
+      <div style="font-size:17px;font-weight:800;color:var(--white);margin-bottom:8px">Self-Scout your defense</div>
+      <div style="font-size:13px;line-height:1.6;margin-bottom:22px">Log your defensive calls during the game — right here instead of paper, with no re-entry into Hudl. You'll see your blitz &amp; coverage tendencies, what offenses did against you, and game-by-game results.</div>
+      <button onclick="openLogger()" style="background:var(--gold);color:var(--navy);border:none;border-radius:11px;padding:14px 28px;font-size:15px;font-weight:800;cursor:pointer;font-family:inherit">&#9998; Start Logging</button>
+    </div>`;
+  } else document.getElementById('ssBody').innerHTML=buildSelfScoutHTML(o);
+  document.getElementById('selfScoutOv').classList.add('open'); document.body.style.overflow='hidden';
+}
+function closeSelfScout(){ document.getElementById('selfScoutOv').classList.remove('open'); document.body.style.overflow=''; }
+function buildSelfScoutHTML(o){
+  const sn=o.snaps, n=sn.length, run=sn.filter(s=>s.type==='run').length;
+  const expl=sn.filter(s=>(s.type==='run'&&s.gn>=EXPLOSIVE_RUN_YDS)||(s.type==='pass'&&s.gn>=EXPLOSIVE_PASS_YDS)).length;
+  const pct=(a,b)=>b?Math.round(a/b*100):0;
+  const tally=key=>{const m=new Map();sn.forEach(s=>{const k=s[key]||'—';m.set(k,(m.get(k)||0)+1);});return [...m.entries()].sort((a,b)=>b[1]-a[1]);};
+  const bar=(label,c,color)=>`<div style="margin-bottom:7px"><div style="display:flex;justify-content:space-between;font-size:12px;margin-bottom:3px"><span style="color:var(--grayl);font-weight:700">${esc(label)}</span><span style="color:var(--gray)">${pct(c,n)}% · ${c}</span></div><div style="height:8px;background:rgba(255,255,255,.07);border-radius:4px;overflow:hidden"><div style="width:${pct(c,n)}%;height:100%;background:${color}"></div></div></div>`;
+  const sec=(t,h)=>`<div style="margin-bottom:20px"><div style="font-size:10px;letter-spacing:1.5px;text-transform:uppercase;color:var(--gold);font-weight:800;margin-bottom:9px">${t}</div>${h}</div>`;
+  const byDown=[1,2,3,4].map(dn=>{const ds=sn.filter(s=>s.dn===dn);return ds.length?`<div style="font-size:12px;color:var(--grayl);margin-bottom:4px">${['1st','2nd','3rd','4th'][dn-1]} down — faced <b style="color:var(--white)">${pct(ds.filter(s=>s.type==='run').length,ds.length)}% run</b> <span style="color:var(--gray)">(${ds.length})</span></div>`:'';}).join('');
+  const games=[...new Set(sn.map(s=>s.game))];
+  const byGame=games.map(g=>{const gs=sn.filter(s=>s.game===g),yd=gs.filter(s=>s.gn!=null);const avg=yd.length?(yd.reduce((a,s)=>a+s.gn,0)/yd.length).toFixed(1):'—';return `<div style="display:flex;justify-content:space-between;font-size:12px;color:var(--grayl);padding:6px 0;border-bottom:1px solid rgba(255,255,255,.06)"><span style="font-weight:700">${esc(g)}</span><span style="color:var(--gray)">${gs.length} plays · ${pct(gs.filter(s=>s.type==='run').length,gs.length)}% run · ${avg} yd/play</span></div>`;}).join('');
+  return `<div style="max-width:560px;margin:0 auto">
+      <div style="text-align:center;margin-bottom:18px"><div style="font-size:22px;font-weight:900;color:var(--white)">${n} plays logged</div><div style="font-size:12px;color:var(--gray)">faced ${pct(run,n)}% run / ${100-pct(run,n)}% pass · ${expl} explosive allowed</div></div>
+      ${sec('My coverage calls', tally('cov').map(([k,c])=>bar(k,c,'var(--gold)')).join(''))}
+      ${sec('My blitz / front', tally('blitz').map(([k,c])=>bar(k,c,'#7eb0ff')).join(''))}
+      ${sec('What offenses ran on me', byDown||'<div style="color:var(--gray);font-size:12px">—</div>')}
+      ${sec('By game', byGame)}
+      <div style="text-align:center"><button onclick="openLogger()" style="background:var(--gold);color:var(--navy);border:none;border-radius:10px;padding:12px 24px;font-size:14px;font-weight:800;cursor:pointer;font-family:inherit">&#9998; Log more plays</button></div>
+    </div>`;
+}
 
 function flipCanvas(){
   if(!cvCtx) return;
