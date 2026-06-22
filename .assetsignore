@@ -1,0 +1,11 @@
+# Files Cloudflare should NOT publish to the web (only serve the actual app)
+.git
+.gitignore
+.assetsignore
+wrangler.jsonc
+.wrangler
+node_modules
+DISTRIBUTION.md
+tools
+beta
+*.mjs
