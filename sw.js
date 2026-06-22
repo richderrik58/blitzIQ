@@ -1,6 +1,6 @@
-// BlitzIQ service worker — makes the app installable and usable offline.
+// DefWise service worker — makes the app installable and usable offline.
 // Bump CACHE when shipping changes so clients pick up the new app shell.
-const CACHE = 'blitziq-v1';
+const CACHE = 'defwise-v1';
 const SHELL = [
   './',
   './index.html',

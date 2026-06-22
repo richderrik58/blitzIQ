@@ -1,6 +1,6 @@
 {
-  "name": "BlitzIQ — Defensive Scouting",
-  "short_name": "BlitzIQ",
+  "name": "DefWise — Defensive Scouting",
+  "short_name": "DefWise",
   "description": "Defensive football scouting: import tendencies, browse formations, get defensive calls, and build game plans, practice scripts and play diagrams.",
   "start_url": "./",
   "scope": "./",
