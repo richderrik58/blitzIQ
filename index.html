@@ -4794,6 +4794,7 @@ const _clampF = v => Math.max(0.02, Math.min(0.98, v));
 // generator and the practice-script diagram renderer).
 function offPresetFor(name){
   const nm=(name||'').toUpperCase();
+  if(/SINGLE\s*WING|WING\s+PISTOL|WING\s+R\s+REDUCE/.test(nm)) return 'single-wing';
   if(/TREY\s+R\s+WEAK/.test(nm)) return 'trey-r-weak';
   if(/TRIPS\s+L\s+STRONG/.test(nm)) return 'trips-l-strong';
   if(/PRO\s+L\s+TWINS\s+R\s+STRONG/.test(nm)) return 'pro-l-twins-r-strong';
@@ -6077,6 +6078,19 @@ const CV_PRESETS = {
     {type:'WR', team:'off', xf:0.96, yd:30},
     {type:'QB', team:'off', xf:0.50, yd:72},
     {type:'RB', team:'off', xf:0.60, yd:72},
+  ],
+  'single-wing':[
+    {type:'WR', team:'off', xf:0.08, yd:30},   // split end (weak side)
+    {type:'OL', team:'off', xf:0.40, yd:30},
+    {type:'OL', team:'off', xf:0.44, yd:30},
+    {type:'C',  team:'off', xf:0.48, yd:30},   // center offset = unbalanced to the strong (right) side
+    {type:'OL', team:'off', xf:0.52, yd:30},
+    {type:'OL', team:'off', xf:0.56, yd:30},
+    {type:'TE', team:'off', xf:0.63, yd:30},   // strong-side end
+    {type:'RB', team:'off', xf:0.71, yd:42},   // wingback — on the wing, off the LOS
+    {type:'RB', team:'off', xf:0.45, yd:54},   // blocking back — up near the line
+    {type:'FB', team:'off', xf:0.42, yd:80},   // fullback — deep backfield
+    {type:'QB', team:'off', xf:0.52, yd:82},   // tailback — takes the direct snap, set deep
   ],
   'i-form':[
     {type:'WR', team:'off', xf:0.04, yd:30},
