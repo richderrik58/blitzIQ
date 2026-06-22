@@ -1369,7 +1369,7 @@ const LIC_KEY='blitziq_license';
 function loadLicense(){ try{return JSON.parse(localStorage.getItem(LIC_KEY)||'null');}catch(e){return null;} }
 function isPro(){ return !PAYWALL_ENABLED || !!loadLicense(); }
 function requirePro(feature){ if(isPro()) return true; showUnlock(feature); return false; }
-function canAddOpponent(){ if(isPro()) return true; if((DB.opponents||[]).length<FREE_OPP_LIMIT) return true; showUnlock('Scouting more than one opponent'); return false; }
+function canAddOpponent(){ if(isPro()) return true; if((DB.opponents||[]).filter(o=>!o._demo).length<FREE_OPP_LIMIT) return true; showUnlock('Scouting more than one opponent'); return false; }
 async function verifyLicense(){
   const inp=document.getElementById('licInput'); const key=(inp?inp.value:'').trim();
   if(!key){ showToast('Paste your license key first'); return; }
@@ -1705,7 +1705,7 @@ function loadDemo(){
     situations:sits.map(s=>({...s,id:uid(),dc:{coverage:'',blitz:'',reason:'',alert:''}}))
   });
   const demoOpp={
-    id:uid(),name:'Riverside Knights 2025',season:'2025',
+    id:uid(),_demo:true,name:'Riverside Knights 2025',season:'2025',
     runPct:55,passPct:45,
     notes:'DEMO-Riverside-Knights-2025 — tap Import Scouting PDF to replace with real scouting data.',
     gameNotes:'',importLog:'Demo mode loaded. Explore every feature, then import a real scouting PDF to scout your next opponent.',
@@ -1753,6 +1753,35 @@ function loadDemo(){
         alert:'Watch for quick QB sneaks on 3rd & short inside the 5. Call it pre-snap.'}},
     ]
   };
+  // Per-snap data so the Game Day Predictor + Situational reports work on the demo —
+  // generated to match each formation's tendencies (run-heavy Pistol/Pro, pass-heavy
+  // Empty/Trips, pass on 3rd & long), with realistic down/distance/hash/zone/quarter.
+  demoOpp.snaps=(function(){
+    const fconf=[
+      {form:'GUN SPREAD WEAK',      n:34, run:0.45, runs:['Inside Zone','QB Draw','Counter'],     passes:['Curl Flat','Four Verticals','Mesh']},
+      {form:'TRIPS LEFT STRONG',    n:24, run:0.28, runs:['Outside Zone','Toss Sweep'],           passes:['Bubble Screen','Slant Out Go','Post Wheel']},
+      {form:'PRO RIGHT TWINS LEFT', n:22, run:0.70, runs:['Power O','Counter','Iso','Lead Draw'], passes:['Play Action Post','Boot Waggle']},
+      {form:'EMPTY LEFT',           n:12, run:0.15, runs:['QB Draw'],                              passes:['Four Verticals','Mesh','Hitch Go Go Go']},
+      {form:'PISTOL STRONG RIGHT',  n:16, run:0.78, runs:['Zone Read','Power Read','Jet Sweep'],   passes:['RPO Bubble','Boot Naked']},
+    ];
+    const hashes=['L','M','R'], zones=[-8,-25,-40,35,15,3];
+    const R=n=>Math.floor(Math.random()*n), pick=a=>a[R(a.length)];
+    const out=[];
+    fconf.forEach(fc=>{ for(let i=0;i<fc.n;i++){
+      const dn=[1,1,1,1,2,2,2,3,3,4][R(10)];
+      const dist=dn===1 ? (Math.random()<0.85?10:(Math.random()<0.5?5:15)) : 1+R(12);
+      const bk=dist<=3?'S':dist<=7?'M':'L';
+      let pRun=fc.run;
+      if(dn>=3&&bk==='L') pRun*=0.4;
+      if(bk==='S') pRun=Math.min(0.92,pRun+0.18);
+      const type=Math.random()<pRun?'run':'pass';
+      const gn = type==='run' ? (Math.random()<0.12?13+R(18):-2+R(8))
+                              : (Math.random()<0.15?20+R(22):(Math.random()<0.35?0:3+R(11)));
+      out.push({dn,dist,hash:pick(hashes),yard:pick(zones),qtr:1+R(4),form:fc.form,
+                play:type==='run'?pick(fc.runs):pick(fc.passes),type,gn});
+    }});
+    return out;
+  })();
   applyRecommendations(demoOpp);
   autoFillSituationDC(demoOpp);
   DB.opponents.push(demoOpp);
@@ -1898,17 +1927,18 @@ function renderOpps() {
             <button onclick="setScheme('3-3-5')" style="background:var(--navy);color:#fff;border:2px solid var(--gold);border-radius:12px;padding:14px 20px;font-size:15px;font-weight:900;cursor:pointer;font-family:inherit;letter-spacing:.3px">3-3-5 Stack</button>
           </div>
           <div style="font-size:11px;color:var(--grayl);text-align:center">You can change this any time in settings</div>
+          <button onclick="DB.scheme='4-3';saveDB();loadDemo()" style="margin-top:18px;background:none;border:none;color:var(--gold);font-size:13px;font-weight:700;cursor:pointer;font-family:inherit;text-decoration:underline">&#9654; Just exploring? Try a sample team</button>
         </div>`;
       return;
     }
     el.innerHTML = `
       <div class="empty">
         <div class="empty-icon">🏟</div>
-        <div class="empty-txt" style="margin-bottom:20px">No opponents yet.<br>Add one manually or import a scouting PDF.</div>
-        <button onclick="loadDemo()" style="background:var(--gold);color:var(--navy);border:none;border-radius:12px;padding:16px 28px;font-size:16px;font-weight:900;cursor:pointer;font-family:inherit;letter-spacing:.3px;margin-bottom:10px;display:block;width:100%;max-width:300px;margin-left:auto;margin-right:auto;box-shadow:0 4px 16px rgba(240,165,0,.35)">
-          &#9654; Load Demo
+        <div class="empty-txt" style="margin-bottom:20px">New here? See what blitzIQ does in 10 seconds.</div>
+        <button onclick="loadDemo()" style="background:var(--gold);color:var(--navy);border:none;border-radius:12px;padding:16px 28px;font-size:16px;font-weight:900;cursor:pointer;font-family:inherit;letter-spacing:.3px;margin-bottom:10px;display:block;width:100%;max-width:320px;margin-left:auto;margin-right:auto;box-shadow:0 4px 16px rgba(240,165,0,.35)">
+          &#9654; Try a Sample Team
         </button>
-        <div style="font-size:12px;color:var(--grayl);text-align:center;max-width:280px;margin:0 auto;line-height:1.5">Instantly loads a full sample opponent — explore every feature before importing your own scouting PDF</div>
+        <div style="font-size:12px;color:var(--grayl);text-align:center;max-width:300px;margin:0 auto;line-height:1.5">Loads a full sample opponent so you can run the <b style="color:var(--gold)">Game Day Predictor</b> and reports right now — then import your own with <b>Import Scouting PDFs</b>.</div>
       </div>`;
     return;
   }
@@ -7021,7 +7051,7 @@ function predictOffense(o, sit){
 }
 function openPredictor(){
   if(!st.opp) return;
-  if(!requirePro('The Game Day Predictor')) return;
+  if(!st.opp._demo && !requirePro('The Game Day Predictor')) return;   // demo is free — the try-before-you-buy hook
   const o=st.opp;
   if(!(o.snaps&&o.snaps.length)){ alert("The predictor needs per-snap data — import this opponent's Hudl playlist (Excel) first."); return; }
   st.pred={down:null,dist:null,hash:null,zone:null,qtr:null,form:null};
