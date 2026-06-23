@@ -4882,6 +4882,10 @@ const ROUTE_LIB = {
   SPOT:[[0,28],[0,-32],[-0.10,-30]], POP:[[0,28],[0,-30],[0,-24]],
   // DRAG: release 1 yd downfield, then cross the field finishing at ~5 yds depth
   DRAG:[[0,28],[0,-7],[-0.36,-35]], SHALLOW:[[0,28],[0,-7],[-0.36,-35]],
+  // ARROW / SHOOT / ANGLE: quick angled release to the flat (back/slot)
+  ARROW:[[0,28],[0.20,4]], SHOOT:[[0,28],[0.20,4]], ANGLE:[[0,28],[0.10,8],[0.22,2]],
+  // CC (deep cross): release over the LBs, cross the formation, finish ~15 yds at the far sideline
+  CC:[[0,28],[0,-30],[-0.45,-72],[-0.68,-105]], CROSS:[[0,28],[0,-30],[-0.45,-72],[-0.68,-105]],
 };
 const RUN_WORDS=/\b(ZONE|POWER|ISO|COUNTER|DRAW|SWEEP|KICK|FOLD|SNEAK|PUNCH|BASE|DIVE|TRAP|GUT|BLAST|BELLY|WHAM|LEAD|READ|MIDLINE|VEGAS|BUCK|GAP)\b/;
 const _clampF = v => Math.max(0.02, Math.min(0.98, v));
