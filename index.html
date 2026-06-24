@@ -387,6 +387,7 @@
     <div style="display:flex;align-items:center;gap:8px">
       <div class="logo">DEF<span>WISE</span></div>
       <span style="background:var(--gold);color:var(--navy);font-size:9px;font-weight:900;letter-spacing:1.5px;padding:2px 7px;border-radius:10px;text-transform:uppercase">Beta</span>
+      <span id="proBadge" onclick="proBadgeClick()" style="display:none"></span>
     </div>
     <div class="hdr-sub" id="hdrSub">Defensive Scouting</div>
   </div>
@@ -1402,6 +1403,22 @@ function loadLicense(){ try{return JSON.parse(localStorage.getItem(LIC_KEY)||'nu
 function isPro(){ return !PAYWALL_ENABLED || !!loadLicense(); }
 function requirePro(feature){ if(isPro()) return true; showUnlock(feature); return false; }
 function canAddOpponent(){ if(isPro()) return true; if((DB.opponents||[]).filter(o=>!o._demo&&!o._self).length<FREE_OPP_LIMIT) return true; showUnlock('Scouting more than one opponent'); return false; }
+// "Pro ✓" badge in the header when a Season Pass license is active on this device;
+// tapping it deactivates (so a coach can move their key to a new iPad, or test the lock).
+function updateProBadge(){
+  const el=document.getElementById('proBadge'); if(!el) return;
+  if(loadLicense()){
+    el.textContent='🛡 PRO';
+    el.style.cssText='display:inline-block;background:rgba(34,197,94,.18);color:#22c55e;border:1px solid rgba(34,197,94,.55);font-size:9px;font-weight:900;letter-spacing:1px;padding:2px 7px;border-radius:10px;cursor:pointer';
+    el.title='Season Pass active on this device — tap to deactivate';
+  } else { el.style.display='none'; el.textContent=''; }
+}
+function proBadgeClick(){
+  if(!loadLicense()) return;
+  if(confirm('Deactivate your Season Pass on THIS device?\n\nYou can re-activate anytime by pasting your license key. Your scouting data stays put.')){
+    localStorage.removeItem(LIC_KEY); showToast('Season Pass deactivated on this device.'); updateProBadge(); renderOpps();
+  }
+}
 async function verifyLicense(){
   const inp=document.getElementById('licInput'); const key=(inp?inp.value:'').trim();
   if(!key){ showToast('Paste your license key first'); return; }
@@ -1412,7 +1429,7 @@ async function verifyLicense(){
     const res=await fetch('https://api.gumroad.com/v2/licenses/verify',{method:'POST',body});
     const data=await res.json().catch(()=>({}));
     if(data&&data.success){ localStorage.setItem(LIC_KEY, JSON.stringify({key, at:new Date().toISOString()}));
-      closeUnlock(); showToast('✓ Season Pass unlocked — thanks, Coach!'); renderOpps(); }
+      closeUnlock(); showToast('✓ Season Pass unlocked — thanks, Coach!'); updateProBadge(); renderOpps(); }
     else showToast('That key didn’t verify — double-check it, or email support.');
   }catch(e){ showToast('Couldn’t reach the license server — check your connection.'); }
   finally{ if(btn){btn.disabled=false;btn.textContent='Unlock';} }
@@ -8202,7 +8219,7 @@ loadDB();
   });
   if(changed) saveDB();
 })();
-renderOpps(); syncHdr(); applyGameDay(); applyCVD();
+renderOpps(); syncHdr(); applyGameDay(); applyCVD(); updateProBadge();
 if (_loadNotice) setTimeout(() => { try { showToast(_loadNotice, 5000); } catch(_) {} }, 400);
 
 // ── INSTALL SCRIPT ────────────────────────────────────────────────────────────
