@@ -6663,15 +6663,61 @@ function logDefPlay(type){
   showToast(`Logged ${type.toUpperCase()} — ${d.cov}${d.blitz!=='None'?' / '+d.blitz:''}`);
 }
 function undoLastLog(){ const o=selfTeam(); if(o&&o.snaps.length){ o.snaps.pop(); saveDB(); renderLogger(); showToast('Removed last play'); } }
+// ── Self-scout by spreadsheet — paste a whole game (40-60 plays) in YOUR words ──
+const SS_HEAD={
+  dn:['down','dn','d'], dist:['distance','dist','dis'], hash:['hash','ha'],
+  yard:['yard line','yardline','yard','yd','ball on','los'],
+  call:['play call','playcall','call','front secondary','front/secondary','front','coverage'],
+  gn:['gain','gain +-','gain+-','yards','yds','gn','net'],
+  type:['run or pass','run/pass','runpass','r/p','type','run pass','rp'],
+  result:['result','outcome'], score:['score']
+};
+function _ssCols(header){ const h=header.map(x=>String(x).toLowerCase().replace(/[^a-z0-9 /+-]/g,'').trim()); const idx={};
+  for(const k in SS_HEAD){ idx[k]=-1; for(const name of SS_HEAD[k]){ const i=h.indexOf(name); if(i>=0){idx[k]=i;break;} } } return idx; }
+function ssImportUI(){ return `
+  <div style="max-width:600px;margin:18px auto 0;text-align:left;background:var(--navy2);border:1px solid rgba(255,255,255,.1);border-radius:12px;padding:16px">
+    <div style="font-size:13px;font-weight:800;color:var(--white);margin-bottom:6px">&#128203; Paste a whole game from your spreadsheet</div>
+    <div style="font-size:11px;color:var(--gray);line-height:1.55;margin-bottom:10px">Column order (a header row is fine too):<br><b style="color:var(--grayl)">Down &middot; Distance &middot; Hash &middot; Yard Line &middot; Play Call &middot; Gain &middot; Run/Pass &middot; Result &middot; Score</b><br>Your call names (e.g. <i>Mic Drop Shooter</i>) come in exactly as you type them.</div>
+    <input id="ssPasteGame" placeholder="Game label (e.g. vs Central — Wk 3)" style="width:100%;padding:8px;border-radius:8px;border:1px solid rgba(255,255,255,.18);background:var(--navy);color:var(--white);font-family:inherit;font-size:12px;margin-bottom:8px;outline:none;box-sizing:border-box">
+    <textarea id="ssPaste" rows="6" placeholder="Paste rows copied from Excel / Google Sheets here…" style="width:100%;padding:9px;border-radius:8px;border:1px solid rgba(255,255,255,.18);background:var(--navy);color:var(--white);font-family:ui-monospace,monospace;font-size:12px;outline:none;resize:vertical;box-sizing:border-box"></textarea>
+    <button onclick="importSelfGame()" style="margin-top:9px;width:100%;background:var(--gold);color:var(--navy);border:none;border-radius:9px;padding:11px;font-size:13px;font-weight:800;cursor:pointer;font-family:inherit">Import this game</button>
+  </div>`;
+}
+function importSelfGame(){
+  const ta=document.getElementById('ssPaste'); const txt=(ta?ta.value:'').trim();
+  if(!txt){ showToast('Paste your game rows first'); return; }
+  const o=ensureSelfTeam(), gameInp=document.getElementById('ssPasteGame');
+  const game=(gameInp&&gameInp.value.trim()) || ('Game '+([...new Set(o.snaps.map(s=>s.game))].filter(Boolean).length+1));
+  const rows=txt.split(/\r?\n/).map(r=> (r.indexOf('\t')>=0? r.split('\t'): r.split(',')).map(c=>c.trim())).filter(r=>r.some(Boolean));
+  if(!rows.length){ showToast('No rows found'); return; }
+  let idx, start=0;
+  if(/down|front|hash|distance|play\s*call|coverage/i.test(rows[0].join(' '))){ idx=_ssCols(rows[0]); start=1; }
+  else idx={dn:0,dist:1,hash:2,yard:3,call:4,gn:5,type:6,result:7,score:8};
+  const num=v=>{ if(v==null) return null; const n=parseInt(String(v).replace(/[^0-9-]/g,'')); return isNaN(n)?null:n; };
+  const cell=(r,k)=>{ const c=idx[k]; return (c!=null&&c>=0&&c<r.length)? r[c] : ''; };
+  let added=0;
+  for(let i=start;i<rows.length;i++){ const r=rows[i];
+    const call=cell(r,'call'), dn=num(cell(r,'dn'));
+    if(dn==null && !call) continue;
+    const tRaw=(cell(r,'type')||'').toLowerCase();
+    const type= tRaw[0]==='r'?'run': tRaw[0]==='p'?'pass': null;
+    o.snaps.push({dn,dist:num(cell(r,'dist')),hash:(cell(r,'hash')||'').toUpperCase(),yard:num(cell(r,'yard')),qtr:null,type,gn:num(cell(r,'gn')),form:'',play:'',cov:call,blitz:'',result:cell(r,'result')||'',score:cell(r,'score')||'',game});
+    added++;
+  }
+  saveDB();
+  showToast(added?`Imported ${added} plays → ${game}`:'No plays found — check the column order');
+  if(added){ if(ta)ta.value=''; if(gameInp)gameInp.value=''; }
+  showSelfScout();
+}
 function showSelfScout(){
   const o=selfTeam();
   if(!o||!o.snaps.length){
-    document.getElementById('ssBody').innerHTML=`<div style="text-align:center;padding:44px 20px;color:var(--grayl);max-width:360px;margin:0 auto">
+    document.getElementById('ssBody').innerHTML=`<div style="text-align:center;padding:34px 20px 0;color:var(--grayl);max-width:440px;margin:0 auto">
       <div style="font-size:42px;margin-bottom:10px">&#128737;&#65039;</div>
       <div style="font-size:17px;font-weight:800;color:var(--white);margin-bottom:8px">Self-Scout your defense</div>
-      <div style="font-size:13px;line-height:1.6;margin-bottom:22px">Log your defensive calls during the game — right here instead of paper, with no re-entry into Hudl. You'll see your blitz &amp; coverage tendencies, what offenses did against you, and game-by-game results.</div>
-      <button onclick="openLogger()" style="background:var(--gold);color:var(--navy);border:none;border-radius:11px;padding:14px 28px;font-size:15px;font-weight:800;cursor:pointer;font-family:inherit">&#9998; Start Logging</button>
-    </div>`;
+      <div style="font-size:13px;line-height:1.6;margin-bottom:18px">Import a whole game from your spreadsheet — your fronts &amp; coverages, in your words. You'll see your call tendencies, what offenses did against you, and game-by-game results. Or quick-log live if you'd rather.</div>
+      <button onclick="openLogger()" style="background:transparent;color:var(--gold);border:1px solid rgba(240,165,0,.5);border-radius:10px;padding:10px 20px;font-size:13px;font-weight:800;cursor:pointer;font-family:inherit">&#9998; Or quick-log live</button>
+    </div>`+ssImportUI();
   } else document.getElementById('ssBody').innerHTML=buildSelfScoutHTML(o);
   document.getElementById('selfScoutOv').classList.add('open'); document.body.style.overflow='hidden';
 }
@@ -6686,13 +6732,19 @@ function buildSelfScoutHTML(o){
   const byDown=[1,2,3,4].map(dn=>{const ds=sn.filter(s=>s.dn===dn);return ds.length?`<div style="font-size:12px;color:var(--grayl);margin-bottom:4px">${['1st','2nd','3rd','4th'][dn-1]} down — faced <b style="color:var(--white)">${pct(ds.filter(s=>s.type==='run').length,ds.length)}% run</b> <span style="color:var(--gray)">(${ds.length})</span></div>`:'';}).join('');
   const games=[...new Set(sn.map(s=>s.game))];
   const byGame=games.map(g=>{const gs=sn.filter(s=>s.game===g),yd=gs.filter(s=>s.gn!=null);const avg=yd.length?(yd.reduce((a,s)=>a+s.gn,0)/yd.length).toFixed(1):'—';return `<div style="display:flex;justify-content:space-between;font-size:12px;color:var(--grayl);padding:6px 0;border-bottom:1px solid rgba(255,255,255,.06)"><span style="font-weight:700">${esc(g)}</span><span style="color:var(--gray)">${gs.length} plays · ${pct(gs.filter(s=>s.type==='run').length,gs.length)}% run · ${avg} yd/play</span></div>`;}).join('');
-  return `<div style="max-width:560px;margin:0 auto">
+  const hasFront=sn.some(s=>s.blitz);
+  const td='padding:5px 7px;border-bottom:1px solid rgba(255,255,255,.06);white-space:nowrap';
+  const th='padding:5px 7px;text-align:left;color:var(--gold);font-size:9px;text-transform:uppercase;letter-spacing:.4px;border-bottom:1px solid rgba(255,255,255,.16)';
+  const trows=sn.map(s=>`<tr><td style="${td}">${s.dn||''}</td><td style="${td}">${s.dist==null?'':s.dist}</td><td style="${td}">${esc(s.hash||'')}</td><td style="${td}">${s.yard==null?'':s.yard}</td><td style="${td};white-space:normal;font-weight:700;color:var(--grayl)">${esc(s.cov||s.blitz||'')}</td><td style="${td}">${s.type?s.type[0].toUpperCase():''}</td><td style="${td};color:${(s.gn||0)>=12?'var(--green)':'var(--grayl)'}">${s.gn==null?'':s.gn}</td><td style="${td}">${esc(s.result||'')}</td><td style="${td}">${esc(s.score||'')}</td></tr>`).join('');
+  const playTable=`<div style="overflow-x:auto;border:1px solid rgba(255,255,255,.08);border-radius:10px"><table style="width:100%;border-collapse:collapse;font-size:11px;color:var(--gray)"><thead><tr><th style="${th}">Dn</th><th style="${th}">Dist</th><th style="${th}">Ha</th><th style="${th}">Yd</th><th style="${th}">Call (front + sec)</th><th style="${th}">R/P</th><th style="${th}">Gn</th><th style="${th}">Result</th><th style="${th}">Score</th></tr></thead><tbody>${trows}</tbody></table></div>`;
+  return `<div style="max-width:640px;margin:0 auto">
       <div style="text-align:center;margin-bottom:18px"><div style="font-size:22px;font-weight:900;color:var(--white)">${n} plays logged</div><div style="font-size:12px;color:var(--gray)">faced ${pct(run,n)}% run / ${100-pct(run,n)}% pass · ${expl} explosive allowed</div></div>
-      ${sec('My coverage calls', tally('cov').map(([k,c])=>bar(k,c,'var(--gold)')).join(''))}
-      ${sec('My blitz / front', tally('blitz').map(([k,c])=>bar(k,c,'#7eb0ff')).join(''))}
+      ${sec('My defensive calls', tally('cov').map(([k,c])=>bar(k,c,'var(--gold)')).join(''))}
+      ${hasFront?sec('My blitz / front', tally('blitz').map(([k,c])=>bar(k,c,'#7eb0ff')).join('')):''}
       ${sec('What offenses ran on me', byDown||'<div style="color:var(--gray);font-size:12px">—</div>')}
       ${sec('By game', byGame)}
-      <div style="text-align:center"><button onclick="openLogger()" style="background:var(--gold);color:var(--navy);border:none;border-radius:10px;padding:12px 24px;font-size:14px;font-weight:800;cursor:pointer;font-family:inherit">&#9998; Log more plays</button></div>
+      ${sec('Every play ('+n+')', playTable)}
+      ${ssImportUI()}
     </div>`;
 }
 
