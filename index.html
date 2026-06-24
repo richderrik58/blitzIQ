@@ -1394,7 +1394,8 @@ function closeHandoff(){ document.getElementById('handoffOv').classList.remove('
 // Ships OFF. At launch: set PAYWALL_ENABLED=true, GUMROAD_BUY_URL, GUMROAD_PERMALINK.
 const PAYWALL_ENABLED=true;      // LIVE: paid features gated behind the Season Pass
 const GUMROAD_BUY_URL='https://richderrik.gumroad.com/l/oyvvj';
-const GUMROAD_PERMALINK='oyvvj'; // product permalink for license verification
+const GUMROAD_PERMALINK='oyvvj'; // product permalink (buy URL / display)
+const GUMROAD_PRODUCT_ID='0Gv0qO8aT5Ig5PFavcbFzg=='; // Gumroad now REQUIRES product_id (not permalink) to verify licenses
 const FREE_OPP_LIMIT=1;
 const LIC_KEY='blitziq_license';
 function loadLicense(){ try{return JSON.parse(localStorage.getItem(LIC_KEY)||'null');}catch(e){return null;} }
@@ -1404,10 +1405,10 @@ function canAddOpponent(){ if(isPro()) return true; if((DB.opponents||[]).filter
 async function verifyLicense(){
   const inp=document.getElementById('licInput'); const key=(inp?inp.value:'').trim();
   if(!key){ showToast('Paste your license key first'); return; }
-  if(!GUMROAD_PERMALINK){ showToast('Purchases open at launch — hang tight!'); return; }
+  if(!GUMROAD_PRODUCT_ID){ showToast('Purchases open at launch — hang tight!'); return; }
   const btn=document.getElementById('licBtn'); if(btn){btn.disabled=true;btn.textContent='Checking…';}
   try{
-    const body=new URLSearchParams({product_permalink:GUMROAD_PERMALINK, license_key:key, increment_uses_count:'false'});
+    const body=new URLSearchParams({product_id:GUMROAD_PRODUCT_ID, license_key:key, increment_uses_count:'false'});
     const res=await fetch('https://api.gumroad.com/v2/licenses/verify',{method:'POST',body});
     const data=await res.json().catch(()=>({}));
     if(data&&data.success){ localStorage.setItem(LIC_KEY, JSON.stringify({key, at:new Date().toISOString()}));
