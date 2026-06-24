@@ -6681,7 +6681,34 @@ function ssImportUI(){ return `
     <input id="ssPasteGame" placeholder="Game label (e.g. vs Central — Wk 3)" style="width:100%;padding:8px;border-radius:8px;border:1px solid rgba(255,255,255,.18);background:var(--navy);color:var(--white);font-family:inherit;font-size:12px;margin-bottom:8px;outline:none;box-sizing:border-box">
     <textarea id="ssPaste" rows="6" placeholder="Paste rows copied from Excel / Google Sheets here…" style="width:100%;padding:9px;border-radius:8px;border:1px solid rgba(255,255,255,.18);background:var(--navy);color:var(--white);font-family:ui-monospace,monospace;font-size:12px;outline:none;resize:vertical;box-sizing:border-box"></textarea>
     <button onclick="importSelfGame()" style="margin-top:9px;width:100%;background:var(--gold);color:var(--navy);border:none;border-radius:9px;padding:11px;font-size:13px;font-weight:800;cursor:pointer;font-family:inherit">Import this game</button>
+    <button onclick="printSelfSheet()" style="margin-top:8px;width:100%;background:transparent;color:var(--grayl);border:1px solid rgba(255,255,255,.2);border-radius:9px;padding:9px;font-size:12px;font-weight:700;cursor:pointer;font-family:inherit">&#128424; Print a blank sheet to fill in by hand</button>
   </div>`;
+}
+// Open a clean, printable blank call sheet (the coach's exact columns) — print,
+// or "Save as PDF" from the print dialog to email it to yourself.
+function printSelfSheet(){
+  const o=selfTeam();
+  const cols=['#','Down','Dist','Hash','Yard','Play Call (Front + Secondary)','Gain','Run/Pass','Result','Score'];
+  const wide={5:'28%'};
+  let rows='';
+  for(let i=1;i<=50;i++){ rows+='<tr><td>'+i+'</td>'+cols.slice(1).map(()=> '<td></td>').join('')+'</tr>'; }
+  const w=window.open('','_blank');
+  if(!w){ showToast('Allow pop-ups to print the sheet'); return; }
+  w.document.write(`<!doctype html><html><head><meta charset="utf-8"><title>DefWise Self-Scout Sheet</title><style>
+    *{box-sizing:border-box} body{font-family:Arial,Helvetica,sans-serif;margin:16px;color:#111}
+    h1{font-size:16px;margin:0 0 2px;color:#13294b} .sub{font-size:11px;color:#555;margin-bottom:9px}
+    table{width:100%;border-collapse:collapse} th,td{border:1px solid #444;padding:3px 5px;font-size:10px;text-align:left;height:21px}
+    th{background:#13294b;color:#fff;font-size:8.5px;text-transform:uppercase;letter-spacing:.3px}
+    td:first-child,th:first-child{width:24px;text-align:center;color:#999}
+    .pbtn{margin-top:12px;padding:9px 18px;font-size:13px;font-weight:700;background:#13294b;color:#fff;border:none;border-radius:6px;cursor:pointer}
+    @media print{.pbtn{display:none}}
+  </style></head><body>
+    <h1>DefWise &mdash; Self-Scout Call Sheet</h1>
+    <div class="sub"><b>${esc(o?o.name:'My Defense')}</b> &nbsp;&middot;&nbsp; Game: ____________________ &nbsp;&middot;&nbsp; Date: ____________</div>
+    <table><thead><tr>${cols.map((c,i)=>'<th'+(wide[i]?' style="width:'+wide[i]+'"':'')+'>'+c+'</th>').join('')}</tr></thead><tbody>${rows}</tbody></table>
+    <button class="pbtn" onclick="window.print()">Print / Save as PDF</button>
+  </body></html>`);
+  w.document.close();
 }
 function importSelfGame(){
   const ta=document.getElementById('ssPaste'); const txt=(ta?ta.value:'').trim();
