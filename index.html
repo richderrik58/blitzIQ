@@ -4991,6 +4991,23 @@ function assignRoutes(nm, recv){
   return out;
 }
 
+// Offensive-line + receiver blocking on run plays, and the QB rollout on
+// boot/rollout calls — so run diagrams show movement, not just the ball carrier.
+function olBlocks(preset, dir){
+  return preset.filter(p=>p.type==='OL'||p.type==='C').map(p=>
+    ({color:'#22c55e', block:true, pts:[[p.xf,p.yd],[_clampF(p.xf+dir*0.02), p.yd-13]]}));
+}
+function wrRunBlocks(preset){
+  return preset.filter(p=>p.type==='WR'||p.type==='TE').map(p=>{ const ss=p.xf<0.5?-1:1;
+    return {color:'#22c55e', block:true, pts:[[p.xf,p.yd],[_clampF(p.xf+ss*0.012), p.yd-34]]}; });
+}
+function bootlegPath(nm, preset){
+  if(!/\b(ROLL|BOOT|BOOTLEG|WAGGLE|NAKED|SPRINT)\b/.test(nm)) return null;
+  const dir = /\b(ROLL|BOOT|BOOTLEG|WAGGLE|NAKED|SPRINT)\s*(OUT\s*)?L(EFT)?\b/.test(nm) ? -1 : 1;
+  const qb = preset.find(p=>p.type==='QB'); if(!qb) return null;
+  return {color:'#22c55e', pts:[ [qb.xf,qb.yd], [_clampF(0.5+dir*0.10),qb.yd-2], [_clampF(0.5+dir*0.30),-2], [_clampF(0.5+dir*0.40),-26] ]};
+}
+
 // Build per-receiver / ball-carrier route POLYLINES from a Hudl play call.
 // Each entry: {color, pts:[[xf, yPx], …]}; yPx = px from LOS (negative = upfield).
 function buildPlayPolylines(f, offPreset, playName){
@@ -5013,13 +5030,17 @@ function buildPlayPolylines(f, offPreset, playName){
         || preset.find(p=>p.type==='FB') || preset.find(p=>p.type==='QB');
     }
     const sx = carrier?carrier.xf:0.6, sy = carrier?carrier.yd:72;
+    const lines = olBlocks(preset, dir).concat(wrRunBlocks(preset));   // OL fires + WRs stalk-block
     if(carrierType==='WR'){
       // Slot jet sweep: cross behind the QB and attack the edge past the D gap
       const edge=_clampF(0.5+dir*(dist+0.10));
-      return [{color:'#22c55e', pts:[ [sx,sy], [0.5,58], [_clampF(0.5+dir*0.20),44], [edge,16], [edge,-30] ]}];
+      lines.push({color:'#22c55e', pts:[ [sx,sy], [0.5,58], [_clampF(0.5+dir*0.20),44], [edge,16], [edge,-30] ]});
+    } else {
+      const hx = _clampF(0.5+dir*dist);                // the gap the run hits
+      lines.push({color:'#22c55e', pts:[ [sx,sy], [0.5,48], [hx,-6], [_clampF(hx+dir*0.03),-46] ]});
     }
-    const hx = _clampF(0.5+dir*dist);                  // the gap the run hits
-    return [{color:'#22c55e', pts:[ [sx,sy], [0.5,48], [hx,-6], [_clampF(hx+dir*0.03),-46] ]}];
+    const boot = bootlegPath(nm, preset); if(boot) lines.push(boot);   // designed QB rollout
+    return lines;
   }
   // Pass call → one route per WR/TE (concept → numbered/named → jet flat)
   const recv = preset.filter(p=>p.type==='WR'||p.type==='TE').sort((a,b)=>a.xf-b.xf);
@@ -5027,10 +5048,11 @@ function buildPlayPolylines(f, offPreset, playName){
   const assign = assignRoutes(nm, recv);
   const lines=[];
   recv.forEach((r,i)=>{
-    const a=assign[i]; if(!a||!ROUTE_LIB[a.word]) return;
+    const a=assign[i];
+    const word = (a&&ROUTE_LIB[a.word]) ? a.word : 'HITCH';   // unassigned receiver → hitch so EVERY WR draws a route
     const sideSign = r.xf<0.5 ? -1 : 1;                // -1 = toward left sideline
-    const pts = ROUTE_LIB[a.word].map(([o,y])=>[_clampF(r.xf + o*sideSign), y]);
-    if(a.andGo) pts.push([pts[pts.length-1][0], -125]); // hitch/curl-and-go = deep extension
+    const pts = ROUTE_LIB[word].map(([o,y])=>[_clampF(r.xf + o*sideSign), y]);
+    if(a&&a.andGo) pts.push([pts[pts.length-1][0], -125]); // hitch/curl-and-go = deep extension
     lines.push({color:'#ef4444', pts});
   });
   if(/\bFLY\b/.test(nm)){                                // FLY motion is the RB → swing to the flat
@@ -5038,6 +5060,12 @@ function buildPlayPolylines(f, offPreset, playName){
     if(rb){ const dir = /\bLEFT\b|\bL\b/.test(nm) ? -1 : 1;
       lines.push({color:'#ef4444', pts:[[rb.xf,rb.yd],[_clampF(0.5+dir*0.30),36],[_clampF(0.5+dir*0.44),22]]}); }
   }
+  // Play-action: the RB sells the fake toward the run number's gap
+  if(/\bFAKE\b/.test(nm)){
+    const fk=runCall(nm), rb=preset.find(p=>p.type==='RB')||preset.find(p=>p.type==='FB');
+    if(rb&&fk){ const hx=_clampF(0.5+fk.dir*fk.dist); lines.push({color:'#22c55e', block:true, pts:[[rb.xf,rb.yd],[0.5,50],[hx,4]]}); }
+  }
+  const boot = bootlegPath(nm, preset); if(boot) lines.push(boot);   // QB rollout / bootleg (e.g. "Roll R")
   return lines;
 }
 
@@ -5073,7 +5101,8 @@ function playDiagramSVG(f, playName, isRun){
   }).join('');
   const routeSVG = buildPlayPolylines(f, offPreset, playName).map(pl=>{
     const pts = pl.pts.map(([xf,yd])=>`${X(xf)},${Y(yd)}`).join(' ');
-    return `<polyline points="${pts}" fill="none" stroke="${pl.color}" stroke-width="1.7" stroke-linejoin="round" stroke-linecap="round" marker-end="url(#${pl.color==='#22c55e'?'arrG':'arrR'})"/>`;
+    const marker = pl.block ? '' : ` marker-end="url(#${pl.color==='#22c55e'?'arrG':'arrR'})"`;
+    return `<polyline points="${pts}" fill="none" stroke="${pl.color}" stroke-width="${pl.block?1:1.7}"${pl.block?' stroke-dasharray="2.5 2" opacity="0.65"':''} stroke-linejoin="round" stroke-linecap="round"${marker}/>`;
   }).join('');
   // Gap marker (A/B/C/D) at the hole a numbered run hits
   const pNm=(playName||'').toUpperCase();
