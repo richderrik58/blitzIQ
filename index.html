@@ -1451,10 +1451,16 @@ function updateProBadge(){
     el.textContent='🛡 PRO';
     el.style.cssText='display:inline-block;background:rgba(34,197,94,.18);color:#22c55e;border:1px solid rgba(34,197,94,.55);font-size:9px;font-weight:900;letter-spacing:1px;padding:2px 7px;border-radius:10px;cursor:pointer';
     el.title='Season Pass active on this device — tap to deactivate';
+  } else if(PAYWALL_ENABLED){
+    // Free user: header badge becomes an always-visible upgrade entry point
+    // so pricing is discoverable without bumping into a locked feature.
+    el.textContent='⭐ Season Pass';
+    el.style.cssText='display:inline-block;background:rgba(240,165,0,.18);color:var(--gold);border:1px solid rgba(240,165,0,.55);font-size:9px;font-weight:900;letter-spacing:.5px;padding:2px 8px;border-radius:10px;cursor:pointer';
+    el.title='See the DefWise Season Pass';
   } else { el.style.display='none'; el.textContent=''; }
 }
 function proBadgeClick(){
-  if(!loadLicense()) return;
+  if(!loadLicense()){ if(PAYWALL_ENABLED) showUnlock(''); return; } // free user → open pricing
   if(confirm('Deactivate your Season Pass on THIS device?\n\nYou can re-activate anytime by pasting your license key. Your scouting data stays put.')){
     localStorage.removeItem(LIC_KEY); showToast('Season Pass deactivated on this device.'); updateProBadge(); renderOpps();
   }
