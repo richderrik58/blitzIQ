@@ -1,0 +1,6 @@
+# DefWise — https://defwise.com
+# Allow search engines to index the site.
+User-agent: *
+Allow: /
+
+Sitemap: https://defwise.com/sitemap.xml
