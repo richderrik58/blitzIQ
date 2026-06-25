@@ -14,9 +14,25 @@
   <meta name="mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
   <meta name="apple-mobile-web-app-title" content="DefWise">
-  <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
-  <!-- SheetJS for .xlsx playlist import (exposes global XLSX) -->
-  <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+  <!-- Heavy import libs (pdf.js ~330KB, SheetJS ~900KB) load ON DEMAND, only when a
+       coach actually imports a file — keeps first paint fast on game-day cellular. -->
+  <link rel="preconnect" href="https://cdnjs.cloudflare.com" crossorigin>
+  <link rel="dns-prefetch" href="https://esm.sh">
+  <script>
+    // Load an external script once, on demand. Returns a cached promise.
+    const _scriptCache = {};
+    function loadScript(src){
+      return _scriptCache[src] || (_scriptCache[src] = new Promise((resolve, reject) => {
+        const s = document.createElement('script');
+        s.src = src; s.async = true;
+        s.onload = () => resolve();
+        s.onerror = () => { delete _scriptCache[src]; reject(new Error('Failed to load ' + src)); };
+        document.head.appendChild(s);
+      }));
+    }
+    const ensurePdfJs = () => loadScript('https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js');
+    const ensureXLSX  = () => loadScript('https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js');
+  </script>
   <!-- Anthropic SDK for AI play generation (loaded as ES module, exposed globally) -->
   <script type="module">
     try {
@@ -1196,8 +1212,8 @@ function ensurePDFWorker() {
   return _pdfWorkerReady;
 }
 
-// Start loading the worker immediately so it's ready when the coach uploads
-if (typeof pdfjsLib !== 'undefined') ensurePDFWorker();
+// pdf.js now loads on demand (see ensurePdfJs in <head>); the worker is readied
+// inside handlePDF right after the library loads, so nothing to preload here.
 
 // ── SEED DATA ─────────────────────────────────────────────────────────────────
 const SEED = { opponents: [{
@@ -1501,11 +1517,11 @@ function importCSV(){
 // GN/LS (gain/loss yards), OFF FORM, OFF PLAY, DN/DIST. We aggregate those snaps
 // into formation records (same shape the PDF importer produces) and flag explosive
 // plays directly from GN/LS. Aggregating snaps avoids the PDF _findForm fragility.
-function handleXLSX(e){
+async function handleXLSX(e){
   const file=e.target.files&&e.target.files[0];
   if(e.target) e.target.value='';
   if(!file) return;
-  if(typeof XLSX==='undefined'){ alert('Spreadsheet parser is still loading — wait a moment and try again.'); return; }
+  try { await ensureXLSX(); } catch(err){ alert('Spreadsheet parser failed to load — check your connection and try again.'); return; }
   const reader=new FileReader();
   reader.onload=()=>{
     try{
@@ -1557,10 +1573,10 @@ function aggregateFromSnaps(snaps){
 
 // Add another scouted game (playlist) to the current opponent — more games =
 // better in-game predictions. Appends snaps and re-aggregates the formations.
-function handleAddGameXLSX(e){
+async function handleAddGameXLSX(e){
   const file=e.target.files&&e.target.files[0]; if(e.target) e.target.value='';
   if(!file||!st.opp) return;
-  if(typeof XLSX==='undefined'){ alert('Spreadsheet parser is still loading — try again.'); return; }
+  try { await ensureXLSX(); } catch(err){ alert('Spreadsheet parser failed to load — check your connection and try again.'); return; }
   const reader=new FileReader();
   reader.onload=()=>{
     try{
@@ -2555,8 +2571,9 @@ async function handlePDF(e) {
   const files=Array.from(e.target.files); e.target.value='';
   if(!files.length) return;
 
-  // Ensure pdf.js worker is ready before touching any files
+  // Load pdf.js (on demand) and ready its worker before touching any files
   try {
+    await ensurePdfJs();
     await ensurePDFWorker();
   } catch(err) {
     alert('PDF reader failed to initialize.\n\n' + err.message);
