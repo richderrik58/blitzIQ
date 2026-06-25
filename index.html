@@ -5217,11 +5217,31 @@ function buildPlayPolylines(f, offPreset, playName){
   const recv = preset.filter(p=>p.type==='WR'||p.type==='TE').sort((a,b)=>a.xf-b.xf);
   if(!recv.length){ const b=bootlegPath(nm,preset)||qbDrop(preset,nm); return b? olPassPro(preset).concat([b]) : []; }
   const assign = assignRoutes(nm, recv);
+  const isScreen = /\b(SCREEN|BUBBLE|TUNNEL|JAILBREAK)\b/.test(nm);
+  // Position-aware default so every UNASSIGNED receiver runs a believable route
+  // (outside = comeback, next = curl, inside = dig) instead of an identical stub.
+  const defaultRoute = (r) => {
+    const isLeft = r.xf<0.5;
+    const sideRecv = recv.filter(rr=>(rr.xf<0.5)===isLeft).sort((a,b)=>Math.abs(b.xf-0.5)-Math.abs(a.xf-0.5)); // outside → in
+    const rank = sideRecv.indexOf(r);                 // 0 = outermost on that side
+    return rank===0 ? 'COMEBACK' : rank===1 ? 'CURL' : 'DIG';
+  };
+  // For a screen, the nearest-to-the-call receiver catches it; everyone else blocks.
+  let screenTarget = -1;
+  if(isScreen){
+    const explicit = assign.findIndex(a=>a&&/BUBBLE|SCREEN|SMOKE|NOW|TUNNEL/.test(a.word||''));
+    screenTarget = explicit>=0 ? explicit
+      : recv.map((r,i)=>({i,d:Math.abs(r.xf-0.5)})).sort((a,b)=>a.d-b.d)[0].i; // innermost slot
+  }
   const lines = olPassPro(preset);                    // 5 OL pass-set first
   recv.forEach((r,i)=>{
     const a=assign[i];
+    if(isScreen && i!==screenTarget){                 // screen → blockers out in front
+      lines.push(r.type==='TE'?teDownBlock(r):wrStalk(r)); return;
+    }
     if(a&&a.block){ lines.push(r.type==='TE'?teDownBlock(r):wrStalk(r)); return; }  // assigned to block → block, not route
-    const word = (a&&ROUTE_LIB[a.word]) ? a.word : 'HITCH';   // unassigned receiver → hitch so EVERY WR draws a route
+    const word = (isScreen && i===screenTarget) ? ((a&&ROUTE_LIB[a.word])?a.word:'BUBBLE')
+               : (a&&ROUTE_LIB[a.word]) ? a.word : defaultRoute(r);   // unassigned → believable default
     const sideSign = r.xf<0.5 ? -1 : 1;                // -1 = toward left sideline
     const pts = ROUTE_LIB[word].map(([o,y])=>[_clampF(r.xf + o*sideSign), y]);
     if(a&&a.andGo) pts.push([pts[pts.length-1][0], -125]); // hitch/curl-and-go = deep extension
@@ -5255,7 +5275,7 @@ function buildPlayRoutes(f, offPreset, playName){
 // in its shell flipped to the offense's strength, and the play's routes drawn.
 // Used in the practice script so each rep shows the look the scout team must give.
 function playDiagramSVG(f, playName, isRun){
-  const W=300, H=196, LY=116, MX=14, FW=W-2*MX, sc=0.42;
+  const W=340, H=300, LY=205, MX=16, FW=W-2*MX, sc=0.62;
   const X = xf => +(MX + xf*FW).toFixed(1);
   const Y = yd => +(LY + yd*sc).toFixed(1);
   const offPreset = formationPreset(f);
@@ -5264,16 +5284,16 @@ function playDiagramSVG(f, playName, isRun){
   // Strength from the actual alignment: more WR/TE left → flip the defensive front.
   const recv = off.filter(p=>p.type==='WR'||p.type==='TE');
   const strongLeft = recv.filter(p=>p.xf<0.5).length > recv.length/2;
-  const lbl = (cx,cy,t,c) => t ? `<text x="${cx}" y="${cy+2.1}" font-size="5.3" font-weight="700" text-anchor="middle" fill="${c}">${t}</text>` : '';
+  const lbl = (cx,cy,t,c) => t ? `<text x="${cx}" y="${cy+2.6}" font-size="7" font-weight="700" text-anchor="middle" fill="${c}">${t}</text>` : '';
   const offSVG = off.map(p=>{
     const cx=X(p.xf), cy=Y(p.yd);
     if(p.type==='C'||p.type==='OL')
-      return `<rect x="${cx-4.6}" y="${cy-4.6}" width="9.2" height="9.2" rx="1.4" fill="#13294b" stroke="#fff" stroke-width="0.7"/>`+lbl(cx,cy,p.type==='C'?'C':'','#fff');
-    return `<circle cx="${cx}" cy="${cy}" r="6" fill="#13294b" stroke="#fff" stroke-width="0.7"/>`+lbl(cx,cy,p.type,'#fff');
+      return `<rect x="${cx-5.6}" y="${cy-5.6}" width="11.2" height="11.2" rx="1.6" fill="#13294b" stroke="#fff" stroke-width="0.9"/>`+lbl(cx,cy,p.type==='C'?'C':'','#fff');
+    return `<circle cx="${cx}" cy="${cy}" r="7.4" fill="#13294b" stroke="#fff" stroke-width="0.9"/>`+lbl(cx,cy,p.type,'#fff');
   }).join('');
   const defSVG = def.map(p=>{
     const cx=X(strongLeft ? 1-p.xf : p.xf), cy=Y(p.yd);
-    return `<circle cx="${cx}" cy="${cy}" r="6" fill="#fff" stroke="#c0392b" stroke-width="1.2"/>`+lbl(cx,cy,p.type,'#c0392b');
+    return `<circle cx="${cx}" cy="${cy}" r="7.4" fill="#fff" stroke="#c0392b" stroke-width="1.5"/>`+lbl(cx,cy,p.type,'#c0392b');
   }).join('');
   const routeSVG = buildPlayPolylines(f, offPreset, playName).map(pl=>{
     const P = pl.pts.map(([xf,yd])=>[X(xf),Y(yd)]);
@@ -5281,28 +5301,28 @@ function playDiagramSVG(f, playName, isRun){
     if(pl.block){                                     // block = solid line + perpendicular "T" cap at the end
       const n=P.length, a=P[n-2]||P[0], bxby=P[n-1];
       let dx=bxby[0]-a[0], dy=bxby[1]-a[1]; const L=Math.hypot(dx,dy)||1; dx/=L; dy/=L;
-      const cap=3, px=-dy*cap, py=dx*cap;
-      const tcap=`<line x1="${(bxby[0]+px).toFixed(1)}" y1="${(bxby[1]+py).toFixed(1)}" x2="${(bxby[0]-px).toFixed(1)}" y2="${(bxby[1]-py).toFixed(1)}" stroke="${pl.color}" stroke-width="1.5" stroke-linecap="round"/>`;
-      return `<polyline points="${pts}" fill="none" stroke="${pl.color}" stroke-width="1.4" stroke-linejoin="round" stroke-linecap="round"/>`+tcap;
+      const cap=4.4, px=-dy*cap, py=dx*cap;
+      const tcap=`<line x1="${(bxby[0]+px).toFixed(1)}" y1="${(bxby[1]+py).toFixed(1)}" x2="${(bxby[0]-px).toFixed(1)}" y2="${(bxby[1]-py).toFixed(1)}" stroke="${pl.color}" stroke-width="2.2" stroke-linecap="round"/>`;
+      return `<polyline points="${pts}" fill="none" stroke="${pl.color}" stroke-width="2" stroke-linejoin="round" stroke-linecap="round"/>`+tcap;
     }
-    if(pl.motion){ return `<polyline points="${pts}" fill="none" stroke="${pl.color}" stroke-width="1.5" stroke-dasharray="4 3" stroke-linejoin="round" stroke-linecap="round" marker-end="url(#arrM)"/>`; }
-    return `<polyline points="${pts}" fill="none" stroke="${pl.color}" stroke-width="1.7" stroke-linejoin="round" stroke-linecap="round" marker-end="url(#${pl.color===RUNC?'arrG':'arrR'})"/>`;
+    if(pl.motion){ return `<polyline points="${pts}" fill="none" stroke="${pl.color}" stroke-width="2" stroke-dasharray="5 3.5" stroke-linejoin="round" stroke-linecap="round" marker-end="url(#arrM)"/>`; }
+    return `<polyline points="${pts}" fill="none" stroke="${pl.color}" stroke-width="2.3" stroke-linejoin="round" stroke-linecap="round" marker-end="url(#${pl.color===RUNC?'arrG':'arrR'})"/>`;
   }).join('');
   // Gap marker (A/B/C/D) at the hole a numbered run hits
   const pNm=(playName||'').toUpperCase();
   const rc=(RUN_WORDS.test(pNm)||/^\s*\d{1,2}\s*$/.test(pNm)) ? runCall(playName) : null;
   const gapSVG = (rc&&rc.gap) ? (()=>{ const gx=X(_clampF(0.5+rc.dir*rc.dist)), gy=Y(-4);
-    return `<circle cx="${gx}" cy="${gy}" r="6.6" fill="#eafaf0" stroke="#16a34a" stroke-width="1" stroke-dasharray="2 1.6"/><text x="${gx}" y="${gy+2.4}" font-size="6.4" font-weight="800" fill="#16a34a" text-anchor="middle">${rc.gap}</text>`;
+    return `<circle cx="${gx}" cy="${gy}" r="8.6" fill="#eafaf0" stroke="#16a34a" stroke-width="1.2" stroke-dasharray="2.4 1.8"/><text x="${gx}" y="${gy+3}" font-size="8.4" font-weight="800" fill="#16a34a" text-anchor="middle">${rc.gap}</text>`;
   })() : '';
   return `<svg viewBox="0 0 ${W} ${H}" width="100%" preserveAspectRatio="xMidYMid meet" style="display:block;border-radius:8px;background:#f4f7f4">
     <defs>
-      <marker id="arrR" markerWidth="5" markerHeight="5" refX="3.4" refY="2.5" orient="auto"><path d="M0,0 L5,2.5 L0,5 z" fill="#ef4444"/></marker>
-      <marker id="arrG" markerWidth="5" markerHeight="5" refX="3.4" refY="2.5" orient="auto"><path d="M0,0 L5,2.5 L0,5 z" fill="#22c55e"/></marker>
-      <marker id="arrM" markerWidth="5" markerHeight="5" refX="3.4" refY="2.5" orient="auto"><path d="M0,0 L5,2.5 L0,5 z" fill="#f0a500"/></marker>
+      <marker id="arrR" markerWidth="6" markerHeight="6" refX="3.6" refY="3" orient="auto"><path d="M0,0 L6,3 L0,6 z" fill="#ef4444"/></marker>
+      <marker id="arrG" markerWidth="6" markerHeight="6" refX="3.6" refY="3" orient="auto"><path d="M0,0 L6,3 L0,6 z" fill="#22c55e"/></marker>
+      <marker id="arrM" markerWidth="6" markerHeight="6" refX="3.6" refY="3" orient="auto"><path d="M0,0 L6,3 L0,6 z" fill="#f0a500"/></marker>
     </defs>
     <rect x="0.5" y="0.5" width="${W-1}" height="${H-1}" rx="7" fill="#f4f7f4" stroke="#ccd5cc"/>
-    <line x1="6" y1="${LY}" x2="${W-6}" y2="${LY}" stroke="#9aa6b2" stroke-width="1" stroke-dasharray="5 3"/>
-    <text x="8" y="${LY-3}" font-size="5" fill="#9aa6b2" letter-spacing="0.5">LOS</text>
+    <line x1="6" y1="${LY}" x2="${W-6}" y2="${LY}" stroke="#9aa6b2" stroke-width="1.2" stroke-dasharray="6 4"/>
+    <text x="9" y="${LY-4}" font-size="6.5" fill="#9aa6b2" letter-spacing="0.5">LOS</text>
     ${routeSVG}${gapSVG}${defSVG}${offSVG}
   </svg>`;
 }
