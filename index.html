@@ -7550,8 +7550,13 @@ function buildSituationReportHTML(o, light){
     const tr=topOf(g.rP), tp=topOf(g.pP);
     return `<div style="margin-bottom:9px;break-inside:avoid"><div style="display:flex;align-items:center;gap:10px"><div style="width:118px;font-size:12px;font-weight:700;color:${c.txt};flex-shrink:0">${dndLabel(k)}</div><div style="flex:1">${ibar(rp)}</div><div style="width:78px;text-align:right;font-size:11px;color:${c.mut};flex-shrink:0">${rp}% R · ${n}</div></div>${(tr||tp)?`<div style="font-size:10px;color:${c.sub};margin:2px 0 0 128px">${tr?`&#127939; ${esc(tr)}`:''}${tr&&tp?'  ·  ':''}${tp?`&#9992; ${esc(tp)}`:''}</div>`:''}</div>`;
   }).join('');
+  // Top Keys — the strongest, best-sampled down & distance tendencies, surfaced up top
+  const keyArr=[]; dndG.forEach((g,k)=>{ const n=g.run+g.pass; if(n<4) return; const rp=Math.round(g.run/n*100); const lean=Math.abs(rp-50); if(lean<15) return; keyArr.push({label:dndLabel(k),rp,n,lean,go:rp>=50?topOf(g.rP):topOf(g.pP)}); });
+  keyArr.sort((a,b)=>b.lean-a.lean||b.n-a.n);
+  const keysHTML=keyArr.length?`<div style="margin-bottom:18px;break-inside:avoid;background:${light?'#fff7ed':'rgba(240,165,0,.08)'};border:1px solid ${light?'#fdba74':'rgba(240,165,0,.35)'};border-radius:12px;padding:13px 15px"><div style="font-size:10px;letter-spacing:1.5px;text-transform:uppercase;color:${c.gold};font-weight:800;margin-bottom:9px">&#128273; Top Keys — what to game-plan</div>${keyArr.slice(0,3).map(t=>{const isRun=t.rp>=50; return `<div style="display:flex;align-items:baseline;gap:8px;margin-bottom:6px;font-size:13px;color:${c.txt}"><b style="min-width:118px;flex-shrink:0">${t.label}</b><span style="font-weight:900;color:${isRun?'#15803d':'#1d4ed8'}">${isRun?t.rp+'% RUN':(100-t.rp)+'% PASS'}</span><span style="font-size:11px;color:${c.sub}">${t.n} snaps${t.go?` · ${isRun?'&#127939;':'&#9992;'} ${esc(t.go)}`:''}</span></div>`;}).join('')}</div>`:'';
   return `
     <div style="text-align:center;margin-bottom:18px"><div style="font-size:24px;font-weight:900;color:${c.txt}">${totRunPct}% RUN <span style="color:${c.sub};font-size:15px">/ ${100-totRunPct}% PASS</span></div><div style="font-size:11px;color:${c.sub}">${tot} offensive snaps scouted</div></div>
+    ${keysHTML}
     ${dndRows?`<div style="margin-bottom:18px;break-inside:avoid"><div style="font-size:10px;letter-spacing:1.5px;text-transform:uppercase;color:${c.gold};font-weight:800;margin-bottom:8px">By Down &amp; Distance</div>${dndRows}</div>`:''}
     ${section('By Down',split(s=>s.dn>=1&&s.dn<=4?s.dn:null),[1,2,3,4],k=>k+ordSuffix(k)+' down')}
     ${section('By Distance',split(s=>s.dist==null?null:(s.dist<=3?'S':s.dist<=7?'M':'L')),['S','M','L'],k=>({S:'Short ≤3',M:'Med 4-7',L:'Long 8+'}[k]))}
