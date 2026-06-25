@@ -5060,6 +5060,20 @@ function bootlegPath(nm, preset){
   const qb = preset.find(p=>p.type==='QB'); if(!qb) return null;
   return {color:RUNC, pts:[ [qb.xf,qb.yd], [_clampF(0.5+dir*0.10),qb.yd-2], [_clampF(0.5+dir*0.30),-2], [_clampF(0.5+dir*0.40),-26] ]};
 }
+// Pre-snap motion (dashed gold line): "Trade L/R" = TE crosses to the called side;
+// "Jet L/R" = backside WR/slot jets across. Shows the look team the motion.
+function motionLines(nm, preset){
+  const out=[];
+  const tr=nm.match(/\bTRADE\s*(LEFT|RIGHT|L|R)\b/);
+  if(tr){ const dir=/^L/.test(tr[1])?-1:1; const te=preset.find(p=>p.type==='TE');
+    if(te) out.push({color:'#f0a500',motion:true,pts:[[te.xf,te.yd],[0.5,te.yd+5],[_clampF(0.5+dir*0.19),te.yd]]}); }
+  const jt=nm.match(/\bJET\s*(LEFT|RIGHT|L|R)\b/);
+  if(jt){ const dir=/^L/.test(jt[1])?-1:1;
+    const wr=preset.filter(p=>p.type==='WR'||p.type==='TE').sort((a,b)=>a.xf-b.xf);
+    const man=dir>0?wr[0]:wr[wr.length-1];
+    if(man) out.push({color:'#f0a500',motion:true,pts:[[man.xf,man.yd],[0.5,man.yd+7],[_clampF(0.5+dir*0.28),man.yd+3]]}); }
+  return out;
+}
 
 // Build per-receiver / ball-carrier route POLYLINES from a Hudl play call.
 // Each entry: {color, pts:[[xf, yPx], …]}; yPx = px from LOS (negative = upfield).
@@ -5099,6 +5113,7 @@ function buildPlayPolylines(f, offPreset, playName){
       lines.push({color:RUNC, pts:[ [sx,sy], [0.5,48], [hx,-6], [_clampF(hx+dir*0.03),-46] ]});
     }
     const boot = bootlegPath(nm, preset); if(boot) lines.push(boot);
+    lines.push(...motionLines(nm, preset));
     return lines;
   }
   // Pass call → one route per WR/TE (concept → numbered/named → jet flat)
@@ -5129,6 +5144,7 @@ function buildPlayPolylines(f, offPreset, playName){
   }
   const boot = bootlegPath(nm, preset);
   if(boot) lines.push(boot); else { const d=qbDrop(preset,nm); if(d) lines.push(d); }   // QB boots or drops back
+  lines.push(...motionLines(nm, preset));
   return lines;
 }
 
@@ -5172,6 +5188,7 @@ function playDiagramSVG(f, playName, isRun){
       const tcap=`<line x1="${(bxby[0]+px).toFixed(1)}" y1="${(bxby[1]+py).toFixed(1)}" x2="${(bxby[0]-px).toFixed(1)}" y2="${(bxby[1]-py).toFixed(1)}" stroke="${pl.color}" stroke-width="1.5" stroke-linecap="round"/>`;
       return `<polyline points="${pts}" fill="none" stroke="${pl.color}" stroke-width="1.4" stroke-linejoin="round" stroke-linecap="round"/>`+tcap;
     }
+    if(pl.motion){ return `<polyline points="${pts}" fill="none" stroke="${pl.color}" stroke-width="1.5" stroke-dasharray="4 3" stroke-linejoin="round" stroke-linecap="round" marker-end="url(#arrM)"/>`; }
     return `<polyline points="${pts}" fill="none" stroke="${pl.color}" stroke-width="1.7" stroke-linejoin="round" stroke-linecap="round" marker-end="url(#${pl.color===RUNC?'arrG':'arrR'})"/>`;
   }).join('');
   // Gap marker (A/B/C/D) at the hole a numbered run hits
@@ -5184,6 +5201,7 @@ function playDiagramSVG(f, playName, isRun){
     <defs>
       <marker id="arrR" markerWidth="5" markerHeight="5" refX="3.4" refY="2.5" orient="auto"><path d="M0,0 L5,2.5 L0,5 z" fill="#ef4444"/></marker>
       <marker id="arrG" markerWidth="5" markerHeight="5" refX="3.4" refY="2.5" orient="auto"><path d="M0,0 L5,2.5 L0,5 z" fill="#22c55e"/></marker>
+      <marker id="arrM" markerWidth="5" markerHeight="5" refX="3.4" refY="2.5" orient="auto"><path d="M0,0 L5,2.5 L0,5 z" fill="#f0a500"/></marker>
     </defs>
     <rect x="0.5" y="0.5" width="${W-1}" height="${H-1}" rx="7" fill="#f4f7f4" stroke="#ccd5cc"/>
     <line x1="6" y1="${LY}" x2="${W-6}" y2="${LY}" stroke="#9aa6b2" stroke-width="1" stroke-dasharray="5 3"/>
