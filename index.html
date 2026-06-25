@@ -1429,6 +1429,14 @@ const PAYWALL_ENABLED=true;      // LIVE: paid features gated behind the Season 
 const GUMROAD_BUY_URL='https://richderrik.gumroad.com/l/oyvvj';
 const GUMROAD_PERMALINK='oyvvj'; // product permalink (buy URL / display)
 const GUMROAD_PRODUCT_ID='0Gv0qO8aT5Ig5PFavcbFzg=='; // Gumroad now REQUIRES product_id (not permalink) to verify licenses
+// ── PROGRAM (whole defensive staff) tier — $99/season ────────────────────────
+// Leave both blank until the $99 Gumroad product exists. When BOTH are set, a
+// second "Program" option appears in the unlock modal, and keys from EITHER
+// product verify (see verifyLicense). Same in-app unlock — the $99 product is
+// licensed for a whole staff (every coach pastes the same key on their device).
+const GUMROAD_PROGRAM_BUY_URL='';    // e.g. https://richderrik.gumroad.com/l/xxxxx
+const GUMROAD_PROGRAM_PRODUCT_ID=''; // Gumroad product_id of the $99 program product
+const PROGRAM_TIER_ON = !!(GUMROAD_PROGRAM_BUY_URL && GUMROAD_PROGRAM_PRODUCT_ID);
 const FREE_OPP_LIMIT=1;
 const LIC_KEY='blitziq_license';
 function loadLicense(){ try{return JSON.parse(localStorage.getItem(LIC_KEY)||'null');}catch(e){return null;} }
@@ -1454,13 +1462,20 @@ function proBadgeClick(){
 async function verifyLicense(){
   const inp=document.getElementById('licInput'); const key=(inp?inp.value:'').trim();
   if(!key){ showToast('Paste your license key first'); return; }
-  if(!GUMROAD_PRODUCT_ID){ showToast('Purchases open at launch — hang tight!'); return; }
+  // A key may come from the $29 individual product OR the $99 program product —
+  // try each in turn so either unlocks the same Season Pass.
+  const productIds=[GUMROAD_PRODUCT_ID, GUMROAD_PROGRAM_PRODUCT_ID].filter(Boolean);
+  if(!productIds.length){ showToast('Purchases open at launch — hang tight!'); return; }
   const btn=document.getElementById('licBtn'); if(btn){btn.disabled=true;btn.textContent='Checking…';}
   try{
-    const body=new URLSearchParams({product_id:GUMROAD_PRODUCT_ID, license_key:key, increment_uses_count:'false'});
-    const res=await fetch('https://api.gumroad.com/v2/licenses/verify',{method:'POST',body});
-    const data=await res.json().catch(()=>({}));
-    if(data&&data.success){ localStorage.setItem(LIC_KEY, JSON.stringify({key, at:new Date().toISOString()}));
+    let ok=false;
+    for(const pid of productIds){
+      const body=new URLSearchParams({product_id:pid, license_key:key, increment_uses_count:'false'});
+      const res=await fetch('https://api.gumroad.com/v2/licenses/verify',{method:'POST',body});
+      const data=await res.json().catch(()=>({}));
+      if(data&&data.success){ ok=true; break; }
+    }
+    if(ok){ localStorage.setItem(LIC_KEY, JSON.stringify({key, at:new Date().toISOString()}));
       closeUnlock(); showToast('✓ Season Pass unlocked — thanks, Coach!'); updateProBadge(); renderOpps(); }
     else showToast('That key didn’t verify — double-check it, or email support.');
   }catch(e){ showToast('Couldn’t reach the license server — check your connection.'); }
@@ -1468,14 +1483,38 @@ async function verifyLicense(){
 }
 function showUnlock(feature){
   const buy=GUMROAD_BUY_URL||'#';
+  const featLine = `${feature?`<b style="color:var(--gold)">${feature}</b> is part of the`:'Unlock the'} DefWise <b>Season Pass</b>.`;
+  const features = `&#127919; Game Day Predictor + live feedback loop<br>&#128193; Unlimited opponents &amp; multi-game<br>&#128241; iPad game-day handoff (offline)<br>&#9999;&#65039; Play diagrams &amp; practice scripts<br>&#128438;&#65039; Print / PDF everything`;
+  let pricing;
+  if(PROGRAM_TIER_ON){
+    const pbuy=GUMROAD_PROGRAM_BUY_URL;
+    pricing = `
+      <div style="display:flex;gap:10px;flex-wrap:wrap;margin:14px 0">
+        <div style="flex:1;min-width:150px;background:var(--navy2);border:1px solid rgba(255,255,255,.1);border-radius:12px;padding:14px;text-align:center">
+          <div style="font-size:12px;font-weight:800;color:var(--grayl);letter-spacing:.5px">INDIVIDUAL</div>
+          <div style="font-size:28px;font-weight:900;color:var(--white);margin:6px 0 0">$29<span style="font-size:12px;color:var(--gray);font-weight:600"> / season</span></div>
+          <div style="font-size:11px;color:var(--gray);margin-bottom:12px">One coach, your devices</div>
+          <a href="${buy}" target="_blank" rel="noopener" style="display:block;padding:11px;background:rgba(240,165,0,.15);color:var(--gold);font-size:14px;font-weight:800;border-radius:10px;text-decoration:none;font-family:inherit">Get it &rarr;</a>
+        </div>
+        <div style="flex:1;min-width:150px;background:var(--navy2);border:2px solid var(--gold);border-radius:12px;padding:14px;text-align:center;position:relative">
+          <div style="position:absolute;top:-9px;left:50%;transform:translateX(-50%);background:var(--gold);color:var(--navy);font-size:9px;font-weight:900;letter-spacing:.5px;padding:2px 9px;border-radius:8px;white-space:nowrap">BEST FOR STAFFS</div>
+          <div style="font-size:12px;font-weight:800;color:var(--gold);letter-spacing:.5px">PROGRAM</div>
+          <div style="font-size:28px;font-weight:900;color:var(--white);margin:6px 0 0">$99<span style="font-size:12px;color:var(--gray);font-weight:600"> / season</span></div>
+          <div style="font-size:11px;color:var(--gray);margin-bottom:12px">Your whole defensive staff</div>
+          <a href="${pbuy}" target="_blank" rel="noopener" style="display:block;padding:11px;background:var(--gold);color:var(--navy);font-size:14px;font-weight:800;border-radius:10px;text-decoration:none;font-family:inherit">Get it &rarr;</a>
+        </div>
+      </div>`;
+  } else {
+    pricing = `
+      <div style="font-size:34px;font-weight:900;color:var(--white);margin:14px 0 2px"><span style="font-size:18px;color:var(--gray);text-decoration:line-through;margin-right:8px">$49</span>$29<span style="font-size:14px;color:var(--gray);font-weight:600"> / season</span></div>
+      <a href="${buy}" ${buy!=='#'?'target="_blank" rel="noopener"':''} style="display:block;width:100%;padding:14px;background:var(--gold);color:var(--navy);font-size:16px;font-weight:800;border-radius:11px;text-decoration:none;font-family:inherit;margin-top:12px">Get the Season Pass &rarr;</a>`;
+  }
   document.getElementById('unlockBody').innerHTML=`
-    <div style="max-width:460px;margin:0 auto;text-align:center">
+    <div style="max-width:480px;margin:0 auto;text-align:center">
       <div style="font-size:40px;margin:6px 0 4px">&#11088;</div>
-      <div style="font-size:13px;color:var(--grayl);margin-bottom:4px">${feature?`<b style="color:var(--gold)">${feature}</b> is part of the`:'Unlock the'} DefWise <b>Season Pass</b>.</div>
-      <div style="font-size:34px;font-weight:900;color:var(--white);margin:10px 0 2px"><span style="font-size:18px;color:var(--gray);text-decoration:line-through;margin-right:8px">$49</span>$29<span style="font-size:14px;color:var(--gray);font-weight:600"> / season</span></div>
-      <div style="text-align:left;background:var(--navy2);border:1px solid rgba(255,255,255,.08);border-radius:12px;padding:14px 16px;margin:16px 0;font-size:13px;color:var(--grayl);line-height:1.9">
-        &#127919; Game Day Predictor + live feedback loop<br>&#128193; Unlimited opponents &amp; multi-game<br>&#128241; iPad game-day handoff (offline)<br>&#9999;&#65039; Play diagrams &amp; practice scripts<br>&#128438;&#65039; Print / PDF everything</div>
-      <a href="${buy}" ${buy!=='#'?'target="_blank" rel="noopener"':''} style="display:block;width:100%;padding:14px;background:var(--gold);color:var(--navy);font-size:16px;font-weight:800;border-radius:11px;text-decoration:none;font-family:inherit">Get the Season Pass &rarr;</a>
+      <div style="font-size:13px;color:var(--grayl);margin-bottom:4px">${featLine}</div>
+      <div style="text-align:left;background:var(--navy);border:1px solid rgba(255,255,255,.08);border-radius:12px;padding:14px 16px;margin:14px 0;font-size:13px;color:var(--grayl);line-height:1.9">${features}</div>
+      ${pricing}
       <div style="font-size:11px;color:var(--gray);margin:8px 0 16px">30-day money-back guarantee · one purchase covers your season</div>
       <div style="border-top:1px solid rgba(255,255,255,.08);padding-top:14px">
         <div style="font-size:11px;color:var(--gray);margin-bottom:7px">Already bought? Paste your license key:</div>
@@ -2000,8 +2039,10 @@ function renderOpps() {
       el.innerHTML = `
         <div class="empty">
           <div class="empty-icon">🛡</div>
-          <div style="font-size:20px;font-weight:900;color:var(--text);margin-bottom:8px">Welcome to DefWise</div>
-          <div class="empty-txt" style="margin-bottom:24px">What is your base defensive scheme?<br><span style="font-size:12px;color:var(--grayl)">This loads your default alignment on every play canvas.</span></div>
+          <div style="font-size:22px;font-weight:900;color:var(--text);margin-bottom:4px">DefWise</div>
+          <div style="font-size:14px;font-weight:800;color:var(--gold);margin-bottom:12px">Scout smarter. Call the game from the box.</div>
+          <div class="empty-txt" style="margin:0 auto 22px;max-width:340px;line-height:1.6">Import your Hudl tendencies and know what the offense runs on <b style="color:var(--white)">3rd &amp; long</b> — then call it from your iPad on the sideline. <span style="color:var(--grayl)">Free to start. Works offline on game day.</span></div>
+          <div class="empty-txt" style="margin-bottom:16px;font-weight:800;color:var(--white)">First — what's your base defensive scheme?<br><span style="font-size:12px;color:var(--grayl);font-weight:400">Sets your default alignment on every play canvas.</span></div>
           <div style="display:flex;flex-direction:column;gap:12px;width:100%;max-width:300px;margin:0 auto 20px">
             <button onclick="setScheme('4-3')" style="background:var(--navy);color:#fff;border:2px solid var(--gold);border-radius:12px;padding:14px 20px;font-size:15px;font-weight:900;cursor:pointer;font-family:inherit;letter-spacing:.3px">4-3 Defense</button>
             <button onclick="setScheme('3-4')" style="background:var(--navy);color:#fff;border:2px solid var(--gold);border-radius:12px;padding:14px 20px;font-size:15px;font-weight:900;cursor:pointer;font-family:inherit;letter-spacing:.3px">3-4 Defense</button>
