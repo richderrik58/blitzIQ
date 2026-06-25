@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0">
-  <title>DefWise — Defensive Scouting</title>
+  <title>DefWise — Free Defensive Scouting &amp; Game-Day Predictor</title>
   <meta name="google-site-verification" content="zbQxkRFGOgmFGFXONeM7lxP9oZ_8WU_EdtzopzDQVD0" />
   <!-- PWA: installable + offline -->
   <link rel="manifest" href="manifest.webmanifest">
@@ -24,6 +24,23 @@
   <meta name="twitter:title" content="DefWise — Scout smarter. Call the game from the box.">
   <meta name="twitter:description" content="Free, film-less defensive scouting + a game-day predictor for high-school coaches. Import your Hudl export and know what's coming on 3rd &amp; long.">
   <meta name="twitter:image" content="https://defwise.com/og-image.png">
+  <!-- Structured data: helps Google understand this is a free coaching app with paid tiers -->
+  <script type="application/ld+json">
+  {
+    "@context":"https://schema.org",
+    "@type":"SoftwareApplication",
+    "name":"DefWise",
+    "applicationCategory":"SportsApplication",
+    "operatingSystem":"Web, iPadOS, Android",
+    "description":"Free film-less defensive football scouting and a game-day predictor for high-school coaches. Import your Hudl tendency export and know what the offense runs on 3rd & long — on your iPad, offline.",
+    "url":"https://defwise.com/",
+    "offers":[
+      {"@type":"Offer","name":"Free","price":"0","priceCurrency":"USD"},
+      {"@type":"Offer","name":"Season Pass (Individual)","price":"29","priceCurrency":"USD"},
+      {"@type":"Offer","name":"Program (Whole Staff)","price":"99","priceCurrency":"USD"}
+    ]
+  }
+  </script>
   <link rel="icon" type="image/png" href="icon-192.png">
   <link rel="apple-touch-icon" href="apple-touch-icon.png">
   <meta name="apple-mobile-web-app-capable" content="yes">
