@@ -5378,14 +5378,62 @@ function buildPlayRoutes(f, offPreset, playName){
 // Static SVG diagram of a single play: offense aligned to the formation, defense
 // in its shell flipped to the offense's strength, and the play's routes drawn.
 // Used in the practice script so each rep shows the look the scout team must give.
+// Align the defense TO the offense (canonical rules): DL shades by technique,
+// LBs over guards/TE, CBs on the #1s, overhang on the slot, safeties to strength.
+// strongLeft = strength to the left. Returns 11 defenders with absolute xf/yd.
+function alignDefense(off, front, strongLeft){
+  const ol = off.filter(p=>p.type==='OL'||p.type==='C').sort((a,b)=>a.xf-b.xf);
+  if(ol.length<5){ const fb=CV_PRESETS[front]||CV_PRESETS['4-3']; return fb.map(p=>({...p,xf:strongLeft?1-p.xf:p.xf})); }
+  const LT=ol[0],LG=ol[1],C=ol[2],RG=ol[3],RT=ol[4];
+  const recv = off.filter(p=>p.type==='WR'||p.type==='TE').sort((a,b)=>a.xf-b.xf);
+  const te = off.find(p=>p.type==='TE');
+  const sgn = strongLeft ? -1 : 1;                           // +1 = strength right
+  const sG=sgn>0?RG:LG, wG=sgn>0?LG:RG, sT=sgn>0?RT:LT, wT=sgn>0?LT:RT;
+  const left=recv.filter(r=>r.xf<0.5), right=recv.filter(r=>r.xf>0.5);
+  const n1L=left[0]||null, n1R=right[right.length-1]||null;
+  const strongR=(sgn>0?right:left).slice().sort((a,b)=>Math.abs(a.xf-0.5)-Math.abs(b.xf-0.5)); // inside→out
+  const weakR=(sgn>0?left:right).slice().sort((a,b)=>Math.abs(a.xf-0.5)-Math.abs(b.xf-0.5));
+  const slot=strongR[1]||null, wslot=weakR[1]||null;
+  const teStrong = te && ((te.xf>0.5)===(sgn>0));
+  const LOS=-38, dLB=-100, dCB=-120, dNK=-100, dSS=-150, dFS=-190, sh=0.02;
+  const D=[]; const add=(t,xf,yd)=>D.push({type:t,team:'def',xf:_clampF(xf),yd});
+  if(front==='3-4'){
+    add('NT',C.xf,LOS); add('DE',sT.xf,LOS); add('DE',wT.xf,LOS);
+    add('LB',sG.xf,dLB); add('LB',wG.xf,dLB);                                 // ILBs over the guards
+    add('LB', teStrong? te.xf+sgn*0.03 : sT.xf+sgn*0.05, teStrong?-58:-70);   // strong OLB on TE/edge
+    add('LB', wT.xf-sgn*0.05, -70);                                           // weak OLB off the edge
+  } else if(front==='3-3-5'||front==='3-3'){
+    add('NT',C.xf,LOS); add('DE',sT.xf,LOS); add('DE',wT.xf,LOS);
+    add('MLB',C.xf,-78); add('LB',sT.xf,-78); add('LB',wT.xf,-78);            // 3 LBs stacked behind the DL
+  } else {                                                                     // 4-3 (over front)
+    add('DT', C.xf+sgn*0.028, LOS);                                           // 1-tech (strong A)
+    add('DT', wG.xf-sgn*sh, LOS);                                             // 3-tech (weak B)
+    add('DE', sT.xf+sgn*sh, LOS);                                             // strong 5-tech
+    add('DE', wT.xf-sgn*sh, LOS);                                             // weak 5-tech
+    add('LB', teStrong? te.xf+sgn*0.03 : sG.xf+sgn*0.02, teStrong?-78:dLB);   // Sam to TE/strong
+    add('MLB', C.xf+sgn*0.01, dLB);                                           // Mike over center
+    add('LB', wG.xf-sgn*0.01, dLB);                                           // Will over weak guard
+  }
+  // Secondary — corners on the #1s
+  add('CB', n1L? n1L.xf+0.012 : 0.06, dCB);
+  add('CB', n1R? n1R.xf-0.012 : 0.94, dCB);
+  if(front==='3-3-5'||front==='3-3'){                                          // 5 DBs: 2 overhangs + deep FS
+    add('SS', slot? slot.xf-sgn*0.03 : (0.5+sgn*0.12), dNK);                   // strong overhang (Spur)
+    add('SS', wslot? wslot.xf+sgn*0.03 : (0.5-sgn*0.12), dNK);                 // weak overhang (Rover)
+    add('FS', 0.5, dFS);
+  } else {                                                                     // 4 DBs: overhang to slot + deep FS
+    add('SS', slot? slot.xf-sgn*0.03 : (0.5+sgn*0.16), slot?dNK:dSS);          // nickel/SS over the slot or to strength
+    add('FS', 0.5, dFS);
+  }
+  return D;
+}
 function playDiagramSVG(f, playName, isRun){
   const W=340, H=318, LY=205, MX=16, FW=W-2*MX, sc=0.62;
   const X = xf => +(MX + xf*FW).toFixed(1);
   const Y = yd => +(LY + yd*sc).toFixed(1);
   const offPreset = formationPreset(f);
   const off = CV_PRESETS[offPreset] || CV_PRESETS['spread'];
-  const def = CV_PRESETS[getDefPreset(f)] || CV_PRESETS['4-3'];
-  // Strength from the actual alignment: more WR/TE left → flip the defensive front.
+  // Strength from the actual alignment (TE → receivers → RB).
   const recv = off.filter(p=>p.type==='WR'||p.type==='TE');
   // Strength call (coach's rule): TE side first, then receiver count, then RB.
   const strongLeft = (()=>{
@@ -5397,6 +5445,7 @@ function playDiagramSVG(f, playName, isRun){
     const rb=off.find(p=>p.type==='RB'||p.type==='FB');
     return rb ? rb.xf<0.5 : false;
   })();
+  const def = alignDefense(off, getDefPreset(f), strongLeft);   // defense lines up TO the offense
   const lbl = (cx,cy,t,c) => t ? `<text x="${cx}" y="${cy+2.6}" font-size="7" font-weight="700" text-anchor="middle" fill="${c}">${t}</text>` : '';
   const offSVG = off.map(p=>{
     const cx=X(p.xf), cy=Y(p.yd);
@@ -5405,7 +5454,7 @@ function playDiagramSVG(f, playName, isRun){
     return `<circle cx="${cx}" cy="${cy}" r="7.4" fill="#13294b" stroke="#fff" stroke-width="0.9"/>`+lbl(cx,cy,p.type,'#fff');
   }).join('');
   const defSVG = def.map(p=>{
-    const cx=X(strongLeft ? 1-p.xf : p.xf), cy=Y(p.yd);
+    const cx=X(p.xf), cy=Y(p.yd);
     return `<circle cx="${cx}" cy="${cy}" r="7.4" fill="#fff" stroke="#c0392b" stroke-width="1.5"/>`+lbl(cx,cy,p.type,'#c0392b');
   }).join('');
   const routeSVG = buildPlayPolylines(f, offPreset, playName).map(pl=>{
