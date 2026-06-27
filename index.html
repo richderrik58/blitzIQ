@@ -5283,7 +5283,16 @@ function playDiagramSVG(f, playName, isRun){
   const def = CV_PRESETS[getDefPreset(f)] || CV_PRESETS['4-3'];
   // Strength from the actual alignment: more WR/TE left → flip the defensive front.
   const recv = off.filter(p=>p.type==='WR'||p.type==='TE');
-  const strongLeft = recv.filter(p=>p.xf<0.5).length > recv.length/2;
+  // Strength call (coach's rule): TE side first, then receiver count, then RB.
+  const strongLeft = (()=>{
+    const te=off.filter(p=>p.type==='TE');
+    const tl=te.filter(p=>p.xf<0.5).length, tr=te.length-tl;
+    if(te.length && tl!==tr) return tl>tr;
+    const wl=recv.filter(p=>p.xf<0.5).length, wr=recv.length-wl;
+    if(wl!==wr) return wl>wr;
+    const rb=off.find(p=>p.type==='RB'||p.type==='FB');
+    return rb ? rb.xf<0.5 : false;
+  })();
   const lbl = (cx,cy,t,c) => t ? `<text x="${cx}" y="${cy+2.6}" font-size="7" font-weight="700" text-anchor="middle" fill="${c}">${t}</text>` : '';
   const offSVG = off.map(p=>{
     const cx=X(p.xf), cy=Y(p.yd);
@@ -6381,18 +6390,18 @@ const CV_PRESETS = {
   ],
   // ── OFFENSIVE — WRs at sidelines, OL tighter (18px gap / 46px c-to-c) ──────────
   // OL at center±0.032 increments (20px = 2×CV_R — shoulder-to-shoulder)
-  'pro-set':[ // Pro I: split end L, TE tight R, flanker R off-ball, FB+RB stacked
-    {type:'WR', team:'off', xf:0.06, yd:30},
+  'pro-set':[ // Pro Right: TE on LOS right (single back) — "Pro" = TE on LOS, NOT the I
+    {type:'WR', team:'off', xf:0.05, yd:30},   // X split end (left, on LOS)
     {type:'OL', team:'off', xf:0.436,yd:30},
     {type:'OL', team:'off', xf:0.468,yd:30},
     {type:'C',  team:'off', xf:0.50, yd:30},
     {type:'OL', team:'off', xf:0.532,yd:30},
     {type:'OL', team:'off', xf:0.564,yd:30},
-    {type:'TE', team:'off', xf:0.596,yd:30},
-    {type:'WR', team:'off', xf:0.92, yd:40},
-    {type:'QB', team:'off', xf:0.50, yd:68},
-    {type:'FB', team:'off', xf:0.50, yd:104},
-    {type:'RB', team:'off', xf:0.50, yd:140},
+    {type:'TE', team:'off', xf:0.596,yd:30},   // Y tight end (right, on LOS)
+    {type:'WR', team:'off', xf:0.78, yd:40},   // slot right (off ball)
+    {type:'WR', team:'off', xf:0.92, yd:40},   // Z flanker right (off ball)
+    {type:'QB', team:'off', xf:0.50, yd:72},
+    {type:'RB', team:'off', xf:0.50, yd:100},  // single back
   ],
   'trips':[ // split end L, trips R (outer on line, 2 inner off-ball), single back
     {type:'WR', team:'off', xf:0.05, yd:30},
@@ -6498,18 +6507,18 @@ const CV_PRESETS = {
     {type:'QB', team:'off', xf:0.50, yd:72},
     {type:'RB', team:'off', xf:0.60, yd:72},
   ],
-  'pro-l-twins-r-strong':[ // TE tight L (end), twins R (slot off, split end on line), FB+RB
-    {type:'TE', team:'off', xf:0.404,yd:30},
+  'pro-l-twins-r-strong':[ // TE on LOS left (single back), twins right, X split left
+    {type:'TE', team:'off', xf:0.404,yd:30},   // Y tight end (left, on LOS = the "Pro L")
+    {type:'WR', team:'off', xf:0.06, yd:40},    // X (left, off ball — TE is the end)
     {type:'OL', team:'off', xf:0.436,yd:30},
     {type:'OL', team:'off', xf:0.468,yd:30},
     {type:'C',  team:'off', xf:0.50, yd:30},
     {type:'OL', team:'off', xf:0.532,yd:30},
     {type:'OL', team:'off', xf:0.564,yd:30},
-    {type:'WR', team:'off', xf:0.84, yd:40},
-    {type:'WR', team:'off', xf:0.95, yd:30},
-    {type:'QB', team:'off', xf:0.50, yd:68},
-    {type:'FB', team:'off', xf:0.50, yd:104},
-    {type:'RB', team:'off', xf:0.50, yd:140},
+    {type:'WR', team:'off', xf:0.84, yd:40},    // slot right (off ball)
+    {type:'WR', team:'off', xf:0.95, yd:30},    // split end right (on LOS)
+    {type:'QB', team:'off', xf:0.50, yd:72},
+    {type:'RB', team:'off', xf:0.50, yd:100},  // single back
   ],
   'trips-l-weak':[ // trips L, split end R, single back (weak/right)
     {type:'WR', team:'off', xf:0.05, yd:30},
