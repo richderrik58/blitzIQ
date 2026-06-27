@@ -5174,6 +5174,71 @@ function motionLines(nm, preset){
   return out;
 }
 
+// ── RUN BLOCKING SCHEMES (canonical assignments; gap & zone) ──────────────────
+// Linemen by role for a given playside direction (dir +1 = right). Sorted OL =
+// [LT, LG, C, RG, RT]. Returns playside/backside guard & tackle + center.
+function _olRoles(preset, dir){
+  const ol=preset.filter(p=>p.type==='OL'||p.type==='C').sort((a,b)=>a.xf-b.xf);
+  if(ol.length<5) return null;
+  return dir>0 ? {PST:ol[4],PSG:ol[3],C:ol[2],BSG:ol[1],BST:ol[0]}
+               : {PST:ol[0],PSG:ol[1],C:ol[2],BSG:ol[3],BST:ol[4]};
+}
+function detectRunScheme(nm){
+  if(/\bBUCK\b|\bSWEEP\b/.test(nm)) return 'sweep';
+  if(/\bCOUNTER\b/.test(nm)) return 'counter';
+  if(/\bPOWER\b/.test(nm)) return 'power';
+  if(/\bTRAP\b|\bWHAM\b/.test(nm)) return 'trap';
+  if(/\b(OUTSIDE|WIDE|STRETCH)\s*ZONE\b|\bOZONE\b/.test(nm)) return 'ozone';
+  if(/\bZONE\b|\bINSIDE\s*ZONE\b|\bIZ\b/.test(nm)) return 'izone';
+  return null;
+}
+// Scheme-specific OL/FB blocking paths. ps = playside sign (+1 right, -1 left).
+function schemeBlocks(preset, scheme, dir){
+  const R=_olRoles(preset,dir); if(!R) return [];
+  const ps=dir, lines=[];
+  const edge=_clampF(0.5+ps*0.20), hole=_clampF(0.5+ps*0.10);
+  const fb=preset.find(p=>p.type==='FB');
+  const te=preset.filter(p=>p.type==='TE').sort((a,b)=> ps>0 ? b.xf-a.xf : a.xf-b.xf)[0]; // playside TE
+  const down  = p => _blk([[p.xf,p.yd],[_clampF(p.xf-ps*0.03),-14]]);                 // down block (seal inside)
+  const hinge = p => _blk([[p.xf,p.yd],[_clampF(p.xf-ps*0.015),p.yd-8]]);             // backside hinge
+  const reach = p => _blk([[p.xf,p.yd],[_clampF(p.xf+ps*0.04),p.yd-2],[_clampF(p.xf+ps*0.07),-12]]);
+  const pullKick = p => _blk([[p.xf,p.yd],[0.5,p.yd+5],[edge,p.yd+2],[_clampF(edge+ps*0.02),-8]]);     // pull, kick EMOL
+  const pullWrap = p => _blk([[p.xf,p.yd],[0.5,p.yd+6],[_clampF(hole-ps*0.01),p.yd+2],[hole,-34]]);    // pull, wrap to LB
+  const fbKick = () => fb ? _blk([[fb.xf,fb.yd],[_clampF(0.5+ps*0.08),34],[edge,30],[_clampF(edge+ps*0.02),-8]]) : null;
+  if(scheme==='power'){
+    lines.push(down(R.PST),down(R.PSG),down(R.C)); if(te) lines.push(down(te));
+    lines.push(pullWrap(R.BSG), hinge(R.BST));
+    const k=fbKick(); if(k) lines.push(k);
+  } else if(scheme==='counter'){
+    lines.push(down(R.PST),down(R.PSG),down(R.C)); if(te) lines.push(down(te));
+    lines.push(pullKick(R.BSG), pullWrap(R.BST));                 // G kicks, T wraps
+  } else if(scheme==='trap'){
+    lines.push(_blk([[R.PSG.xf,R.PSG.yd],[_clampF(R.PSG.xf-ps*0.02),-30]]));          // PSG climbs to LB (leaves 3-tech)
+    lines.push(down(R.PST),down(R.C),hinge(R.BST));
+    lines.push(_blk([[R.BSG.xf,R.BSG.yd],[0.5,R.BSG.yd+4],[_clampF(0.5+ps*0.06),-6]]));// BSG traps the unblocked DL
+  } else if(scheme==='sweep'){
+    lines.push(pullKick(R.PSG), pullWrap(R.BSG), reach(R.C), down(R.PST), hinge(R.BST));
+    if(te) lines.push(down(te));
+  } else if(scheme==='izone'){
+    [R.BST,R.BSG,R.C,R.PSG,R.PST].forEach(p=>lines.push(_blk([[p.xf,p.yd],[_clampF(p.xf+ps*0.02),p.yd-4],[_clampF(p.xf+ps*0.03),-22]])));
+    if(te) lines.push(down(te));
+  } else if(scheme==='ozone'){
+    [R.BST,R.BSG,R.C,R.PSG,R.PST].forEach(p=>lines.push(reach(p)));
+    if(te) lines.push(reach(te));
+  }
+  return lines;
+}
+// Ball-carrier path per scheme (single green arrow with the scheme's track).
+function schemeCarrier(sx, sy, scheme, dir){
+  const ps=dir, edge=_clampF(0.5+ps*0.20), hole=_clampF(0.5+ps*0.10);
+  if(scheme==='counter') return [[sx,sy],[_clampF(sx-ps*0.06),sy-2],[0.5,50],[hole,-4],[_clampF(hole+ps*0.02),-46]];
+  if(scheme==='sweep')   return [[sx,sy],[0.5,56],[_clampF(0.5+ps*0.16),40],[edge,12],[edge,-30]];
+  if(scheme==='trap')    return [[sx,sy],[0.5,48],[_clampF(0.5+ps*0.05),-6],[_clampF(0.5+ps*0.05),-46]];
+  if(scheme==='ozone')   return [[sx,sy],[_clampF(0.5+ps*0.10),54],[edge,30],[edge,-6],[_clampF(edge-ps*0.03),-44]];
+  if(scheme==='izone')   return [[sx,sy],[0.5,50],[hole,0],[_clampF(hole-ps*0.02),-46]];
+  return [[sx,sy],[0.5,50],[hole,-4],[hole,-46]]; // power / default downhill
+}
+
 // Build per-receiver / ball-carrier route POLYLINES from a Hudl play call.
 // Each entry: {color, pts:[[xf, yPx], …]}; yPx = px from LOS (negative = upfield).
 function buildPlayPolylines(f, offPreset, playName){
@@ -5196,6 +5261,17 @@ function buildPlayPolylines(f, offPreset, playName){
         || preset.find(p=>p.type==='FB') || preset.find(p=>p.type==='QB');
     }
     const sx = carrier?carrier.xf:0.6, sy = carrier?carrier.yd:72;
+    // Recognized blocking scheme → draw the canonical pulls/kicks/wraps + track.
+    const scheme = detectRunScheme(nm);
+    if(scheme){
+      const slines = schemeBlocks(preset, scheme, dir);
+      preset.filter(p=>p.type==='WR').forEach(p=>slines.push(wrStalk(p)));
+      if(carrierType!=='QB'){ const qh=qbHandoff(preset,dir); if(qh) slines.push(qh); }
+      slines.push({color:RUNC, pts: schemeCarrier(sx, sy, scheme, dir)});
+      const sboot=bootlegPath(nm,preset); if(sboot) slines.push(sboot);
+      slines.push(...motionLines(nm, preset));
+      return slines;
+    }
     const down = /POWER|COUNTER|TRAP/.test(nm);
     const lines = olRunBlocks(preset, dir, down);                       // OL down/drive blocks
     preset.filter(p=>p.type==='TE').forEach(p=>lines.push(teDownBlock(p)));   // TE seals the edge
