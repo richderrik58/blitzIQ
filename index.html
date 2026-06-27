@@ -5067,11 +5067,22 @@ function detectConcept(nm){
   if(/\bMESH\b/.test(nm)) return 'MESH';
   if(/POST\s*-?\s*DIG/.test(nm)) return 'POSTDIG';
   if(/POST\s*-?\s*WHEEL/.test(nm)) return 'POSTWHEEL';
+  if(/\b(BOOT|BOOTLEG|WAGGLE|NAKED)\b/.test(nm)) return 'FLOOD';  // boot → 3-level flood to the roll side
   return null;
 }
 function applyConcept(concept, nm, recv, out){
   if(concept==='FOURVERT'){ recv.forEach((r,i)=> out[i]={word:(r.xf>0.30&&r.xf<0.70)?'SEAM':'GO'}); return; }
   if(concept==='ALLCURL'){ recv.forEach((r,i)=> out[i]={word:'CURL'}); return; }
+  if(concept==='SMASH'){                                  // BOTH sides: #1 hitch (low), #2 corner (high)
+    [-1,1].forEach(sd=>{
+      const sr=recv.map((r,i)=>({i,r})).filter(o=> sd<0?o.r.xf<0.5:o.r.xf>0.5)
+        .sort((a,b)=> sd<0?a.r.xf-b.r.xf:b.r.xf-a.r.xf);  // outside → in
+      if(sr[0]) out[sr[0].i]={word:'HITCH'};
+      if(sr[1]) out[sr[1].i]={word:'CORNER'};
+    });
+    recv.forEach((r,i)=>{ if(!out[i]) out[i]={word:'HITCH'}; });
+    return;
+  }
   const named = /\bLEFT\b|\bL\b/.test(nm) ? -1 : /\bRIGHT\b|\bR\b/.test(nm) ? 1 : null;
   const leftN = recv.filter(r=>r.xf<0.5).length;
   const side = named!==null ? named : (leftN>recv.length-leftN ? -1 : 1);    // named, else trips/strength
@@ -5306,10 +5317,12 @@ function buildPlayPolylines(f, offPreset, playName){
   };
   // For a screen, the nearest-to-the-call receiver catches it; everyone else blocks.
   let screenTarget = -1;
-  if(isScreen){
-    const explicit = assign.findIndex(a=>a&&/BUBBLE|SCREEN|SMOKE|NOW|TUNNEL/.test(a.word||''));
-    screenTarget = explicit>=0 ? explicit
-      : recv.map((r,i)=>({i,d:Math.abs(r.xf-0.5)})).sort((a,b)=>a.d-b.d)[0].i; // innermost slot
+  if(isScreen){                                         // bubble → the SLOT on the called/strength side
+    const sd = /\bLEFT\b|\bL\b/.test(nm) ? -1 : /\bRIGHT\b|\bR\b/.test(nm) ? 1
+             : (recv.filter(r=>r.xf>0.5).length >= recv.filter(r=>r.xf<0.5).length ? 1 : -1);
+    const sr = recv.map((r,i)=>({i,r})).filter(o=> sd>0?o.r.xf>0.5:o.r.xf<0.5)
+      .sort((a,b)=> sd>0?b.r.xf-a.r.xf:a.r.xf-b.r.xf);   // outside → in
+    screenTarget = (sr[1]||sr[0]||{i:0}).i;              // slot (#2), else outermost
   }
   const lines = olPassPro(preset);                    // 5 OL pass-set first
   recv.forEach((r,i)=>{
