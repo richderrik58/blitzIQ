@@ -5216,13 +5216,17 @@ function schemeBlocks(preset, scheme, dir){
   const pullKick = p => _blk([[p.xf,p.yd],[0.5,p.yd+5],[edge,p.yd+2],[_clampF(edge+ps*0.02),-8]]);     // pull, kick EMOL
   const pullWrap = p => _blk([[p.xf,p.yd],[0.5,p.yd+6],[_clampF(hole-ps*0.01),p.yd+2],[hole,-34]]);    // pull, wrap to LB
   const fbKick = () => fb ? _blk([[fb.xf,fb.yd],[_clampF(0.5+ps*0.08),34],[edge,30],[_clampF(edge+ps*0.02),-8]]) : null;
+  const fbWrap = () => fb ? _blk([[fb.xf,fb.yd],[_clampF(fb.xf-ps*0.06),fb.yd-2],[hole,fb.yd-12],[hole,-32]]) : null; // jab backside, wrap to LB
   if(scheme==='power'){
-    lines.push(down(R.PST),down(R.PSG),down(R.C)); if(te) lines.push(down(te));
-    lines.push(pullWrap(R.BSG), hinge(R.BST));
-    const k=fbKick(); if(k) lines.push(k);
+    lines.push(down(R.PST),down(R.PSG),down(R.C)); if(te) lines.push(down(te));   // TE/PST/PSG/C block down, protect puller
+    lines.push(pullWrap(R.BSG), hinge(R.BST));                    // BSG wraps to playside LB; BST cuts off & protects
+    const k=fbKick(); if(k) lines.push(k);                        // FB kicks the EMOL
   } else if(scheme==='counter'){
-    lines.push(down(R.PST),down(R.PSG),down(R.C)); if(te) lines.push(down(te));
-    lines.push(pullKick(R.BSG), pullWrap(R.BST));                 // G kicks, T wraps
+    lines.push(down(R.PST),down(R.PSG),down(R.C)); if(te) lines.push(down(te));   // PST/PSG block down, C protects the puller
+    lines.push(pullKick(R.BSG));                                  // backside guard pulls & kicks the EMOL
+    const fw=fbWrap();
+    if(fw){ lines.push(fw, down(R.BST)); }                        // FB jabs then wraps to playside LB; BST stays in & protects
+    else { lines.push(pullWrap(R.BST)); }                         // no FB (gun) → backside tackle wraps (Counter GT)
   } else if(scheme==='trap'){
     lines.push(_blk([[R.PSG.xf,R.PSG.yd],[_clampF(R.PSG.xf-ps*0.02),-30]]));          // PSG climbs to LB (leaves 3-tech)
     lines.push(down(R.PST),down(R.C),hinge(R.BST));
@@ -5273,7 +5277,11 @@ function buildPlayPolylines(f, offPreset, playName){
     }
     const sx = carrier?carrier.xf:0.6, sy = carrier?carrier.yd:72;
     // Recognized blocking scheme → draw the canonical pulls/kicks/wraps + track.
-    const scheme = detectRunScheme(nm);
+    let scheme = detectRunScheme(nm);
+    if(!scheme && rc && /^\s*\d{2}\s*$/.test(nm)){        // bare 2-digit run number → hole implies zone scheme
+      if(rc.gap==='A') scheme='izone';                    // 22 / 23 = inside zone
+      else if(rc.gap==='D') scheme='ozone';               // 28 / 29 = outside zone
+    }
     if(scheme){
       const slines = schemeBlocks(preset, scheme, dir);
       preset.filter(p=>p.type==='WR').forEach(p=>slines.push(wrStalk(p)));
@@ -6483,11 +6491,11 @@ const CV_PRESETS = {
   // OL at center±0.032 increments (20px = 2×CV_R — shoulder-to-shoulder)
   'trips':[ // split end L, trips R (outer on line, 2 inner off-ball), single back
     {type:'WR', team:'off', xf:0.05, yd:30},
-    {type:'OL', team:'off', xf:0.436,yd:30},
-    {type:'OL', team:'off', xf:0.468,yd:30},
+    {type:'OL', team:'off', xf:0.408,yd:30},
+    {type:'OL', team:'off', xf:0.454,yd:30},
     {type:'C',  team:'off', xf:0.50, yd:30},
-    {type:'OL', team:'off', xf:0.532,yd:30},
-    {type:'OL', team:'off', xf:0.564,yd:30},
+    {type:'OL', team:'off', xf:0.546,yd:30},
+    {type:'OL', team:'off', xf:0.592,yd:30},
     {type:'QB', team:'off', xf:0.50, yd:72},
     {type:'RB', team:'off', xf:0.60, yd:72},
     {type:'WR', team:'off', xf:0.77, yd:40},
@@ -6497,11 +6505,11 @@ const CV_PRESETS = {
   'doubles':[ // 2x2 no-TE (generic 4-wide look) — also the default fallback
     {type:'WR', team:'off', xf:0.05, yd:30},
     {type:'WR', team:'off', xf:0.17, yd:40},
-    {type:'OL', team:'off', xf:0.436,yd:30},
-    {type:'OL', team:'off', xf:0.468,yd:30},
+    {type:'OL', team:'off', xf:0.408,yd:30},
+    {type:'OL', team:'off', xf:0.454,yd:30},
     {type:'C',  team:'off', xf:0.50, yd:30},
-    {type:'OL', team:'off', xf:0.532,yd:30},
-    {type:'OL', team:'off', xf:0.564,yd:30},
+    {type:'OL', team:'off', xf:0.546,yd:30},
+    {type:'OL', team:'off', xf:0.592,yd:30},
     {type:'WR', team:'off', xf:0.83, yd:40},
     {type:'WR', team:'off', xf:0.95, yd:30},
     {type:'QB', team:'off', xf:0.50, yd:72},
@@ -6510,11 +6518,11 @@ const CV_PRESETS = {
   'spread':[ // TE flexed off the tackle at 45 (right, tight to RT); 2 WR left, split end right
     {type:'WR', team:'off', xf:0.05, yd:30},
     {type:'WR', team:'off', xf:0.18, yd:40},
-    {type:'OL', team:'off', xf:0.436,yd:30},
-    {type:'OL', team:'off', xf:0.468,yd:30},
+    {type:'OL', team:'off', xf:0.408,yd:30},
+    {type:'OL', team:'off', xf:0.454,yd:30},
     {type:'C',  team:'off', xf:0.50, yd:30},
-    {type:'OL', team:'off', xf:0.532,yd:30},
-    {type:'OL', team:'off', xf:0.564,yd:30},
+    {type:'OL', team:'off', xf:0.546,yd:30},
+    {type:'OL', team:'off', xf:0.592,yd:30},
     {type:'TE', team:'off', xf:0.61, yd:42},
     {type:'WR', team:'off', xf:0.95, yd:30},
     {type:'QB', team:'off', xf:0.50, yd:72},
@@ -6522,11 +6530,11 @@ const CV_PRESETS = {
   ],
   'flexbone':[ // slotbacks tucked closer to the tackles
     {type:'WR', team:'off', xf:0.05, yd:30},
-    {type:'OL', team:'off', xf:0.436,yd:30},
-    {type:'OL', team:'off', xf:0.468,yd:30},
+    {type:'OL', team:'off', xf:0.408,yd:30},
+    {type:'OL', team:'off', xf:0.454,yd:30},
     {type:'C',  team:'off', xf:0.50, yd:30},
-    {type:'OL', team:'off', xf:0.532,yd:30},
-    {type:'OL', team:'off', xf:0.564,yd:30},
+    {type:'OL', team:'off', xf:0.546,yd:30},
+    {type:'OL', team:'off', xf:0.592,yd:30},
     {type:'WR', team:'off', xf:0.95, yd:30},
     {type:'RB', team:'off', xf:0.39, yd:44},
     {type:'RB', team:'off', xf:0.61, yd:44},
@@ -6548,12 +6556,12 @@ const CV_PRESETS = {
   ],
   'i-form':[ // QB under center; FB in the I; tailback behind FB; TE right
     {type:'WR', team:'off', xf:0.06, yd:30},
-    {type:'OL', team:'off', xf:0.436,yd:30},
-    {type:'OL', team:'off', xf:0.468,yd:30},
+    {type:'OL', team:'off', xf:0.408,yd:30},
+    {type:'OL', team:'off', xf:0.454,yd:30},
     {type:'C',  team:'off', xf:0.50, yd:30},
-    {type:'OL', team:'off', xf:0.532,yd:30},
-    {type:'OL', team:'off', xf:0.564,yd:30},
-    {type:'TE', team:'off', xf:0.596,yd:30},
+    {type:'OL', team:'off', xf:0.546,yd:30},
+    {type:'OL', team:'off', xf:0.592,yd:30},
+    {type:'TE', team:'off', xf:0.62,yd:30},
     {type:'WR', team:'off', xf:0.92, yd:40},
     {type:'QB', team:'off', xf:0.50, yd:48},
     {type:'FB', team:'off', xf:0.50, yd:80},
@@ -6562,11 +6570,11 @@ const CV_PRESETS = {
   'empty':[ // 3x2 empty: outer WRs on line, inner off-ball, no back
     {type:'WR', team:'off', xf:0.04, yd:30},
     {type:'WR', team:'off', xf:0.15, yd:40},
-    {type:'OL', team:'off', xf:0.436,yd:30},
-    {type:'OL', team:'off', xf:0.468,yd:30},
+    {type:'OL', team:'off', xf:0.408,yd:30},
+    {type:'OL', team:'off', xf:0.454,yd:30},
     {type:'C',  team:'off', xf:0.50, yd:30},
-    {type:'OL', team:'off', xf:0.532,yd:30},
-    {type:'OL', team:'off', xf:0.564,yd:30},
+    {type:'OL', team:'off', xf:0.546,yd:30},
+    {type:'OL', team:'off', xf:0.592,yd:30},
     {type:'WR', team:'off', xf:0.78, yd:40},
     {type:'WR', team:'off', xf:0.87, yd:40},
     {type:'WR', team:'off', xf:0.96, yd:30},
@@ -6574,12 +6582,12 @@ const CV_PRESETS = {
   ],
   'king':[ // QB under center; deep tailback; FB offset behind STRONG (TE-side) guard
     {type:'WR', team:'off', xf:0.05, yd:30},
-    {type:'OL', team:'off', xf:0.436,yd:30},
-    {type:'OL', team:'off', xf:0.468,yd:30},
+    {type:'OL', team:'off', xf:0.408,yd:30},
+    {type:'OL', team:'off', xf:0.454,yd:30},
     {type:'C',  team:'off', xf:0.50, yd:30},
-    {type:'OL', team:'off', xf:0.532,yd:30},
-    {type:'OL', team:'off', xf:0.564,yd:30},
-    {type:'TE', team:'off', xf:0.596,yd:30},
+    {type:'OL', team:'off', xf:0.546,yd:30},
+    {type:'OL', team:'off', xf:0.592,yd:30},
+    {type:'TE', team:'off', xf:0.62,yd:30},
     {type:'WR', team:'off', xf:0.92, yd:40},
     {type:'QB', team:'off', xf:0.50, yd:48},
     {type:'FB', team:'off', xf:0.53, yd:70},
@@ -6587,12 +6595,12 @@ const CV_PRESETS = {
   ],
   'queen':[ // QB under center; deep tailback; FB offset behind WEAK guard
     {type:'WR', team:'off', xf:0.05, yd:30},
-    {type:'OL', team:'off', xf:0.436,yd:30},
-    {type:'OL', team:'off', xf:0.468,yd:30},
+    {type:'OL', team:'off', xf:0.408,yd:30},
+    {type:'OL', team:'off', xf:0.454,yd:30},
     {type:'C',  team:'off', xf:0.50, yd:30},
-    {type:'OL', team:'off', xf:0.532,yd:30},
-    {type:'OL', team:'off', xf:0.564,yd:30},
-    {type:'TE', team:'off', xf:0.596,yd:30},
+    {type:'OL', team:'off', xf:0.546,yd:30},
+    {type:'OL', team:'off', xf:0.592,yd:30},
+    {type:'TE', team:'off', xf:0.62,yd:30},
     {type:'WR', team:'off', xf:0.92, yd:40},
     {type:'QB', team:'off', xf:0.50, yd:48},
     {type:'FB', team:'off', xf:0.47, yd:70},
@@ -6600,11 +6608,11 @@ const CV_PRESETS = {
   ],
   'trey-r-weak':[ // TE OFF ball, NEXT to the RT at 45; farthest WR on the ball; RB weak (left)
     {type:'WR', team:'off', xf:0.05, yd:30},
-    {type:'OL', team:'off', xf:0.436,yd:30},
-    {type:'OL', team:'off', xf:0.468,yd:30},
+    {type:'OL', team:'off', xf:0.408,yd:30},
+    {type:'OL', team:'off', xf:0.454,yd:30},
     {type:'C',  team:'off', xf:0.50, yd:30},
-    {type:'OL', team:'off', xf:0.532,yd:30},
-    {type:'OL', team:'off', xf:0.564,yd:30},
+    {type:'OL', team:'off', xf:0.546,yd:30},
+    {type:'OL', team:'off', xf:0.592,yd:30},
     {type:'TE', team:'off', xf:0.60, yd:42},
     {type:'WR', team:'off', xf:0.84, yd:40},
     {type:'WR', team:'off', xf:0.95, yd:30},
@@ -6615,23 +6623,23 @@ const CV_PRESETS = {
     {type:'WR', team:'off', xf:0.05, yd:30},
     {type:'WR', team:'off', xf:0.14, yd:40},
     {type:'WR', team:'off', xf:0.23, yd:40},
-    {type:'OL', team:'off', xf:0.436,yd:30},
-    {type:'OL', team:'off', xf:0.468,yd:30},
+    {type:'OL', team:'off', xf:0.408,yd:30},
+    {type:'OL', team:'off', xf:0.454,yd:30},
     {type:'C',  team:'off', xf:0.50, yd:30},
-    {type:'OL', team:'off', xf:0.532,yd:30},
-    {type:'OL', team:'off', xf:0.564,yd:30},
+    {type:'OL', team:'off', xf:0.546,yd:30},
+    {type:'OL', team:'off', xf:0.592,yd:30},
     {type:'WR', team:'off', xf:0.95, yd:30},
     {type:'QB', team:'off', xf:0.50, yd:72},
     {type:'RB', team:'off', xf:0.40, yd:72},
   ],
   'pro-l-twins-r-strong':[ // TE on LOS left; twins right; RB set to TE/strength side
-    {type:'TE', team:'off', xf:0.404,yd:30},
+    {type:'TE', team:'off', xf:0.38,yd:30},
     {type:'WR', team:'off', xf:0.06, yd:40},
-    {type:'OL', team:'off', xf:0.436,yd:30},
-    {type:'OL', team:'off', xf:0.468,yd:30},
+    {type:'OL', team:'off', xf:0.408,yd:30},
+    {type:'OL', team:'off', xf:0.454,yd:30},
     {type:'C',  team:'off', xf:0.50, yd:30},
-    {type:'OL', team:'off', xf:0.532,yd:30},
-    {type:'OL', team:'off', xf:0.564,yd:30},
+    {type:'OL', team:'off', xf:0.546,yd:30},
+    {type:'OL', team:'off', xf:0.592,yd:30},
     {type:'WR', team:'off', xf:0.84, yd:40},
     {type:'WR', team:'off', xf:0.95, yd:30},
     {type:'QB', team:'off', xf:0.50, yd:72},
@@ -6641,11 +6649,11 @@ const CV_PRESETS = {
     {type:'WR', team:'off', xf:0.05, yd:30},
     {type:'WR', team:'off', xf:0.14, yd:40},
     {type:'WR', team:'off', xf:0.23, yd:40},
-    {type:'OL', team:'off', xf:0.436,yd:30},
-    {type:'OL', team:'off', xf:0.468,yd:30},
+    {type:'OL', team:'off', xf:0.408,yd:30},
+    {type:'OL', team:'off', xf:0.454,yd:30},
     {type:'C',  team:'off', xf:0.50, yd:30},
-    {type:'OL', team:'off', xf:0.532,yd:30},
-    {type:'OL', team:'off', xf:0.564,yd:30},
+    {type:'OL', team:'off', xf:0.546,yd:30},
+    {type:'OL', team:'off', xf:0.592,yd:30},
     {type:'WR', team:'off', xf:0.95, yd:30},
     {type:'QB', team:'off', xf:0.50, yd:72},
     {type:'RB', team:'off', xf:0.60, yd:72},
@@ -6654,11 +6662,11 @@ const CV_PRESETS = {
     {type:'WR', team:'off', xf:0.05, yd:30},
     {type:'WR', team:'off', xf:0.18, yd:40},
     {type:'TE', team:'off', xf:0.40, yd:42},
-    {type:'OL', team:'off', xf:0.436,yd:30},
-    {type:'OL', team:'off', xf:0.468,yd:30},
+    {type:'OL', team:'off', xf:0.408,yd:30},
+    {type:'OL', team:'off', xf:0.454,yd:30},
     {type:'C',  team:'off', xf:0.50, yd:30},
-    {type:'OL', team:'off', xf:0.532,yd:30},
-    {type:'OL', team:'off', xf:0.564,yd:30},
+    {type:'OL', team:'off', xf:0.546,yd:30},
+    {type:'OL', team:'off', xf:0.592,yd:30},
     {type:'WR', team:'off', xf:0.95, yd:30},
     {type:'QB', team:'off', xf:0.50, yd:72},
     {type:'RB', team:'off', xf:0.40, yd:72},
@@ -6666,23 +6674,23 @@ const CV_PRESETS = {
   'pro-r-twins-l-weak':[ // twins L (outer on line, slot off), TE tight R (end) + flanker off, single back
     {type:'WR', team:'off', xf:0.05, yd:30},
     {type:'WR', team:'off', xf:0.16, yd:40},
-    {type:'OL', team:'off', xf:0.436,yd:30},
-    {type:'OL', team:'off', xf:0.468,yd:30},
+    {type:'OL', team:'off', xf:0.408,yd:30},
+    {type:'OL', team:'off', xf:0.454,yd:30},
     {type:'C',  team:'off', xf:0.50, yd:30},
-    {type:'OL', team:'off', xf:0.532,yd:30},
-    {type:'OL', team:'off', xf:0.564,yd:30},
-    {type:'TE', team:'off', xf:0.596,yd:30},
+    {type:'OL', team:'off', xf:0.546,yd:30},
+    {type:'OL', team:'off', xf:0.592,yd:30},
+    {type:'TE', team:'off', xf:0.62,yd:30},
     {type:'WR', team:'off', xf:0.92, yd:40},
     {type:'QB', team:'off', xf:0.50, yd:72},
     {type:'RB', team:'off', xf:0.40, yd:72},
   ],
   'trey-r-strong':[ // TE OFF ball next to RT; farthest WR ON the ball (right); RB strong (right)
     {type:'WR', team:'off', xf:0.05, yd:30},
-    {type:'OL', team:'off', xf:0.436,yd:30},
-    {type:'OL', team:'off', xf:0.468,yd:30},
+    {type:'OL', team:'off', xf:0.408,yd:30},
+    {type:'OL', team:'off', xf:0.454,yd:30},
     {type:'C',  team:'off', xf:0.50, yd:30},
-    {type:'OL', team:'off', xf:0.532,yd:30},
-    {type:'OL', team:'off', xf:0.564,yd:30},
+    {type:'OL', team:'off', xf:0.546,yd:30},
+    {type:'OL', team:'off', xf:0.592,yd:30},
     {type:'TE', team:'off', xf:0.60, yd:42},
     {type:'WR', team:'off', xf:0.84, yd:40},
     {type:'WR', team:'off', xf:0.95, yd:30},
@@ -6690,26 +6698,26 @@ const CV_PRESETS = {
     {type:'RB', team:'off', xf:0.60, yd:72},
   ],
   'pro-l-wing-l-twins-r-weak':[ // TE on LOS left; wing tight to TE at 45 (off ball); twins right
-    {type:'TE', team:'off', xf:0.404,yd:30},
+    {type:'TE', team:'off', xf:0.38,yd:30},
     {type:'WR', team:'off', xf:0.34, yd:44},
-    {type:'OL', team:'off', xf:0.436,yd:30},
-    {type:'OL', team:'off', xf:0.468,yd:30},
+    {type:'OL', team:'off', xf:0.408,yd:30},
+    {type:'OL', team:'off', xf:0.454,yd:30},
     {type:'C',  team:'off', xf:0.50, yd:30},
-    {type:'OL', team:'off', xf:0.532,yd:30},
-    {type:'OL', team:'off', xf:0.564,yd:30},
+    {type:'OL', team:'off', xf:0.546,yd:30},
+    {type:'OL', team:'off', xf:0.592,yd:30},
     {type:'WR', team:'off', xf:0.84, yd:40},
     {type:'WR', team:'off', xf:0.95, yd:30},
     {type:'QB', team:'off', xf:0.50, yd:72},
     {type:'RB', team:'off', xf:0.60, yd:72},
   ],
   'pro-l-twins-r-weak':[ // TE tight L (end) + flanker L off, twins R, single back
-    {type:'TE', team:'off', xf:0.404,yd:30},
+    {type:'TE', team:'off', xf:0.38,yd:30},
     {type:'WR', team:'off', xf:0.06, yd:40},
-    {type:'OL', team:'off', xf:0.436,yd:30},
-    {type:'OL', team:'off', xf:0.468,yd:30},
+    {type:'OL', team:'off', xf:0.408,yd:30},
+    {type:'OL', team:'off', xf:0.454,yd:30},
     {type:'C',  team:'off', xf:0.50, yd:30},
-    {type:'OL', team:'off', xf:0.532,yd:30},
-    {type:'OL', team:'off', xf:0.564,yd:30},
+    {type:'OL', team:'off', xf:0.546,yd:30},
+    {type:'OL', team:'off', xf:0.592,yd:30},
     {type:'WR', team:'off', xf:0.84, yd:40},
     {type:'WR', team:'off', xf:0.95, yd:30},
     {type:'QB', team:'off', xf:0.50, yd:72},
