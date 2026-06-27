@@ -5228,9 +5228,12 @@ function schemeBlocks(preset, scheme, dir){
     if(fw){ lines.push(fw, down(R.BST)); }                        // FB jabs then wraps to playside LB; BST stays in & protects
     else { lines.push(pullWrap(R.BST)); }                         // no FB (gun) → backside tackle wraps (Counter GT)
   } else if(scheme==='trap'){
-    lines.push(_blk([[R.PSG.xf,R.PSG.yd],[_clampF(R.PSG.xf-ps*0.02),-30]]));          // PSG climbs to LB (leaves 3-tech)
-    lines.push(down(R.PST),down(R.C),hinge(R.BST));
-    lines.push(_blk([[R.BSG.xf,R.BSG.yd],[0.5,R.BSG.yd+4],[_clampF(0.5+ps*0.06),-6]]));// BSG traps the unblocked DL
+    const base = p => _blk([[p.xf,p.yd],[_clampF(p.xf+ps*0.004),-16]]);                // base block — the man ON
+    if(te) lines.push(base(te));                                                       // TE blocks the man on
+    lines.push(base(R.PST));                                                           // playside tackle blocks the man on
+    lines.push(_blk([[R.PSG.xf,R.PSG.yd],[_clampF(R.PSG.xf-ps*0.02),-30]]));          // PSG releases inside to LB (leaves the trapped DL)
+    lines.push(down(R.C),hinge(R.BST));
+    lines.push(_blk([[R.BSG.xf,R.BSG.yd],[0.5,R.BSG.yd+4],[_clampF(0.5+ps*0.06),-6]]));// BSG pulls & traps the unblocked DL
   } else if(scheme==='sweep'){
     lines.push(pullKick(R.PSG), pullWrap(R.BSG), reach(R.C), down(R.PST), hinge(R.BST));
     if(te) lines.push(down(te));
@@ -5250,7 +5253,7 @@ function schemeCarrier(sx, sy, scheme, dir){
   if(scheme==='sweep')   return [[sx,sy],[0.5,56],[_clampF(0.5+ps*0.16),40],[edge,12],[edge,-30]];
   if(scheme==='trap')    return [[sx,sy],[0.5,48],[_clampF(0.5+ps*0.05),-6],[_clampF(0.5+ps*0.05),-46]];
   if(scheme==='ozone')   return [[sx,sy],[_clampF(0.5+ps*0.10),54],[edge,30],[edge,-6],[_clampF(edge-ps*0.03),-44]];
-  if(scheme==='izone')   return [[sx,sy],[0.5,50],[hole,0],[_clampF(hole-ps*0.02),-46]];
+  if(scheme==='izone')   return [[sx,sy],[0.5,50],[_clampF(0.5+ps*0.05),-2],[_clampF(0.5+ps*0.03),-46]]; // aim the 2-hole (A-gap)
   return [[sx,sy],[0.5,50],[hole,-4],[hole,-46]]; // power / default downhill
 }
 
@@ -5275,13 +5278,15 @@ function buildPlayPolylines(f, offPreset, playName){
       carrier = preset.find(p=>p.type===carrierType) || preset.find(p=>p.type==='RB')
         || preset.find(p=>p.type==='FB') || preset.find(p=>p.type==='QB');
     }
-    const sx = carrier?carrier.xf:0.6, sy = carrier?carrier.yd:72;
     // Recognized blocking scheme → draw the canonical pulls/kicks/wraps + track.
     let scheme = detectRunScheme(nm);
-    if(!scheme && rc && /^\s*\d{2}\s*$/.test(nm)){        // bare 2-digit run number → hole implies zone scheme
-      if(rc.gap==='A') scheme='izone';                    // 22 / 23 = inside zone
-      else if(rc.gap==='D') scheme='ozone';               // 28 / 29 = outside zone
+    if(!scheme && rc && /^\s*\d{2}\s*$/.test(nm)){        // bare 2-digit call → carrier+hole implies scheme
+      if(rc.carrier==='FB') scheme='trap';                // 3x = FB trap (e.g. 32)
+      else if(rc.carrier==='RB' && rc.gap==='A') scheme='izone';   // 22 / 23 = inside zone
+      else if(rc.carrier==='RB' && rc.gap==='D') scheme='ozone';   // 28 / 29 = outside zone
     }
+    if(scheme==='trap'){ const _fb=preset.find(p=>p.type==='FB'); if(_fb) carrier=_fb; }  // the trap is the FB
+    const sx = carrier?carrier.xf:0.6, sy = carrier?carrier.yd:72;
     if(scheme){
       const slines = schemeBlocks(preset, scheme, dir);
       preset.filter(p=>p.type==='WR').forEach(p=>slines.push(wrStalk(p)));
