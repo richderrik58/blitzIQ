@@ -66,14 +66,10 @@
     const ensurePdfJs = () => loadScript('https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js');
     const ensureXLSX  = () => loadScript('https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js');
   </script>
-  <!-- Anthropic SDK for AI play generation (loaded as ES module, exposed globally) -->
-  <script type="module">
-    try {
-      const mod = await import('https://esm.sh/@anthropic-ai/sdk@0.52.0');
-      window._AnthropicSDK = mod.default || mod.Anthropic || mod;
-      window.dispatchEvent(new CustomEvent('anthropic-ready'));
-    } catch(e) { console.warn('Anthropic SDK load failed:', e); }
-  </script>
+  <!-- Anthropic SDK loads ON DEMAND (only when a coach actually uses AI scouting)
+       via ensureAnthropic() — keeps it off the critical path for faster first paint
+       and a snappier first tap. -->
+  <link rel="dns-prefetch" href="https://esm.sh">
   <style>
     :root {
       --navy:#0a1628; --navy2:#112240; --navy3:#1a3256; --navyc:#0f1e35;
@@ -4734,8 +4730,14 @@ ${notes}
 }
 
 // ── AI PLAY GENERATOR ─────────────────────────────────────────────────────────
-let _anthropicSDK = null;
-window.addEventListener('anthropic-ready', () => { _anthropicSDK = window._AnthropicSDK; });
+let _anthropicSDK = null, _anthropicPromise = null;
+// Load the Anthropic SDK on demand and cache it (no eager load at page start).
+function ensureAnthropic(){
+  if(_anthropicSDK) return Promise.resolve(_anthropicSDK);
+  return _anthropicPromise || (_anthropicPromise = import('https://esm.sh/@anthropic-ai/sdk@0.52.0')
+    .then(m => { _anthropicSDK = m.default || m.Anthropic || m; return _anthropicSDK; })
+    .catch(e => { _anthropicPromise = null; console.warn('Anthropic SDK load failed:', e); throw e; }));
+}
 
 function saveApiKey(){
   const k = document.getElementById('apiKeyIn').value.trim();
@@ -4875,11 +4877,12 @@ async function generateScoutingReport(){
     hideLoad(); openModal('mScout');
     return;
   }
-  if(!_anthropicSDK){ alert('AI service is still loading — please wait a moment and try again.'); return; }
-
   showLoad('Asking AI to scout this opponent…');
+  let _SDK;
+  try{ _SDK = await ensureAnthropic(); }
+  catch(e){ hideLoad(); alert('Couldn’t load the AI service — check your connection and try again.'); return; }
   try{
-    const client=new _anthropicSDK({apiKey:key,dangerouslyAllowBrowser:true});
+    const client=new _SDK({apiKey:key,dangerouslyAllowBrowser:true});
     const msg=await client.messages.create({
       model:'claude-sonnet-4-6', max_tokens:1600,
       messages:[{role:'user', content:buildScoutPrompt(o)}]
