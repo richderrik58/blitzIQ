@@ -5009,6 +5009,8 @@ const _clampF = v => Math.max(0.02, Math.min(0.98, v));
 // generator and the practice-script diagram renderer).
 function offPresetFor(name){
   const nm=(name||'').toUpperCase();
+  if(/\bQUEEN\b/.test(nm)) return 'queen';   // FB offset WEAK (away from the TE)
+  if(/\bKING\b/.test(nm)) return 'king';     // FB offset to the TE / strength
   if(/SINGLE\s*WING|WING\s+PISTOL|WING\s+[LR]\s+REDUCE/.test(nm)) return 'single-wing';
   if(/FLEXBONE|FLEX\s*BONE|WISHBONE/.test(nm)) return 'flexbone';
   if(/TREY\s+R\s+WEAK/.test(nm)) return 'trey-r-weak';
@@ -6480,6 +6482,32 @@ const CV_PRESETS = {
     {type:'WR', team:'off', xf:0.87, yd:40},
     {type:'WR', team:'off', xf:0.96, yd:30},
     {type:'QB', team:'off', xf:0.50, yd:72},
+  ],
+  'king':[ // TE right (strength); FB offset to the STRONG/TE side, tailback behind QB
+    {type:'WR', team:'off', xf:0.05, yd:30},
+    {type:'OL', team:'off', xf:0.436,yd:30},
+    {type:'OL', team:'off', xf:0.468,yd:30},
+    {type:'C',  team:'off', xf:0.50, yd:30},
+    {type:'OL', team:'off', xf:0.532,yd:30},
+    {type:'OL', team:'off', xf:0.564,yd:30},
+    {type:'TE', team:'off', xf:0.596,yd:30},
+    {type:'WR', team:'off', xf:0.92, yd:40},
+    {type:'QB', team:'off', xf:0.50, yd:72},
+    {type:'FB', team:'off', xf:0.62, yd:98},   // offset STRONG (TE side, right)
+    {type:'RB', team:'off', xf:0.50, yd:118},
+  ],
+  'queen':[ // TE right (strength); FB offset to the WEAK side (away from the TE)
+    {type:'WR', team:'off', xf:0.05, yd:30},
+    {type:'OL', team:'off', xf:0.436,yd:30},
+    {type:'OL', team:'off', xf:0.468,yd:30},
+    {type:'C',  team:'off', xf:0.50, yd:30},
+    {type:'OL', team:'off', xf:0.532,yd:30},
+    {type:'OL', team:'off', xf:0.564,yd:30},
+    {type:'TE', team:'off', xf:0.596,yd:30},
+    {type:'WR', team:'off', xf:0.92, yd:40},
+    {type:'QB', team:'off', xf:0.50, yd:72},
+    {type:'FB', team:'off', xf:0.38, yd:98},   // offset WEAK (away from TE, left)
+    {type:'RB', team:'off', xf:0.50, yd:118},
   ],
   'trey-r-weak':[ // TE tight R (end), 2 WR R off-ball outside, split end L, single back
     {type:'WR', team:'off', xf:0.05, yd:30},
