@@ -801,7 +801,6 @@
         </div>
         <div class="preset-row">
           <span class="preset-lbl">OFF</span>
-          <button class="pbtn-preset" onclick="placePreset('pro-set')">Pro Set</button>
           <button class="pbtn-preset" onclick="placePreset('trips')">Trips</button>
           <button class="pbtn-preset" onclick="placePreset('spread')">Spread</button>
           <button class="pbtn-preset" onclick="placePreset('i-form')">I-Form</button>
@@ -5024,7 +5023,6 @@ function offPresetFor(name){
   if(/PRO\s+L\s+TWINS\s+R\s+WEAK/.test(nm)) return 'pro-l-twins-r-weak';
   if(/TRIPS|TREY/.test(nm)) return 'trips';
   if(/EMPTY/.test(nm)) return 'empty';
-  if(/\bPRO\s*SET\b|PISTOL|STRONG/.test(nm)) return 'pro-set';
   if(/I.FORM|IFORM/.test(nm)) return 'i-form';
   if(/SPREAD/.test(nm)) return 'spread';        // SPREAD = flexed TE
   if(/DOUBLES?|DEUCE/.test(nm)) return 'doubles';
@@ -6394,19 +6392,6 @@ const CV_PRESETS = {
   ],
   // ── OFFENSIVE — WRs at sidelines, OL tighter (18px gap / 46px c-to-c) ──────────
   // OL at center±0.032 increments (20px = 2×CV_R — shoulder-to-shoulder)
-  'pro-set':[ // Pro: TE on LOS (right), QB under center, FB behind strong guard, deep RB
-    {type:'WR', team:'off', xf:0.05, yd:30},
-    {type:'OL', team:'off', xf:0.436,yd:30},
-    {type:'OL', team:'off', xf:0.468,yd:30},
-    {type:'C',  team:'off', xf:0.50, yd:30},
-    {type:'OL', team:'off', xf:0.532,yd:30},
-    {type:'OL', team:'off', xf:0.564,yd:30},
-    {type:'TE', team:'off', xf:0.596,yd:30},
-    {type:'WR', team:'off', xf:0.92, yd:40},
-    {type:'QB', team:'off', xf:0.50, yd:48},
-    {type:'FB', team:'off', xf:0.53, yd:70},
-    {type:'RB', team:'off', xf:0.50, yd:108},
-  ],
   'trips':[ // split end L, trips R (outer on line, 2 inner off-ball), single back
     {type:'WR', team:'off', xf:0.05, yd:30},
     {type:'OL', team:'off', xf:0.436,yd:30},
@@ -7651,7 +7636,7 @@ function closePredictor(){ document.getElementById('predictOv').classList.remove
 
 // ── HIGH-ZOOM PLAY VIEW (wristband / teaching clarity) ────────────────────────
 let _zoomPlay=null, _zoomIdx=0;
-const FORMATION_LOOKS=[['','Auto-detect'],['spread','Spread (2×2)'],['trips','Trips (3×1)'],['pro-set','Pro Set / Pistol'],['i-form','I-Form'],['empty','Empty (5 wide)'],['single-wing','Single Wing'],['flexbone','Flexbone']];
+const FORMATION_LOOKS=[['','Auto-detect'],['spread','Spread (2×2)'],['trips','Trips (3×1)'],['i-form','I-Form'],['empty','Empty (5 wide)'],['single-wing','Single Wing'],['flexbone','Flexbone']];
 function showPlayZoom(idx){
   const p=(window._psRows||[])[idx]; if(!p) return;
   _zoomPlay=p; _zoomIdx=idx;
