@@ -5024,7 +5024,7 @@ function offPresetFor(name){
   if(/PRO\s+L\s+TWINS\s+R\s+WEAK/.test(nm)) return 'pro-l-twins-r-weak';
   if(/TRIPS|TREY/.test(nm)) return 'trips';
   if(/EMPTY/.test(nm)) return 'empty';
-  if(/PISTOL|STRONG/.test(nm)) return 'pro-set';
+  if(/\bPRO\s*SET\b|PISTOL|STRONG/.test(nm)) return 'pro-set';
   if(/I.FORM|IFORM/.test(nm)) return 'i-form';
   if(/SPREAD/.test(nm)) return 'spread';        // SPREAD = flexed TE
   if(/DOUBLES?|DEUCE/.test(nm)) return 'doubles';
@@ -6433,7 +6433,7 @@ const CV_PRESETS = {
     {type:'QB', team:'off', xf:0.50, yd:72},
     {type:'RB', team:'off', xf:0.60, yd:72},
   ],
-  'spread':[ // TE flexed off the tackle at 45 (right); 2 WR left, split end right
+  'spread':[ // TE flexed off the tackle at 45 (right, tight to RT); 2 WR left, split end right
     {type:'WR', team:'off', xf:0.05, yd:30},
     {type:'WR', team:'off', xf:0.18, yd:40},
     {type:'OL', team:'off', xf:0.436,yd:30},
@@ -6441,7 +6441,7 @@ const CV_PRESETS = {
     {type:'C',  team:'off', xf:0.50, yd:30},
     {type:'OL', team:'off', xf:0.532,yd:30},
     {type:'OL', team:'off', xf:0.564,yd:30},
-    {type:'TE', team:'off', xf:0.66, yd:44},
+    {type:'TE', team:'off', xf:0.61, yd:42},
     {type:'WR', team:'off', xf:0.95, yd:30},
     {type:'QB', team:'off', xf:0.50, yd:72},
     {type:'RB', team:'off', xf:0.60, yd:72},
