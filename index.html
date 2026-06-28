@@ -5032,11 +5032,39 @@ function offPresetFor(name){
   if(/DOUBLES?|DEUCE/.test(nm)) return 'doubles';
   return 'doubles';                              // default = no-TE 2x2
 }
+// Generic presets are drawn strong-RIGHT by default. When a formation NAME calls a
+// side (TRIPS LEFT, EMPTY RIGHT, SPREAD LEFT…) that differs from how the generic
+// preset is drawn, mirror it left↔right. Specific presets (TRIPS L STRONG, PRO L
+// TWINS R…) already encode their side, so they're left alone. The defense aligns to
+// the actual coordinates, so flipping the offense flips the front with it.
+const _MIRRORABLE = new Set(['trips','empty','spread','doubles','i-form','king','queen','single-wing','flexbone']);
+function _presetStrongLeft(arr){                    // TE side → receiver count → RB (coach's strength rule)
+  const te=arr.filter(p=>p.type==='TE'), tl=te.filter(p=>p.xf<0.5).length;
+  if(te.length && tl!==te.length-tl) return tl>te.length-tl;
+  const rc=arr.filter(p=>p.type==='WR'||p.type==='TE'), rl=rc.filter(p=>p.xf<0.5).length;
+  if(rl!==rc.length-rl) return rl>rc.length-rl;
+  const rb=arr.find(p=>p.type==='RB'||p.type==='FB'); return rb?rb.xf<0.5:false;
+}
+function _nameStrongLeft(nm){                        // direction called in the formation name, if any
+  const full=nm.match(/\b(LEFT|RIGHT)\b/); if(full) return full[1]==='LEFT';
+  const abbr=nm.match(/\b([LR])\b/);        if(abbr) return abbr[1]==='L';
+  return null;
+}
+function mirrorOffPreset(key, nm){
+  if(!_MIRRORABLE.has(key)) return key;
+  const base=CV_PRESETS[key]; if(!base) return key;
+  const want=_nameStrongLeft(nm); if(want===null) return key;   // no side called → draw as-is
+  if(_presetStrongLeft(base)===want) return key;                // already orients the right way
+  const mk=key+'__M';                                            // cached mirror = opposite of base
+  if(!CV_PRESETS[mk]) CV_PRESETS[mk]=base.map(p=>({...p, xf:+(1-p.xf).toFixed(4)}));
+  return mk;
+}
 // A coach's manual override (by formation name) wins over auto-detection.
 // Stored in DB.formationLooks so it persists and applies everywhere that formation draws.
 function formationPreset(f){
   const nm=((f&&f.name)||'').toUpperCase();
-  return (typeof DB!=='undefined'&&DB.formationLooks&&DB.formationLooks[nm]) || offPresetFor(nm);
+  const manual=(typeof DB!=='undefined'&&DB.formationLooks&&DB.formationLooks[nm]);
+  return manual || mirrorOffPreset(offPresetFor(nm), nm);
 }
 
 // Decode a Hudl run number → {carrier, dir, gap letter, lateral distance}.
