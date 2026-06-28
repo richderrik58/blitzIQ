@@ -7486,6 +7486,25 @@ function _buildScoutInstructions(o){
   });
 }
 
+// The down-&-distance situations that decide drives — pulled from the predictor
+// so the scout team reps what the opponent actually does when it matters.
+function _keySituations(o){
+  if(!(o.snaps&&o.snaps.length)||typeof predictOffense!=='function') return [];
+  const defs=[
+    {label:'3rd & Long (8+)',  sit:{down:3,dist:9}},
+    {label:'3rd & Short (≤3)', sit:{down:3,dist:2}},
+    {label:'Red Zone',         sit:{zone:'RZ'}},
+    {label:'Goal Line',        sit:{zone:'GL'}},
+  ];
+  return defs.map(d=>{
+    const p=predictOffense(o,d.sit); if(!p||p.n<3) return null;
+    const isRun=p.runPct>=p.passPct;
+    const top=isRun?(p.runPlays&&p.runPlays[0]):(p.passPlays&&p.passPlays[0]);
+    const rec=generateRecommendation({name:(p.formations[0]?p.formations[0].key:''),runPct:p.runPct,passPct:p.passPct});
+    return {label:d.label,n:p.n,lean:isRun?'RUN':'PASS',pct:isRun?p.runPct:p.passPct,
+      top:(top&&top.key&&top.key!=='(live rep)')?top.key:null,topPct:top?top.pct:0,cov:rec.coverage,blitz:rec.blitz};
+  }).filter(Boolean);
+}
 function buildPracticeScriptHTML(o){
   applyRecommendations(o);
   const callRows=o.formations.map(f=>{
@@ -7534,6 +7553,25 @@ function buildPracticeScriptHTML(o){
       </div>
     </div>`).join('');
 
+  const keySits=_keySituations(o);
+  const keySitHTML=keySits.length?`
+    <div style="margin-bottom:22px">
+      <div style="font-size:10px;letter-spacing:2px;text-transform:uppercase;color:var(--gold);font-weight:800;margin-bottom:4px">&#127919; Key Situations to Rep</div>
+      <div style="font-size:11px;color:var(--grayl);margin-bottom:10px">The down-&-distance spots that decide drives — what they do, and your call.</div>
+      <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:10px">
+      ${keySits.map(k=>`
+        <div style="background:var(--navy2);border:1px solid rgba(255,255,255,.07);border-radius:10px;padding:11px 14px">
+          <div style="display:flex;justify-content:space-between;align-items:baseline;gap:8px;margin-bottom:5px">
+            <div style="font-size:13px;font-weight:800;color:var(--white)">${esc(k.label)}</div>
+            <div style="font-size:11px;color:${k.lean==='RUN'?'var(--green)':'var(--blue)'};font-weight:800;white-space:nowrap">${k.pct}% ${k.lean}</div>
+          </div>
+          ${k.top?`<div style="font-size:11px;color:var(--grayl);margin-bottom:4px">Most likely: <b style="color:var(--white)">${esc(k.top)}</b> <span style="color:var(--gray)">(${k.topPct}%)</span></div>`:''}
+          <div style="font-size:11px;color:var(--gold);font-weight:700">&#8594; ${esc(k.cov)} <span style="color:var(--grayl);font-weight:600">· ${esc(k.blitz)}</span></div>
+          <div style="font-size:9px;color:var(--gray);margin-top:5px;letter-spacing:.3px">${k.n} snaps in this spot</div>
+        </div>`).join('')}
+      </div>
+    </div>`:'';
+
   const thStyle='font-size:9px;letter-spacing:1.5px;text-transform:uppercase;color:var(--gray);font-weight:800;padding:0 8px 8px 0;text-align:left;white-space:nowrap';
 
   return `
@@ -7554,6 +7592,8 @@ function buildPracticeScriptHTML(o){
         </div>
       </div>
     </div>
+
+    ${keySitHTML}
 
     <div style="margin-bottom:22px">
       <div style="font-size:10px;letter-spacing:2px;text-transform:uppercase;color:var(--gold);font-weight:800;margin-bottom:10px">&#9889; Key Adjustments</div>
@@ -7591,6 +7631,15 @@ function _buildPracticeScriptText(o){
     lines.push(`   ${a.detail}`);
     lines.push(``);
   });
+  const _ks=_keySituations(o);
+  if(_ks.length){
+    lines.push(`KEY SITUATIONS TO REP`,`${'─'.repeat(60)}`);
+    _ks.forEach(k=>{
+      lines.push(`${k.label.padEnd(18)} ${(k.pct+'% '+k.lean).padEnd(10)}${k.top?'most likely '+k.top+' ('+k.topPct+'%)':''}`);
+      lines.push(`   → ${k.cov} · ${k.blitz}   [${k.n} snaps]`);
+    });
+    lines.push(``);
+  }
   lines.push(`PRACTICE SCRIPT`,`${'─'.repeat(60)}`);
   lines.push(`# | Formation | Play | Situation | Hash | Coverage | Blitz | Scout Notes`);
   _buildPlayLines(o).forEach(p=>{
@@ -7712,6 +7761,33 @@ function setPred(key,val,btn){
   if(btn){ [...btn.parentElement.children].forEach(c=>{ const on=c===btn; c.style.background=on?'var(--gold)':'var(--navy2)'; c.style.color=on?'var(--navy)':'var(--grayl)'; }); }
   renderPrediction();
 }
+// Turn the single most-likely play into a concrete front/fit instruction — the
+// "it knew exactly what they'd run" line that earns a coach's trust.
+function _runGapHint(nm){
+  nm=(nm||'').toUpperCase();
+  const rc=(typeof runCall==='function')?runCall(nm):null;
+  let dir=rc&&rc.dir?rc.dir:(/\bLEFT\b|\bL\b/.test(nm)?-1:/\bRIGHT\b|\bR\b/.test(nm)?1:0);
+  let gap=rc&&rc.gap?rc.gap:null;
+  if(!gap){
+    if(/POWER|COUNTER/.test(nm)) gap='B';
+    else if(/TRAP|DIVE|\bISO\b|SNEAK|WEDGE|BELLY|\bGUT\b/.test(nm)) gap='A';
+    else if(/SWEEP|TOSS|PITCH|\bJET\b|OUTSIDE|WIDE|STRETCH|\bEDGE\b|BUCK|SPEED/.test(nm)) gap='D';
+    else if(/ZONE|INSIDE|MIDLINE/.test(nm)) gap='A/B';
+  }
+  return {dir:dir>0?'right':dir<0?'left':'', gap};
+}
+function topPlayInsight(p){
+  if(!p||!p.n) return '';
+  const lean=p.runPct>=p.passPct;
+  const top=lean?(p.runPlays&&p.runPlays[0]):(p.passPlays&&p.passPlays[0]);
+  if(!top||!top.key||top.key==='(live rep)') return '';
+  if(lean){
+    const h=_runGapHint(top.key);
+    const where=(h.gap&&h.dir)?`the <b>${h.dir} ${h.gap}-gap</b>`:h.dir?`the <b>${h.dir} side</b>`:h.gap?`the <b>${h.gap}-gap</b>`:'that gap';
+    return `🎯 Most likely: <b>${esc(top.key)}</b> (${top.pct}% of runs here). Set your front and fit the Mike downhill to ${where}.`;
+  }
+  return `🎯 Most likely: <b>${esc(top.key)}</b> (${top.pct}% of passes here). Make the underneath defender squat on it — don't let him bail off.`;
+}
 function renderPrediction(){
   const o=st.opp, el=document.getElementById('predictOut'); if(!el) return;
   const p=predictOffense(o, st.pred||{});
@@ -7722,6 +7798,7 @@ function renderPrediction(){
   const confC=p.n>=12?'#22c55e':p.n>=5?'#f0a500':'#ef4444';
   const tf=p.formations[0];
   const rec=generateRecommendation({name:tf?tf.key:'',runPct:p.runPct,passPct:p.passPct});
+  const insight=topPlayInsight(p);
   // Coach's own call for this situation (offense→defense pairing), saved per opponent
   const distBk=(st.pred.dist!=null&&st.pred.dist!=='')?(st.pred.dist<=3?'S':st.pred.dist<=7?'M':'L'):'-';
   const callKey=`${st.pred.down||'-'}|${distBk}|${st.pred.zone||'-'}|${tf?tf.key:'-'}`;
@@ -7750,6 +7827,7 @@ function renderPrediction(){
         <div style="font-size:10px;letter-spacing:1.5px;text-transform:uppercase;color:var(--gold);font-weight:800">${saved?'Your Call':'Recommended Call'}</div>
         ${saved?'<span style="font-size:9px;font-weight:800;background:rgba(34,197,94,.18);color:var(--green);border:1px solid rgba(34,197,94,.4);padding:1px 7px;border-radius:8px">SAVED</span>':''}
       </div>
+      ${insight?`<div style="font-size:12.5px;color:var(--white);line-height:1.45;margin-bottom:9px;padding-bottom:9px;border-bottom:1px solid rgba(240,165,0,.2)">${insight}</div>`:''}
       <input id="predCov" value="${esc(cov)}" onchange="saveCoachCall()" placeholder="Coverage" spellcheck="false" style="width:100%;font-size:19px;font-weight:900;color:var(--gold);background:transparent;border:none;border-bottom:1px dashed rgba(240,165,0,.4);outline:none;font-family:inherit;padding:2px 0">
       <input id="predBlitz" value="${esc(blz)}" onchange="saveCoachCall()" placeholder="Blitz / front" spellcheck="false" style="width:100%;font-size:14px;font-weight:700;color:var(--white);background:transparent;border:none;border-bottom:1px dashed rgba(255,255,255,.18);outline:none;font-family:inherit;padding:4px 0;margin-bottom:5px">
       <div style="font-size:11px;color:var(--grayl);line-height:1.4">${saved?'Your saved call for this situation — edit, or clear both to use our suggestion.':esc(rec.reason)+' · Tap to set your own call (saved for game day).'}</div>
