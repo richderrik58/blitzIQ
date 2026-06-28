@@ -422,6 +422,9 @@
     .play-thumb{width:100%;display:block}
     .play-thumb-lbl{position:absolute;bottom:0;left:0;right:0;background:rgba(10,22,40,.75);text-align:center;font-size:11px;color:var(--gold);font-weight:700;padding:7px;letter-spacing:1px;text-transform:uppercase}
   </style>
+  <!-- Cloudflare Web Analytics -->
+  <script defer src='https://static.cloudflareinsights.com/beacon.min.js' data-cf-beacon='{"token": "9af0ec299c304056b75c1834ac3379e0"}'></script>
+  <!-- End Cloudflare Web Analytics -->
 </head>
 <body>
 
@@ -592,6 +595,7 @@
       <button class="cbtn-save" onclick="printPracticeScript()" style="font-size:11px;display:flex;align-items:center;gap:4px">&#128438; Print</button>
       <button class="cbtn-save" onclick="sharePracticeScript()" style="font-size:11px;background:rgba(240,165,0,.18);border:1.5px solid rgba(240,165,0,.5);color:var(--gold);display:flex;align-items:center;gap:4px">&#11014; Email</button>
       <button class="cbtn-save" onclick="copyPracticeScript()" style="font-size:11px;background:rgba(255,255,255,.07);border:1px solid rgba(255,255,255,.2);color:var(--grayl)">&#128203; Copy</button>
+      <button class="cbtn-save" onclick="shareReportLink()" style="font-size:11px;background:rgba(96,165,250,.16);border:1.5px solid rgba(96,165,250,.5);color:#93c5fd;display:flex;align-items:center;gap:4px">&#128279; Link</button>
       <button class="cbtn-close" onclick="closePracticeScript()">&#10005;</button>
     </div>
   </div>
@@ -5654,17 +5658,19 @@ function applyGeneratedPlay(playData){
         x:Math.round(cw*pd.xf), y:Math.round(los+pd.yd)
       }));
     }
-    if(defKey && CV_PRESETS[defKey]){
-      CV_PRESETS[defKey].forEach(pd => cvPlayers.push({
-        id:++cvPid, type:pd.type, team:pd.team,
+    if(defKey && offKey && CV_PRESETS[offKey]){
+      // Align the defense to the ACTUAL (mirrored) offense via the same engine the
+      // static SVG diagrams use — so the canvas front flips identically for
+      // LEFT/RIGHT looks instead of drawing a fixed strong-right shell.
+      const offArr=CV_PRESETS[offKey];
+      const strongLeft=_presetStrongLeft(offArr);
+      window._cvPresetType=defKey;             // track for gap assignment labels
+      window._cvStrength=strongLeft?'left':'right';
+      alignDefense(offArr, defKey, strongLeft).forEach(pd => cvPlayers.push({
+        id:++cvPid, type:pd.type, team:'def',
         x:Math.round(cw*pd.xf), y:Math.round(los+pd.yd)
       }));
-      window._cvPresetType=defKey; // track for gap assignment labels
     }
-
-    // Detect formation strength and adjust SS/SAM to correct side
-    const strength=getFormationStrength(cw);
-    adjustDefenseToStrength(strength, cw);
 
     // Draw routes on the route canvas using canvas-relative coords
     if(cvRouteCanvas && playData.routes){
@@ -8197,6 +8203,66 @@ function copyPracticeScript(){
   }
 }
 
+// ── SHAREABLE SCOUTING-REPORT LINK ───────────────────────────────────────────
+// No backend: a compact report is packed into the URL hash. Opening the link shows
+// a read-only report + a "build your own free" CTA — organic coach-to-coach spread.
+function _b64e(str){ return btoa(unescape(encodeURIComponent(str))).replace(/\+/g,'-').replace(/\//g,'_').replace(/=+$/,''); }
+function _b64d(s){ s=s.replace(/-/g,'+').replace(/_/g,'/'); return decodeURIComponent(escape(atob(s))); }
+function _sharePayload(o){
+  const nm=v=>typeof v==='string'?v:(v&&(v.key||v.play||v.name))||'';
+  return { n:o.name, s:o.season, r:o.runPct, p:o.passPct,
+    f:(o.formations||[]).map(f=>({
+      n:f.name, r:f.runPct, p:f.passPct,
+      fr:nm(f.favoriteRunPlay), fp:nm(f.favoritePassPlay),
+      rp:(f.runPlays||[]).slice(0,3).map(nm).filter(Boolean),
+      pp:(f.passPlays||[]).slice(0,3).map(nm).filter(Boolean),
+      st:(f.situations||[]).map(s=>({d:s.distLabel, r:s.runPct, p:s.passPct})) })) };
+}
+function buildShareLink(o){ return location.origin+location.pathname+'#r='+_b64e(JSON.stringify(_sharePayload(o))); }
+function shareReportLink(){
+  if(!st.opp) return;
+  const url=buildShareLink(st.opp);
+  if(navigator.share){ navigator.share({title:`DefWise — ${st.opp.name} scouting`, url}).catch(()=>{}); return; }
+  const done=()=>showToast('🔗 Share link copied — send it to a coach');
+  if(navigator.clipboard){ navigator.clipboard.writeText(url).then(done).catch(()=>prompt('Copy this link:',url)); }
+  else { const ta=document.createElement('textarea'); ta.value=url; ta.style.cssText='position:fixed;opacity:0';
+    document.body.appendChild(ta); ta.select(); try{document.execCommand('copy');done();}catch(_){prompt('Copy this link:',url);} document.body.removeChild(ta); }
+}
+function maybeShowSharedReport(){
+  try{
+    const m=(location.hash||'').match(/[#&]r=([^&]+)/); if(!m) return;
+    const o=JSON.parse(_b64d(m[1])); if(!o||!o.f) return;
+    renderSharedReport(o);
+  }catch(e){}
+}
+function renderSharedReport(o){
+  const fhtml=(o.f||[]).map(f=>{
+    const rec=(typeof generateRecommendation==='function')?generateRecommendation({name:f.n,runPct:f.r,passPct:f.p}):null;
+    const lean=f.p>=f.r?`<span style="color:#60a5fa;font-weight:800">${f.p}% PASS</span>`:`<span style="color:#22c55e;font-weight:800">${f.r}% RUN</span>`;
+    const plays=[f.fr&&`Run: <b style="color:#e5e7eb">${esc(f.fr)}</b>`, f.fp&&`Pass: <b style="color:#e5e7eb">${esc(f.fp)}</b>`].filter(Boolean).join(' &nbsp;·&nbsp; ');
+    const sits=(f.st||[]).map(s=>`<div style="font-size:11px;color:#94a3b8">${esc(s.d)}: ${s.r}%R / ${s.p}%P</div>`).join('');
+    return `<div style="background:#13294b;border:1px solid rgba(255,255,255,.08);border-radius:11px;padding:12px 14px;margin-bottom:9px">
+      <div style="display:flex;justify-content:space-between;align-items:baseline;gap:8px"><b style="color:#fff;font-size:14px">${esc(f.n)}</b> ${lean}</div>
+      ${plays?`<div style="font-size:11.5px;color:#cbd5e1;margin-top:4px">${plays}</div>`:''}
+      ${rec?`<div style="font-size:11.5px;color:#f0a500;font-weight:700;margin-top:5px">→ ${esc(rec.coverage)} <span style="color:#94a3b8;font-weight:600">· ${esc(rec.blitz)}</span></div>`:''}
+      ${sits?`<div style="margin-top:6px;display:grid;grid-template-columns:1fr 1fr;gap:2px 12px">${sits}</div>`:''}
+    </div>`;
+  }).join('');
+  const wrap=document.createElement('div');
+  wrap.innerHTML=`<div style="position:fixed;inset:0;background:#0a0e1a;z-index:99999;overflow:auto;padding:22px 16px;font-family:inherit;-webkit-overflow-scrolling:touch">
+    <div style="max-width:560px;margin:0 auto">
+      <div style="text-align:center;margin-bottom:6px"><span style="font-size:10px;letter-spacing:2px;text-transform:uppercase;color:#f0a500;font-weight:800">🛡 Shared Scouting Report</span></div>
+      <h1 style="color:#fff;font-size:23px;text-align:center;margin:0 0 2px">${esc(o.n||'Opponent')}</h1>
+      <div style="text-align:center;color:#9aa6b2;font-size:13px;margin-bottom:2px">${esc(o.s||'')} &nbsp;·&nbsp; ${o.r}% run / ${o.p}% pass</div>
+      <div style="text-align:center;color:#64748b;font-size:11px;margin-bottom:18px">Read-only snapshot · scouted with DefWise</div>
+      ${fhtml||'<div style="color:#9aa6b2;text-align:center;padding:20px">No formations in this report.</div>'}
+      <a href="${esc(location.pathname)}" style="display:block;text-align:center;background:#f0a500;color:#0a1a3a;font-weight:900;text-decoration:none;border-radius:12px;padding:15px;margin:22px 0 8px;font-size:15px;box-shadow:0 4px 16px rgba(240,165,0,.3)">Build your own free → defwise.com</a>
+      <div style="text-align:center;color:#64748b;font-size:11px;line-height:1.5">Import the Hudl tendency export you already pull, and call the game from the box.</div>
+    </div></div>`;
+  document.body.appendChild(wrap.firstElementChild);
+  document.body.style.overflow='hidden';
+}
+
 // ── EDIT FUNCTIONALITY (Issue 8) ─────────────────────────────────────────────
 function editOpp(id,e){
   e.stopPropagation();
@@ -8750,7 +8816,7 @@ function maybeShowIosInstallTip(){
     const bar=document.getElementById('iosTip'); if(bar) bar.style.display='flex';
   }catch(e){}
 }
-renderOpps(); syncHdr(); applyGameDay(); applyCVD(); updateProBadge(); maybeShowIosInstallTip();
+renderOpps(); syncHdr(); applyGameDay(); applyCVD(); updateProBadge(); maybeShowIosInstallTip(); maybeShowSharedReport();
 if (_loadNotice) setTimeout(() => { try { showToast(_loadNotice, 5000); } catch(_) {} }, 400);
 
 // ── INSTALL SCRIPT ────────────────────────────────────────────────────────────
