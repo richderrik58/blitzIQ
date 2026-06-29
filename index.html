@@ -5223,6 +5223,7 @@ const BLKC='#7c8696';                              // block-line color (gray)
 const RUNC='#22c55e';                              // run / QB / ball movement (green arrowhead)
 const BLOCK_WORD=/^(BLOCK|BLK|DOWN|BASE|DRIVE|REACH|SEAL|PULL|KICK|FAN|ARC|STALK|CUTOFF|SCOOP|HINGE|PROTECT|PRO|CHIP|ON)$/;
 const _blk = pts => ({color:BLKC, block:true, pts});
+const _pull = pts => ({color:BLKC, pull:true, pts});   // a PULLING/kicking lineman — drawn bold + arrowhead so the movement is obvious
 // OL run blocking — power/counter/trap = playside down-blocks; else drive up into the man
 function olRunBlocks(preset, dir, down){
   return preset.filter(p=>p.type==='OL'||p.type==='C').map(p=>{ const inn=p.xf<0.5?1:-1;
@@ -5264,7 +5265,15 @@ function bootlegPath(nm, preset){
   if(!/\b(ROLL|BOOT|BOOTLEG|WAGGLE|NAKED|SPRINT)\b/.test(nm)) return null;
   const dir = /\b(ROLL|BOOT|BOOTLEG|WAGGLE|NAKED|SPRINT)\s*(OUT\s*)?L(EFT)?\b/.test(nm) ? -1 : 1;
   const qb = preset.find(p=>p.type==='QB'); if(!qb) return null;
-  return {color:RUNC, pts:[ [qb.xf,qb.yd], [_clampF(0.5+dir*0.10),qb.yd-2], [_clampF(0.5+dir*0.30),-2], [_clampF(0.5+dir*0.40),-26] ]};
+  // Fake the stretch away from the boot, gain depth to ~7 yds (apex), then work back downhill to the LOS on the roll side.
+  const opp=-dir;
+  return {color:RUNC, pts:[
+    [qb.xf,qb.yd],
+    [_clampF(qb.xf+opp*0.06), qb.yd+8],      // ride the stretch fake to the backside
+    [0.5, qb.yd+18],                         // pivot, gaining depth (the apex ~7 yds deep)
+    [_clampF(0.5+dir*0.22), qb.yd+14],       // start back to the roll side
+    [_clampF(0.5+dir*0.34), -2],             // work back toward the LOS
+    [_clampF(0.5+dir*0.40), -24] ]};         // up the boundary
 }
 // Pre-snap motion (dashed gold line): "Trade L/R" = TE crosses to the called side;
 // "Jet L/R" = backside WR/slot jets across. Shows the look team the motion.
@@ -5306,13 +5315,14 @@ function schemeBlocks(preset, scheme, dir){
   const edge=_clampF(0.5+ps*0.20), hole=_clampF(0.5+ps*0.10);
   const fb=preset.find(p=>p.type==='FB');
   const te=preset.filter(p=>p.type==='TE').sort((a,b)=> ps>0 ? b.xf-a.xf : a.xf-b.xf)[0]; // playside TE
+  const emolX=_clampF(te ? te.xf+ps*0.05 : R.PST.xf+ps*0.045);   // end-man-on-LOS = the kick-out target (a DE in a 4-3)
   const down  = p => _blk([[p.xf,p.yd],[_clampF(p.xf-ps*0.03),-14]]);                 // down block (seal inside)
   const hinge = p => _blk([[p.xf,p.yd],[_clampF(p.xf-ps*0.015),p.yd-8]]);             // backside hinge
   const reach = p => _blk([[p.xf,p.yd],[_clampF(p.xf+ps*0.04),p.yd-2],[_clampF(p.xf+ps*0.07),-12]]);
-  const pullKick = p => _blk([[p.xf,p.yd],[0.5,p.yd+5],[edge,p.yd+2],[_clampF(edge+ps*0.02),-8]]);     // pull, kick EMOL
-  const pullWrap = p => _blk([[p.xf,p.yd],[0.5,p.yd+6],[_clampF(hole-ps*0.01),p.yd+2],[hole,-34]]);    // pull, wrap to LB
-  const fbKick = () => fb ? _blk([[fb.xf,fb.yd],[_clampF(0.5+ps*0.08),34],[edge,30],[_clampF(edge+ps*0.02),-8]]) : null;
-  const fbWrap = () => fb ? _blk([[fb.xf,fb.yd],[_clampF(fb.xf-ps*0.06),fb.yd-2],[hole,fb.yd-12],[hole,-32]]) : null; // jab backside, wrap to LB
+  const pullKick = p => _pull([[p.xf,p.yd],[0.5,p.yd+5],[_clampF(emolX-ps*0.03),p.yd+1],[emolX,-32]]);  // pull & kick the EMOL (onto the DE)
+  const pullWrap = p => _pull([[p.xf,p.yd],[0.5,p.yd+6],[_clampF(hole-ps*0.01),p.yd+2],[hole,-34]]);    // pull & wrap up to the playside LB
+  const fbKick = () => fb ? _pull([[fb.xf,fb.yd],[_clampF(0.5+ps*0.08),34],[_clampF(emolX-ps*0.02),6],[emolX,-32]]) : null;  // FB kicks the EMOL
+  const fbWrap = () => fb ? _pull([[fb.xf,fb.yd],[_clampF(fb.xf-ps*0.06),fb.yd-2],[hole,fb.yd-12],[hole,-32]]) : null; // jab backside, wrap to the LB
   if(scheme==='power'){
     lines.push(down(R.PST),down(R.PSG),down(R.C)); if(te) lines.push(down(te));   // TE/PST/PSG/C block down, protect puller
     lines.push(pullWrap(R.BSG), hinge(R.BST));                    // BSG wraps to playside LB; BST cuts off & protects
@@ -5541,8 +5551,11 @@ function alignDefense(off, front, strongLeft, shell){
   return D;
 }
 function playDiagramSVG(f, playName, isRun){
-  const W=340, H=318, LY=205, MX=16, FW=W-2*MX, sc=0.62;
-  const X = xf => +(MX + xf*FW).toFixed(1);
+  const W=340, H=318, LY=205, MX=16, FW=W-2*MX, sc=0.62, SPREAD=1.38;
+  // Spread players out from the center so the box isn't cramped (TE off the tackle,
+  // 3-tech off the 5-tech). Wide receivers cap at the sideline. Defense + blocks map
+  // through the same X(), so everything stays aligned, just roomier.
+  const X = xf => { let e=(xf-0.5)*SPREAD; if(e<-0.47)e=-0.47; if(e>0.47)e=0.47; return +(MX+(0.5+e)*FW).toFixed(1); };
   const Y = yd => +(LY + yd*sc).toFixed(1);
   const offPreset = formationPreset(f);
   const off = CV_PRESETS[offPreset] || CV_PRESETS['spread'];
@@ -5559,20 +5572,23 @@ function playDiagramSVG(f, playName, isRun){
     return rb ? rb.xf<0.5 : false;
   })();
   const def = alignDefense(off, getDefPreset(f), strongLeft, window._defShell||'2high');   // defense lines up TO the offense
-  const lbl = (cx,cy,t,c) => t ? `<text x="${cx}" y="${cy+2.6}" font-size="7" font-weight="700" text-anchor="middle" fill="${c}">${t}</text>` : '';
+  const lbl = (cx,cy,t,c) => t ? `<text x="${cx}" y="${cy+2.3}" font-size="6.4" font-weight="700" text-anchor="middle" fill="${c}">${t}</text>` : '';
   const offSVG = off.map(p=>{
     const cx=X(p.xf), cy=Y(p.yd);
     if(p.type==='C'||p.type==='OL')
-      return `<rect x="${cx-5.6}" y="${cy-5.6}" width="11.2" height="11.2" rx="1.6" fill="#13294b" stroke="#fff" stroke-width="0.9"/>`+lbl(cx,cy,p.type==='C'?'C':'','#fff');
-    return `<circle cx="${cx}" cy="${cy}" r="7.4" fill="#13294b" stroke="#fff" stroke-width="0.9"/>`+lbl(cx,cy,p.type,'#fff');
+      return `<rect x="${cx-4.9}" y="${cy-4.9}" width="9.8" height="9.8" rx="1.6" fill="#13294b" stroke="#fff" stroke-width="0.9"/>`+lbl(cx,cy,p.type==='C'?'C':'','#fff');
+    return `<circle cx="${cx}" cy="${cy}" r="6.5" fill="#13294b" stroke="#fff" stroke-width="0.9"/>`+lbl(cx,cy,p.type,'#fff');
   }).join('');
   const defSVG = def.map(p=>{
     const cx=X(p.xf), cy=Y(p.yd);
-    return `<circle cx="${cx}" cy="${cy}" r="7.4" fill="#fff" stroke="#c0392b" stroke-width="1.5"/>`+lbl(cx,cy,p.type,'#c0392b');
+    return `<circle cx="${cx}" cy="${cy}" r="6.5" fill="#fff" stroke="#c0392b" stroke-width="1.5"/>`+lbl(cx,cy,p.type,'#c0392b');
   }).join('');
   const routeSVG = buildPlayPolylines(f, offPreset, playName).map(pl=>{
     const P = pl.pts.map(([xf,yd])=>[X(xf),Y(yd)]);
     const pts = P.map(p=>p.join(',')).join(' ');
+    if(pl.pull){                                      // pulling / kicking lineman — bold path + arrowhead so the movement is obvious
+      return `<polyline points="${pts}" fill="none" stroke="${pl.color}" stroke-width="2.9" stroke-linejoin="round" stroke-linecap="round" marker-end="url(#arrK)"/>`;
+    }
     if(pl.block){                                     // block = solid line + perpendicular "T" cap at the end
       const n=P.length, a=P[n-2]||P[0], bxby=P[n-1];
       let dx=bxby[0]-a[0], dy=bxby[1]-a[1]; const L=Math.hypot(dx,dy)||1; dx/=L; dy/=L;
@@ -5581,7 +5597,8 @@ function playDiagramSVG(f, playName, isRun){
       return `<polyline points="${pts}" fill="none" stroke="${pl.color}" stroke-width="2" stroke-linejoin="round" stroke-linecap="round"/>`+tcap;
     }
     if(pl.motion){ return `<polyline points="${pts}" fill="none" stroke="${pl.color}" stroke-width="2" stroke-dasharray="5 3.5" stroke-linejoin="round" stroke-linecap="round" marker-end="url(#arrM)"/>`; }
-    return `<polyline points="${pts}" fill="none" stroke="${pl.color}" stroke-width="2.3" stroke-linejoin="round" stroke-linecap="round" marker-end="url(#${pl.color===RUNC?'arrG':'arrR'})"/>`;
+    const cw=(pl.color===RUNC)?3.2:2.3;               // ball-carrier / QB path drawn bold so the play reads at a glance
+    return `<polyline points="${pts}" fill="none" stroke="${pl.color}" stroke-width="${cw}" stroke-linejoin="round" stroke-linecap="round" marker-end="url(#${pl.color===RUNC?'arrG':'arrR'})"/>`;
   }).join('');
   // Gap marker (A/B/C/D) at the hole a numbered run hits
   const pNm=(playName||'').toUpperCase();
@@ -5594,6 +5611,7 @@ function playDiagramSVG(f, playName, isRun){
       <marker id="arrR" markerWidth="6" markerHeight="6" refX="3.6" refY="3" orient="auto"><path d="M0,0 L6,3 L0,6 z" fill="#ef4444"/></marker>
       <marker id="arrG" markerWidth="6" markerHeight="6" refX="3.6" refY="3" orient="auto"><path d="M0,0 L6,3 L0,6 z" fill="#22c55e"/></marker>
       <marker id="arrM" markerWidth="6" markerHeight="6" refX="3.6" refY="3" orient="auto"><path d="M0,0 L6,3 L0,6 z" fill="#f0a500"/></marker>
+      <marker id="arrK" markerWidth="6" markerHeight="6" refX="3.6" refY="3" orient="auto"><path d="M0,0 L6,3 L0,6 z" fill="#7c8696"/></marker>
     </defs>
     <rect x="0.5" y="0.5" width="${W-1}" height="${H-1}" rx="7" fill="#f4f7f4" stroke="#ccd5cc"/>
     <line x1="6" y1="${LY}" x2="${W-6}" y2="${LY}" stroke="#9aa6b2" stroke-width="1.2" stroke-dasharray="6 4"/>
