@@ -5499,24 +5499,26 @@ function alignDefense(off, front, strongLeft){
   const weakR=(sgnP>0?left:right).slice().sort((a,b)=>Math.abs(a.xf-0.5)-Math.abs(b.xf-0.5));
   const slot=strongR[1]||null, wslot=weakR[1]||null;
   const teStrong = te && ((te.xf>0.5)===(sgnF>0));
-  const LOS=-38, dLB=-100, dCB=-120, dNK=-100, dSS=-150, dFS=-190, sh=0.02;
+  const LOS=-38, dLB=-94, dCB=-120, dNK=-100, dSS=-150, dFS=-190, sh=0.02, in4=0.018;  // dLB = LBs at 4 yds
   const D=[]; const add=(t,xf,yd)=>D.push({type:t,team:'def',xf:_clampF(xf),yd});
   if(front==='3-4'){
-    add('NT',C.xf,LOS); add('DE',sT.xf,LOS); add('DE',wT.xf,LOS);
-    add('LB',sG.xf,dLB); add('LB',wG.xf,dLB);                                 // ILBs over the guards
-    add('LB', teStrong? te.xf+sgnF*0.03 : sT.xf+sgnF*0.05, teStrong?-58:-70); // strong OLB on TE/edge (front)
+    add('NT',C.xf,LOS);
+    add('DE',sT.xf-sgnF*in4,LOS); add('DE',wT.xf+sgnF*in4,LOS);               // ends in a 4i — inside shade of the tackle
+    add('LB',sG.xf,dLB); add('LB',wG.xf,dLB);                                 // ILBs over the guards @ 4 yds
+    add('LB', teStrong? te.xf+sgnF*0.03 : sT.xf+sgnF*0.05, teStrong?-58:-70); // strong OLB on TE/edge
     add('LB', wT.xf-sgnF*0.05, -70);                                          // weak OLB off the edge
   } else if(front==='3-3-5'||front==='3-3'){
-    add('NT',C.xf,LOS); add('DE',sT.xf,LOS); add('DE',wT.xf,LOS);
-    add('MLB',C.xf,-78); add('LB',sT.xf,-78); add('LB',wT.xf,-78);            // 3 LBs stacked behind the DL
-  } else {                                                                     // 4-3 (over front)
-    add('DT', C.xf+sgnF*0.028, LOS);                                          // 1-tech (strong A — TE side)
-    add('DT', wG.xf-sgnF*sh, LOS);                                            // 3-tech (weak B)
+    add('NT',C.xf,LOS);
+    add('DE',sT.xf-sgnF*in4,LOS); add('DE',wT.xf+sgnF*in4,LOS);               // ends in a 4i — inside shade of the tackle
+    add('MLB',C.xf,dLB); add('LB',sT.xf,dLB); add('LB',wT.xf,dLB);            // 3 LBs @ 4 yds
+  } else {                                                                     // 4-3 OVER front
+    add('DT', C.xf-sgnF*0.028, LOS);                                          // nose — 1-tech to the WEAK A (Over)
+    add('DT', sG.xf+sgnF*sh, LOS);                                            // 3-tech to the STRONG guard (Over)
     add('DE', sT.xf+sgnF*sh, LOS);                                            // strong 5-tech
     add('DE', wT.xf-sgnF*sh, LOS);                                            // weak 5-tech
-    add('LB', teStrong? te.xf+sgnF*0.03 : sG.xf+sgnF*0.02, teStrong?-78:dLB); // Sam to TE (front)
-    add('MLB', C.xf+sgnF*0.01, dLB);                                          // Mike over center
-    add('LB', wG.xf-sgnF*0.01, dLB);                                          // Will over weak guard
+    add('LB', teStrong? te.xf+sgnF*0.04 : sT.xf+sgnF*0.04, dLB);             // Sam to the TE/strong edge @ 4 yds
+    add('MLB', C.xf+sgnF*0.03, dLB);                                          // Mike — strong A gap (10) @ 4 yds
+    add('LB', wG.xf-sgnF*0.02, dLB);                                          // Will — weak B (weakside 30) @ 4 yds
   }
   // Secondary — corners on the #1s; overhang/safety roll to PASS strength (receivers)
   add('CB', n1L? n1L.xf+0.012 : 0.06, dCB);
