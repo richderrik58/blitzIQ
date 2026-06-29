@@ -753,6 +753,7 @@
     </div>
     <div class="canvas-btns">
       <button class="cbtn-clear" id="cvUndoBtn" onclick="cvUndo()" title="Undo (Ctrl+Z / Cmd+Z)" disabled style="opacity:.4">&#8617; Undo</button>
+      <button class="cbtn-clear" id="cvShellBtn" onclick="toggleCoverageShell()" title="Toggle 2-high / 1-high (Cover 3) shell">&#128737; 2-Hi</button>
       <button class="cbtn-clear" onclick="flipCanvas()" title="Mirror play left/right">&#8596; Flip</button>
       <button class="cbtn-clear" onclick="clearCanvas()">Clear</button>
       <button class="cbtn-save" onclick="saveCanvas()">Save</button>
@@ -5476,7 +5477,8 @@ function buildPlayRoutes(f, offPreset, playName){
 // Align the defense TO the offense (canonical rules): DL shades by technique,
 // LBs over guards/TE, CBs on the #1s, overhang on the slot, safeties to strength.
 // strongLeft = strength to the left. Returns 11 defenders with absolute xf/yd.
-function alignDefense(off, front, strongLeft){
+function alignDefense(off, front, strongLeft, shell){
+  shell = shell || '2high';                                  // '2high' (base) | '1high' (Cover 3 option)
   const ol = off.filter(p=>p.type==='OL'||p.type==='C').sort((a,b)=>a.xf-b.xf);
   if(ol.length<5){ const fb=CV_PRESETS[front]||CV_PRESETS['4-3']; return fb.map(p=>({...p,xf:strongLeft?1-p.xf:p.xf})); }
   const LT=ol[0],LG=ol[1],C=ol[2],RG=ol[3],RT=ol[4];
@@ -5520,16 +5522,21 @@ function alignDefense(off, front, strongLeft){
     add('MLB', C.xf+sgnF*0.03, dLB);                                          // Mike — strong A gap (10) @ 4 yds
     add('LB', wG.xf-sgnF*0.02, dLB);                                          // Will — weak B (weakside 30) @ 4 yds
   }
-  // Secondary — corners on the #1s; overhang/safety roll to PASS strength (receivers)
+  // Secondary — corners on the #1s; safeties set by SHELL (2-high base, 1-high = Cover 3 option)
   add('CB', n1L? n1L.xf+0.012 : 0.06, dCB);
   add('CB', n1R? n1R.xf-0.012 : 0.94, dCB);
-  if(front==='3-3-5'||front==='3-3'){                                          // 5 DBs: 2 overhangs + deep FS
-    add('SS', slot? slot.xf-sgnP*0.03 : (0.5+sgnP*0.12), dNK);                 // strong overhang (Spur) → receivers
-    add('SS', wslot? wslot.xf+sgnP*0.03 : (0.5-sgnP*0.12), dNK);               // weak overhang (Rover)
+  const odd = (front==='3-3-5'||front==='3-3');                                // 3-man front = 5 DBs (extra nickel)
+  const dHALF=-176;                                                            // two-high safety depth (~9.8 yds)
+  if(shell==='1high'){
+    // single-high (Cover 3): FS deep middle, SS rolled to the strong overhang
+    add('SS', slot? slot.xf-sgnP*0.03 : (0.5+sgnP*0.16), dNK);                 // strong curl-flat overhang
+    if(odd) add('SS', wslot? wslot.xf+sgnP*0.03 : (0.5-sgnP*0.12), dNK);       // weak overhang (5th DB in the odd front)
     add('FS', 0.5, dFS);
-  } else {                                                                     // 4 DBs: overhang to slot + deep FS
-    add('SS', slot? slot.xf-sgnP*0.03 : (0.5+sgnP*0.16), slot?dNK:dSS);        // nickel/SS over the slot (pass strength)
-    add('FS', 0.5, dFS);
+  } else {
+    // two-high (BASE): split-safety shell; nickel apexes the slot in the odd front
+    add('SS', 0.5+sgnP*0.16, dHALF);                                          // deep half to the pass-strength side
+    add('FS', 0.5-sgnP*0.16, dHALF);                                          // deep half to the other side
+    if(odd) add('NB', slot? slot.xf-sgnP*0.03 : (0.5+sgnP*0.12), dNK);        // nickel apexes the strong slot
   }
   return D;
 }
@@ -5551,7 +5558,7 @@ function playDiagramSVG(f, playName, isRun){
     const rb=off.find(p=>p.type==='RB'||p.type==='FB');
     return rb ? rb.xf<0.5 : false;
   })();
-  const def = alignDefense(off, getDefPreset(f), strongLeft);   // defense lines up TO the offense
+  const def = alignDefense(off, getDefPreset(f), strongLeft, window._defShell||'2high');   // defense lines up TO the offense
   const lbl = (cx,cy,t,c) => t ? `<text x="${cx}" y="${cy+2.6}" font-size="7" font-weight="700" text-anchor="middle" fill="${c}">${t}</text>` : '';
   const offSVG = off.map(p=>{
     const cx=X(p.xf), cy=Y(p.yd);
@@ -5736,7 +5743,8 @@ function applyGeneratedPlay(playData){
       const strongLeft=_presetStrongLeft(offArr);
       window._cvPresetType=defKey;             // track for gap assignment labels
       window._cvStrength=strongLeft?'left':'right';
-      alignDefense(offArr, defKey, strongLeft).forEach(pd => cvPlayers.push({
+      window._cvDef={offKey, defKey, strongLeft, cw, los};   // remember so the shell toggle can re-align
+      alignDefense(offArr, defKey, strongLeft, window._defShell||'2high').forEach(pd => cvPlayers.push({
         id:++cvPid, type:pd.type, team:'def',
         x:Math.round(cw*pd.xf), y:Math.round(los+pd.yd)
       }));
@@ -7464,6 +7472,19 @@ function _posDeleteBtn(player){
 }
 function hidePlayerDeleteBtn(){
   document.getElementById('cvDeletePlayerBtn').style.display='none';
+}
+// Flip the coverage shell (2-high base ↔ 1-high Cover 3) and re-align the defense.
+function toggleCoverageShell(){
+  window._defShell = (window._defShell==='1high') ? '2high' : '1high';
+  const btn=document.getElementById('cvShellBtn'); if(btn) btn.innerHTML = (window._defShell==='1high'?'&#128737; 1-Hi':'&#128737; 2-Hi');
+  const d=window._cvDef;
+  if(d && typeof CV_PRESETS!=='undefined' && CV_PRESETS[d.offKey]){
+    cvPushHistory();
+    cvPlayers = cvPlayers.filter(p=>p.team!=='def');
+    alignDefense(CV_PRESETS[d.offKey], d.defKey, d.strongLeft, window._defShell).forEach(pd => cvPlayers.push({
+      id:++cvPid, type:pd.type, team:'def', x:Math.round(d.cw*pd.xf), y:Math.round(d.los+pd.yd) }));
+    cvSelectedPlayer=null; hidePlayerDeleteBtn(); redrawAll();
+  }
 }
 function deleteSelectedPlayer(){
   if(!cvSelectedPlayer) return;
