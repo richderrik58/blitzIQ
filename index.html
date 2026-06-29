@@ -5239,6 +5239,21 @@ function pullGuard(preset, dir){
 }
 function teDownBlock(p){ const inn=p.xf<0.5?1:-1; return _blk([[p.xf,p.yd],[_clampF(p.xf+inn*0.045),-16]]); }
 function wrStalk(p){ const out=p.xf<0.5?-1:1; return _blk([[p.xf,p.yd],[_clampF(p.xf+out*0.008),-18]]); }
+// On a run: playside #1 stalks the corner; the playside SLOT inserts to block the
+// playside LB (Will) on zone; backside WRs cut off the backside pursuit — so nobody blocks air.
+function runWRBlocks(preset, dir, scheme){
+  const out=[], ps=dir, wrs=preset.filter(p=>p.type==='WR');
+  const psWR=wrs.filter(p=> ps>0?p.xf>0.5:p.xf<0.5).sort((a,b)=>Math.abs(b.xf-0.5)-Math.abs(a.xf-0.5)); // outside→in
+  const bsWR=wrs.filter(p=> ps>0?p.xf<0.5:p.xf>0.5);
+  if(psWR[0]) out.push(wrStalk(psWR[0]));                                  // playside #1 stalks the corner
+  if(psWR[1]){
+    if(scheme==='ozone'||scheme==='izone')
+      out.push(_blk([[psWR[1].xf,psWR[1].yd],[_clampF(psWR[1].xf-ps*0.05),psWR[1].yd-8],[_clampF(0.5+ps*0.06),-30]])); // slot blocks the playside backer (Will)
+    else out.push(wrStalk(psWR[1]));
+  }
+  bsWR.forEach(p=> out.push(_blk([[p.xf,p.yd],[_clampF(p.xf+ps*0.05),p.yd-8],[_clampF(0.5-ps*0.05),-26]])));  // backside WR cuts off pursuit
+  return out;
+}
 // OL pass set — retreat ~1 yd; tackles kick-slide outside
 function olPassPro(preset){
   return preset.filter(p=>p.type==='OL'||p.type==='C').map(p=>{ const out=p.xf<0.5?-1:1, tk=(p.xf<0.45||p.xf>0.55);
@@ -5274,6 +5289,14 @@ function bootlegPath(nm, preset){
     [_clampF(0.5+dir*0.22), qb.yd+14],       // start back to the roll side
     [_clampF(0.5+dir*0.34), -2],             // work back toward the LOS
     [_clampF(0.5+dir*0.40), -24] ]};         // up the boundary
+}
+// The RB sells the stretch fake AWAY from the boot (e.g. boot right = fake the stretch left).
+function bootRBFake(nm, preset){
+  if(!/\b(ROLL|BOOT|BOOTLEG|WAGGLE|NAKED|SPRINT)\b/.test(nm)) return null;
+  const dir = /\b(ROLL|BOOT|BOOTLEG|WAGGLE|NAKED|SPRINT)\s*(OUT\s*)?L(EFT)?\b/.test(nm) ? -1 : 1;
+  const opp=-dir;
+  const rb=preset.find(p=>p.type==='RB')||preset.find(p=>p.type==='FB'); if(!rb) return null;
+  return {color:RUNC, fake:true, pts:[[rb.xf,rb.yd],[0.5,54],[_clampF(0.5+opp*0.13),42],[_clampF(0.5+opp*0.22),22]]};  // stretch-fake away from the boot
 }
 // Pre-snap motion (dashed gold line): "Trade L/R" = TE crosses to the called side;
 // "Jet L/R" = backside WR/slot jets across. Shows the look team the motion.
@@ -5392,10 +5415,12 @@ function buildPlayPolylines(f, offPreset, playName){
       else if(rc.carrier==='RB' && rc.gap==='D') scheme='ozone';   // 28 / 29 = outside zone
     }
     if(scheme==='trap'){ const _fb=preset.find(p=>p.type==='FB'); if(_fb) carrier=_fb; }  // the trap is the FB
+    if(scheme==='sweep'){ const bk=preset.filter(p=>p.type==='RB').filter(b=> dir>0?b.xf>0.5:b.xf<0.5);
+      if(bk.length) carrier=bk.sort((a,b)=>Math.abs(b.xf-0.5)-Math.abs(a.xf-0.5))[0]; }  // sweep = the PLAYSIDE back carries it
     const sx = carrier?carrier.xf:0.6, sy = carrier?carrier.yd:72;
     if(scheme){
       const slines = schemeBlocks(preset, scheme, dir);
-      preset.filter(p=>p.type==='WR').forEach(p=>slines.push(wrStalk(p)));
+      runWRBlocks(preset, dir, scheme).forEach(l=>slines.push(l));
       if(carrierType!=='QB'){ const qh=qbHandoff(preset,dir); if(qh) slines.push(qh); }
       slines.push({color:RUNC, pts: schemeCarrier(sx, sy, scheme, dir)});
       const sboot=bootlegPath(nm,preset); if(sboot) slines.push(sboot);
@@ -5405,7 +5430,7 @@ function buildPlayPolylines(f, offPreset, playName){
     const down = /POWER|COUNTER|TRAP/.test(nm);
     const lines = olRunBlocks(preset, dir, down);                       // OL down/drive blocks
     preset.filter(p=>p.type==='TE').forEach(p=>lines.push(teDownBlock(p)));   // TE seals the edge
-    preset.filter(p=>p.type==='WR').forEach(p=>lines.push(wrStalk(p)));       // WRs stalk their DBs
+    runWRBlocks(preset, dir, null).forEach(l=>lines.push(l));                 // WRs: playside stalk, slot insert, backside cutoff
     if(down){ const pg=pullGuard(preset,dir); if(pg) lines.push(pg); }        // pulling guard on power/counter
     if(carrierType!=='QB'){ const qh=qbHandoff(preset,dir); if(qh) lines.push(qh); }   // QB rides the mesh
     if(carrierType!=='FB'){ const fl=fbLead(preset,dir); if(fl) lines.push(fl); }       // FB leads the hole
@@ -5463,9 +5488,11 @@ function buildPlayPolylines(f, offPreset, playName){
       lines.push({color:'#ef4444', pts:[[rb.xf,rb.yd],[_clampF(0.5+dir*0.30),36],[_clampF(0.5+dir*0.44),22]]}); }
   }
   // Play-action: the RB sells the fake toward the run gap; otherwise the RB pass-protects
-  if(/\bFAKE\b/.test(nm)){
+  if(/\b(ROLL|BOOT|BOOTLEG|WAGGLE|NAKED|SPRINT)\b/.test(nm)){
+    const rf=bootRBFake(nm, preset); if(rf) lines.push(rf);                  // RB sells the stretch fake on the boot
+  } else if(/\bFAKE\b/.test(nm)){
     const fk=runCall(nm), rb=preset.find(p=>p.type==='RB')||preset.find(p=>p.type==='FB');
-    if(rb&&fk){ const hx=_clampF(0.5+fk.dir*fk.dist); lines.push({color:RUNC, pts:[[rb.xf,rb.yd],[0.5,50],[hx,4]]}); }
+    if(rb&&fk){ const hx=_clampF(0.5+fk.dir*fk.dist); lines.push({color:RUNC, fake:true, pts:[[rb.xf,rb.yd],[0.5,50],[hx,4]]}); }
   } else if(!/\b(SWING|FLAT|WHEEL|CHECK|ARROW|SHOOT|SCREEN)\b/.test(nm)){
     const rb=rbPassBlock(preset, /\bLEFT\b|\bL\b/.test(nm)?-1:1); if(rb) lines.push(rb);   // RB stays in to protect
   }
@@ -5597,6 +5624,7 @@ function playDiagramSVG(f, playName, isRun){
       return `<polyline points="${pts}" fill="none" stroke="${pl.color}" stroke-width="2" stroke-linejoin="round" stroke-linecap="round"/>`+tcap;
     }
     if(pl.motion){ return `<polyline points="${pts}" fill="none" stroke="${pl.color}" stroke-width="2" stroke-dasharray="5 3.5" stroke-linejoin="round" stroke-linecap="round" marker-end="url(#arrM)"/>`; }
+    if(pl.fake){ return `<polyline points="${pts}" fill="none" stroke="${RUNC}" stroke-width="2" stroke-dasharray="4 3" stroke-linejoin="round" stroke-linecap="round" marker-end="url(#arrG)" opacity="0.7"/>`; }  // run fake — dashed
     const cw=(pl.color===RUNC)?3.2:2.3;               // ball-carrier / QB path drawn bold so the play reads at a glance
     return `<polyline points="${pts}" fill="none" stroke="${pl.color}" stroke-width="${cw}" stroke-linejoin="round" stroke-linecap="round" marker-end="url(#${pl.color===RUNC?'arrG':'arrR'})"/>`;
   }).join('');
