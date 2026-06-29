@@ -458,7 +458,7 @@
   <button class="act-sec" style="width:100%;margin-bottom:14px" onclick="showBlitzLib()">&#9889; Blitz Library — 12 Packages</button>
   <button class="act-sec" style="width:100%;margin-bottom:14px;background:rgba(240,165,0,.12);border-color:rgba(240,165,0,.45);color:var(--gold)" onclick="showHandoff()">&#128241; Game-Day iPad Setup</button>
   <div style="display:flex;gap:10px;margin-bottom:14px">
-    <button class="act-sec" style="flex:1;background:rgba(124,92,255,.12);border-color:rgba(124,92,255,.45);color:#b9a6ff" onclick="showPlaybook()">&#128210; My Playbook</button>
+    <button class="act-sec" style="flex:1;background:rgba(124,92,255,.12);border-color:rgba(124,92,255,.45);color:#b9a6ff" onclick="showPlaybook()">&#128210; My Playbook<span id="pbCountBadge"></span></button>
     <button class="act-sec" style="flex:1;background:rgba(124,92,255,.12);border-color:rgba(124,92,255,.45);color:#b9a6ff" onclick="drawAPlay()">&#9998; Draw a Play</button>
   </div>
   <button class="act-sec" style="width:100%;margin-bottom:14px;background:rgba(34,197,94,.1);border-color:rgba(34,197,94,.4);color:#4ade80" onclick="showSelfScout()">&#128737;&#65039; Self-Scout — Log My Defense</button>
@@ -752,6 +752,7 @@
       <div class="canvas-hdr-sub" id="canvasSubTitle">Defensive call diagram</div>
     </div>
     <div class="canvas-btns">
+      <button class="cbtn-clear" id="cvUndoBtn" onclick="cvUndo()" title="Undo (Ctrl+Z / Cmd+Z)" disabled style="opacity:.4">&#8617; Undo</button>
       <button class="cbtn-clear" onclick="flipCanvas()" title="Mirror play left/right">&#8596; Flip</button>
       <button class="cbtn-clear" onclick="clearCanvas()">Clear</button>
       <button class="cbtn-save" onclick="saveCanvas()">Save</button>
@@ -2151,6 +2152,62 @@ function buildCompareHTML(A,B){
 }
 
 // ── SCREEN 2 ──────────────────────────────────────────────────────────────────
+// Horizontal usage chart: how often each formation showed up (from playCount).
+function formationUsageChartHTML(o){
+  const fs=(o.formations||[]).filter(f=>f.playCount>0);
+  if(fs.length<2) return '';
+  const total=fs.reduce((a,f)=>a+f.playCount,0)||1;
+  const sorted=[...fs].sort((a,b)=>b.playCount-a.playCount).slice(0,8);
+  const max=sorted[0].playCount||1;
+  const rows=sorted.map(f=>{
+    const pct=Math.round(f.playCount/total*100);
+    const w=Math.max(4,Math.round(f.playCount/max*100));
+    const lean=f.passPct>=f.runPct?'var(--blue)':'var(--green)';
+    return `<div style="margin-bottom:9px">
+      <div style="display:flex;justify-content:space-between;font-size:11px;margin-bottom:3px">
+        <span style="color:var(--white);font-weight:700">${esc(f.name)}</span>
+        <span style="color:var(--gray)">${f.playCount} &middot; ${pct}%</span>
+      </div>
+      <div style="height:8px;background:rgba(255,255,255,.06);border-radius:4px;overflow:hidden"><div style="width:${w}%;height:100%;background:${lean};border-radius:4px"></div></div>
+    </div>`;
+  }).join('');
+  return `<div class="def-block" style="margin-bottom:14px">
+    <div class="def-lbl" style="margin-bottom:10px">&#128202; Formation Usage</div>
+    ${rows}
+    <div style="font-size:10px;color:var(--gray);margin-top:4px">Bar color = run (green) / pass (blue) lean. Top ${sorted.length} of ${fs.length} formations.</div>
+  </div>`;
+}
+// Quick-view of the opponent's most telling tendencies — down-&-distance spots
+// (from per-snap data) first, then the most lopsided formations.
+function keySituationsCardHTML(o){
+  if(o.self) return '';
+  const tells=[];
+  if(typeof _keySituations==='function'){
+    try{ _keySituations(o).slice(0,3).forEach(k=>{
+      tells.push({head:k.label, lean:k.lean, pct:k.pct, detail:(k.top?`likely <b style="color:var(--white)">${esc(k.top)}</b>`:'')});
+    }); }catch(_){}
+  }
+  if(tells.length<3){
+    const fs=(o.formations||[]).map(f=>({f, strength:Math.abs((f.runPct||50)-50)}))
+      .filter(x=>x.strength>=12).sort((a,b)=>b.strength-a.strength);
+    for(const x of fs){ if(tells.length>=3) break;
+      if(tells.some(t=>t.head===x.f.name)) continue;
+      const isPass=x.f.passPct>=x.f.runPct;
+      const fav=isPass?x.f.favoritePassPlay:x.f.favoriteRunPlay;
+      tells.push({head:x.f.name, lean:isPass?'PASS':'RUN', pct:Math.max(x.f.runPct,x.f.passPct),
+        detail:(fav&&fav!=='Not specified')?`fav <b style="color:var(--white)">${esc(fav)}</b>`:''});
+    }
+  }
+  if(!tells.length) return '';
+  const rows=tells.slice(0,3).map(t=>`<div style="display:flex;align-items:baseline;justify-content:space-between;gap:8px;padding:7px 0;border-top:1px solid rgba(255,255,255,.05)">
+      <div style="font-size:12.5px"><span style="font-weight:800;color:var(--white)">${esc(t.head)}</span>${t.detail?` <span style="color:var(--grayl);font-size:11px">— ${t.detail}</span>`:''}</div>
+      <div style="font-size:12px;font-weight:800;white-space:nowrap;color:${t.lean==='PASS'?'var(--blue)':'var(--green)'}">${t.pct}% ${t.lean}</div>
+    </div>`).join('');
+  return `<div class="def-block" style="margin-bottom:14px;border-color:rgba(240,165,0,.35)">
+    <div class="def-lbl" style="margin-bottom:4px;color:var(--gold)">&#127919; Key Situations — Read at a Glance</div>
+    ${rows}
+  </div>`;
+}
 function renderForms() {
   const o = st.opp;
   const isDemo=o.notes?.includes('DEMO-Riverside-Knights-2025');
@@ -2184,7 +2241,9 @@ function renderForms() {
       <div style="font-size:11px;color:var(--gray);margin-bottom:5px">To strengthen this report:</div>
       ${compl.missing.slice(0,4).map(m=>`<div style="font-size:12px;color:var(--grayl);line-height:1.7">&#9633; ${esc(m)}</div>`).join('')}
     </div>` : ''}
+    ${keySituationsCardHTML(o)}
     ${tendencyChartHTML(o)}
+    ${formationUsageChartHTML(o)}
     ${gameTrendHTML(o)}
     ${o.keyPlayers ? `
     <div class="def-block" style="margin-bottom:14px;border-color:rgba(240,165,0,.35)">
@@ -6159,6 +6218,33 @@ let cvDragOffX=0, cvDragOffY=0;
 let cvRouteCanvas=null;               // offscreen canvas storing ONLY freehand routes
 let cvPid=0;                          // player ID counter
 let CV_R=10;                           // player radius — 20px diameter, set in openCanvas
+let cvHistory=[];                     // undo stack of {players, routes-dataURL} snapshots (max 20)
+let cvGestureSnap=null, cvGestureStart=null;  // pre-gesture state for drag/draw undo
+
+// ── CANVAS UNDO ───────────────────────────────────────────────────────────────
+// Snapshot = deep copy of players + a PNG of the freehand-route layer. We push the
+// PRE-action state before each mutating action, then cvUndo() restores the top.
+function cvSnapshot(){ return { players: cvPlayers.map(p=>({...p})),
+  routes: (cvRouteCanvas? cvRouteCanvas.toDataURL('image/png') : null) }; }
+function cvPushHistory(snap){ cvHistory.push(snap||cvSnapshot()); if(cvHistory.length>20) cvHistory.shift(); cvUpdateUndoBtn(); }
+function cvUpdateUndoBtn(){ const b=document.getElementById('cvUndoBtn'); if(!b) return;
+  b.disabled=cvHistory.length===0; b.style.opacity=cvHistory.length?'1':'.4'; }
+function cvRestoreRoutes(dataURL, cb){
+  if(!cvRouteCanvas){ cb&&cb(); return; }
+  const rCtx=cvRouteCanvas.getContext('2d');
+  rCtx.clearRect(0,0,cvRouteCanvas.width,cvRouteCanvas.height);
+  if(!dataURL){ cb&&cb(); return; }
+  const img=new Image(); img.onload=()=>{ rCtx.drawImage(img,0,0); cb&&cb(); }; img.onerror=()=>{ cb&&cb(); }; img.src=dataURL;
+}
+function cvUndo(){
+  if(!cvHistory.length) return;
+  const snap=cvHistory.pop();
+  cvPlayers=(snap.players||[]).map(p=>({...p}));
+  cvSelectedPlayer=null; hidePlayerDeleteBtn();
+  cvRestoreRoutes(snap.routes, ()=>redrawAll());
+  redrawAll();
+  cvUpdateUndoBtn();
+}
 
 function drawField(ctx,w,h){
   // Field background
@@ -6825,6 +6911,7 @@ function placePreset(name){
   const los=ch*0.62;
   const preset=CV_PRESETS[name];
   if(!preset) return;
+  cvPushHistory();
   // Replace only players of the same team so defense + offense can coexist
   const team=preset[0].team;
   cvPlayers=cvPlayers.filter(p=>p.team!==team);
@@ -6892,6 +6979,7 @@ function openCanvas(onReady){
     // Default to Place Players mode
     setCanvasMode('place',document.getElementById('modePlaceBtn'));
     if(onReady) onReady(cw,ch);
+    cvHistory=[]; cvGestureSnap=null; cvGestureStart=null; cvUpdateUndoBtn();  // fresh undo stack per session
   });
 }
 
@@ -6915,7 +7003,7 @@ function closeCanvas(){
 
 // ── MY PLAYBOOK — persistent, reusable saved plays (DB.playbook) ──────────────
 const PB_CATS=['Defense','Run','Pass','Special'];
-let _pbFilter='all', _pbCat='Defense';
+let _pbFilter='all', _pbCat='Defense', _pbSearch='';
 function drawAPlay(){ window._pbEntry=null; window._pbBlank=true; openCanvas(); }
 function saveToPlaybook(){
   if(!cvCtx){ showToast('Open or draw a play first'); return; }
@@ -6940,36 +7028,114 @@ function pbSaveConfirm(){
   DB.playbook.unshift({ id:uid(), name, category:_pbCat, notes:document.getElementById('pbNotes').value.trim(),
     players:_pbDraft.players, routes:_pbDraft.routes, thumb:_pbDraft.thumb, created:new Date().toISOString() });
   saveDB();
+  updatePbCount();
   document.getElementById('pbSaveOv').style.display='none';
   showToast('✅ Saved to My Playbook — '+name);
 }
 function closePbSave(){ document.getElementById('pbSaveOv').style.display='none'; }
-function showPlaybook(){
-  const pb=DB.playbook||[];
-  const cnt=c=> c==='all'?pb.length:pb.filter(p=>p.category===c).length;
-  const chips=['all',...PB_CATS].map(c=>`<button onclick="_pbFilter='${c}';showPlaybook()" style="padding:6px 12px;border-radius:20px;font-size:12px;font-weight:700;cursor:pointer;font-family:inherit;border:1px solid ${c===_pbFilter?'var(--gold)':'rgba(255,255,255,.15)'};background:${c===_pbFilter?'rgba(240,165,0,.18)':'transparent'};color:${c===_pbFilter?'var(--gold)':'var(--grayl)'};${cnt(c)===0&&c!=='all'?'opacity:.4':''}">${c==='all'?'All':c} (${cnt(c)})</button>`).join('');
-  const items=pb.filter(p=>_pbFilter==='all'||p.category===_pbFilter);
-  const cards=items.length? items.map(p=>`
-    <div style="position:relative;background:var(--navy2);border:1px solid rgba(255,255,255,.08);border-radius:12px;overflow:hidden;break-inside:avoid">
+const PBICON='width:28px;height:28px;border-radius:7px;border:1px solid rgba(255,255,255,.14);background:rgba(255,255,255,.05);color:var(--grayl);font-size:12px;cursor:pointer;font-family:inherit;display:inline-flex;align-items:center;justify-content:center;flex-shrink:0';
+let _pbDragId=null;
+function _pbCard(p, idx){
+  const reorder=(_pbFilter==='all' && !_pbSearch.trim());   // priority order only meaningful in the full, unsearched list
+  const total=(DB.playbook||[]).length;
+  return `<div class="pb-card" data-id="${p.id}"${reorder?` draggable="true" ondragstart="_pbDragStart(event,'${p.id}')" ondragover="event.preventDefault()" ondrop="_pbDrop(event,'${p.id}')"`:''} style="position:relative;background:var(--navy2);border:1px solid rgba(255,255,255,.08);border-radius:12px;overflow:hidden;break-inside:avoid">
       <div onclick="loadPlaybookPlay('${p.id}')" style="cursor:pointer">
         <img src="${p.thumb}" style="width:100%;display:block;background:#f4f7f4" alt="${esc(p.name)}">
-        <div style="padding:9px 11px">
+        <div style="padding:9px 11px 7px">
           <div style="font-size:13px;font-weight:800;color:var(--white)">${esc(p.name)}</div>
           <div style="font-size:11px;color:var(--gold);margin-top:2px">${esc(p.category)}${p.notes?` <span style="color:var(--gray)">· ${esc(p.notes)}</span>`:''}</div>
         </div>
       </div>
-      <button onclick="deletePlaybookPlay('${p.id}')" title="Delete" style="position:absolute;top:6px;right:6px;width:24px;height:24px;border-radius:50%;border:none;background:rgba(0,0,0,.55);color:#fff;font-size:13px;cursor:pointer;font-family:inherit">&#10005;</button>
-    </div>`).join('')
-    : `<div style="grid-column:1/-1;text-align:center;color:var(--gray);padding:50px 20px;font-size:14px">No plays saved yet.<br><br>Tap <b style="color:#b9a6ff">&#9998; Draw a Play</b>, draw it up, then hit <b style="color:#b9a6ff">&#128210; Playbook</b> to save it here.</div>`;
+      <div style="display:flex;align-items:center;gap:4px;padding:6px 8px;border-top:1px solid rgba(255,255,255,.06)">
+        <button onclick="presentPlaybookPlay('${p.id}',event)" title="Teaching view" style="${PBICON}">&#9654;</button>
+        <button onclick="renamePlaybookPlay('${p.id}',event)" title="Rename" style="${PBICON}">&#9998;</button>
+        <button onclick="duplicatePlaybookPlay('${p.id}',event)" title="Duplicate" style="${PBICON}">&#10697;</button>
+        <div style="flex:1"></div>
+        ${reorder?`<button onclick="movePlaybookPlay('${p.id}',-1,event)" title="Move up"${idx===0?' disabled':''} style="${PBICON}${idx===0?';opacity:.3':''}">&#9650;</button>
+        <button onclick="movePlaybookPlay('${p.id}',1,event)" title="Move down"${idx===total-1?' disabled':''} style="${PBICON}${idx===total-1?';opacity:.3':''}">&#9660;</button>`:''}
+        <button onclick="deletePlaybookPlay('${p.id}',event)" title="Delete" style="${PBICON};color:var(--red)">&#10005;</button>
+      </div>
+    </div>`;
+}
+function _pbCardsHTML(){
+  const pb=DB.playbook||[];
+  const q=_pbSearch.trim().toLowerCase();
+  let items=pb.filter(p=>_pbFilter==='all'||p.category===_pbFilter);
+  if(q) items=items.filter(p=>(p.name||'').toLowerCase().includes(q)||(p.notes||'').toLowerCase().includes(q));
+  if(!items.length) return `<div style="grid-column:1/-1;text-align:center;color:var(--gray);padding:50px 20px;font-size:14px">${(q||_pbFilter!=='all')?'No plays match.':'No plays saved yet.<br><br>Tap <b style="color:#b9a6ff">&#9998; Draw a Play</b>, draw it up, then hit <b style="color:#b9a6ff">&#128210; Playbook</b> to save it here.'}</div>`;
+  return items.map((p,idx)=>_pbCard(p,idx)).join('');
+}
+function filterPlaybook(){ const g=document.getElementById('pbGrid'); if(g) g.innerHTML=_pbCardsHTML(); }
+function showPlaybook(){
+  const pb=DB.playbook||[];
+  const cnt=c=> c==='all'?pb.length:pb.filter(p=>p.category===c).length;
+  const chips=['all',...PB_CATS].map(c=>`<button onclick="_pbFilter='${c}';showPlaybook()" style="padding:6px 12px;border-radius:20px;font-size:12px;font-weight:700;cursor:pointer;font-family:inherit;border:1px solid ${c===_pbFilter?'var(--gold)':'rgba(255,255,255,.15)'};background:${c===_pbFilter?'rgba(240,165,0,.18)':'transparent'};color:${c===_pbFilter?'var(--gold)':'var(--grayl)'};${cnt(c)===0&&c!=='all'?'opacity:.4':''}">${c==='all'?'All':c} (${cnt(c)})</button>`).join('');
+  const installBtn=pb.length?`<button onclick="printInstallSheet()" title="Print all plays as a handout" style="margin-left:auto;padding:6px 12px;border-radius:8px;font-size:12px;font-weight:700;cursor:pointer;font-family:inherit;border:1px solid rgba(124,92,255,.5);background:rgba(124,92,255,.16);color:#b9a6ff">&#128438; Install Sheet</button>`:'';
+  const search=pb.length?`<input id="pbSearch" value="${esc(_pbSearch)}" oninput="_pbSearch=this.value;filterPlaybook()" placeholder="Search plays by name or note…" autocomplete="off" style="width:100%;padding:10px 14px;background:var(--navy2);border:1px solid rgba(255,255,255,.12);border-radius:10px;color:var(--white);font-size:14px;font-family:inherit;margin-bottom:12px">`:'';
   document.getElementById('pbBody').innerHTML=`
-    <div style="display:flex;gap:7px;flex-wrap:wrap;margin-bottom:16px">${chips}</div>
-    <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:12px">${cards}</div>`;
+    <div style="display:flex;gap:7px;flex-wrap:wrap;align-items:center;margin-bottom:12px">${chips}${installBtn}</div>
+    ${search}
+    ${pb.length&&_pbFilter==='all'&&!_pbSearch.trim()?`<div style="font-size:10px;color:var(--gray);margin-bottom:8px">Drag a card — or use &#9650;/&#9660; — to set priority order.</div>`:''}
+    <div id="pbGrid" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(170px,1fr));gap:12px">${_pbCardsHTML()}</div>`;
   document.getElementById('pbOv').classList.add('open'); document.body.style.overflow='hidden';
 }
 function loadPlaybookPlay(id){ const e=(DB.playbook||[]).find(p=>p.id===id); if(!e) return;
   closePlaybook(); window._pbEntry=e; window._pbBlank=false; openCanvas(); }
-function deletePlaybookPlay(id){ if(!confirm('Delete this play from your playbook?')) return;
-  DB.playbook=(DB.playbook||[]).filter(p=>p.id!==id); saveDB(); showPlaybook(); }
+function deletePlaybookPlay(id, ev){ if(ev) ev.stopPropagation(); if(!confirm('Delete this play from your playbook?')) return;
+  DB.playbook=(DB.playbook||[]).filter(p=>p.id!==id); saveDB(); updatePbCount(); showPlaybook(); }
+function renamePlaybookPlay(id, ev){ if(ev) ev.stopPropagation();
+  const e=(DB.playbook||[]).find(p=>p.id===id); if(!e) return;
+  const nn=prompt('Rename play:', e.name); if(nn==null) return;
+  const t=nn.trim(); if(!t){ showToast('Name can’t be empty'); return; }
+  e.name=t; saveDB(); filterPlaybook(); }
+function duplicatePlaybookPlay(id, ev){ if(ev) ev.stopPropagation();
+  const e=(DB.playbook||[]).find(p=>p.id===id); if(!e) return;
+  const copy={ ...e, id:uid(), name:(e.name||'Play')+' (copy)',
+    players:(e.players||[]).map(x=>({...x})), routes:e.routes, thumb:e.thumb, created:new Date().toISOString() };
+  const pb=DB.playbook; const i=pb.findIndex(p=>p.id===id); pb.splice(i<0?pb.length:i+1,0,copy);
+  saveDB(); updatePbCount(); showPlaybook(); showToast('Duplicated — '+copy.name); }
+function movePlaybookPlay(id, dir, ev){ if(ev) ev.stopPropagation();
+  const pb=DB.playbook||[]; const i=pb.findIndex(p=>p.id===id); const j=i+dir;
+  if(i<0||j<0||j>=pb.length) return; const [m]=pb.splice(i,1); pb.splice(j,0,m); saveDB(); showPlaybook(); }
+function _pbDragStart(e,id){ _pbDragId=id; if(e.dataTransfer) e.dataTransfer.effectAllowed='move'; }
+function _pbDrop(e,targetId){ e.preventDefault(); if(!_pbDragId||_pbDragId===targetId){ _pbDragId=null; return; }
+  const pb=DB.playbook||[]; const from=pb.findIndex(p=>p.id===_pbDragId), to=pb.findIndex(p=>p.id===targetId);
+  if(from<0||to<0){ _pbDragId=null; return; } const [m]=pb.splice(from,1); pb.splice(to,0,m); _pbDragId=null; saveDB(); showPlaybook(); }
+function presentPlaybookPlay(id, ev){ if(ev) ev.stopPropagation();
+  const e=(DB.playbook||[]).find(p=>p.id===id); if(!e) return;
+  const w=document.createElement('div'); w.id='pbPresentOv';
+  w.innerHTML=`<div style="position:fixed;inset:0;background:#0a0e1a;z-index:99998;overflow:auto;padding:18px 16px;font-family:inherit;-webkit-overflow-scrolling:touch">
+    <div style="max-width:760px;margin:0 auto">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px">
+        <div><div style="font-size:22px;font-weight:900;color:#fff">${esc(e.name)}</div>
+        <div style="font-size:12px;color:#f0a500;font-weight:700;margin-top:2px">${esc(e.category)}</div></div>
+        <button onclick="closePbPresent()" style="width:38px;height:38px;border-radius:10px;border:1px solid rgba(255,255,255,.2);background:rgba(255,255,255,.06);color:#fff;font-size:18px;cursor:pointer;font-family:inherit">&#10005;</button>
+      </div>
+      <img src="${e.thumb}" style="width:100%;display:block;background:#f4f7f4;border-radius:12px;border:1px solid rgba(255,255,255,.1)" alt="${esc(e.name)}">
+      ${e.notes?`<div style="margin-top:14px;background:var(--navy2);border:1px solid rgba(255,255,255,.08);border-radius:10px;padding:14px 16px;font-size:15px;line-height:1.6;color:rgba(255,255,255,.9)"><div style="font-size:10px;letter-spacing:1.5px;text-transform:uppercase;color:var(--gray);font-weight:800;margin-bottom:6px">Coaching Notes</div>${esc(e.notes)}</div>`:''}
+      <button onclick="closePbPresent();loadPlaybookPlay('${e.id}')" style="margin-top:16px;width:100%;padding:15px;border-radius:12px;border:1px solid rgba(124,92,255,.5);background:rgba(124,92,255,.18);color:#b9a6ff;font-size:16px;font-weight:800;cursor:pointer;font-family:inherit">&#9998; Edit this play</button>
+    </div></div>`;
+  document.body.appendChild(w); document.body.style.overflow='hidden';
+}
+function closePbPresent(){ const w=document.getElementById('pbPresentOv'); if(w) w.remove(); document.body.style.overflow='hidden'; }
+function printInstallSheet(){
+  const pb=DB.playbook||[];
+  if(!pb.length){ showToast('No plays to print yet'); return; }
+  const cards=pb.map(p=>`<div class="ip"><img src="${p.thumb}"><div class="ipn">${esc(p.name)}</div><div class="ipc">${esc(p.category)}${p.notes?' · '+esc(p.notes):''}</div></div>`).join('');
+  const w=window.open('','_blank'); if(!w){ showToast('Allow pop-ups to print the install sheet'); return; }
+  w.document.write(`<!doctype html><html><head><meta charset="utf-8"><title>DefWise — Install Sheet</title>
+  <style>@page{margin:.4in}body{font-family:Arial,Helvetica,sans-serif;margin:0;color:#111}
+  h1{font-size:16pt;margin:0 0 2px}.sub{font-size:9pt;color:#666;margin-bottom:12px;border-bottom:2px solid #111;padding-bottom:6px}
+  .grid{display:grid;grid-template-columns:repeat(3,1fr);gap:10px}
+  .ip{border:1px solid #ccc;border-radius:6px;overflow:hidden;break-inside:avoid;page-break-inside:avoid}
+  .ip img{width:100%;display:block;background:#f4f7f4}
+  .ipn{font-size:10pt;font-weight:bold;padding:5px 7px 0}.ipc{font-size:8pt;color:#555;padding:0 7px 6px}</style></head><body>
+  <h1>Install Sheet</h1><div class="sub">${pb.length} play${pb.length!==1?'s':''} &middot; DefWise &middot; defwise.com</div>
+  <div class="grid">${cards}</div>
+  <script>window.onload=function(){setTimeout(function(){window.print()},350)}<\/script></body></html>`);
+  w.document.close();
+}
+function updatePbCount(){ const el=document.getElementById('pbCountBadge'); if(el){ const n=(DB.playbook||[]).length; el.textContent=n?` (${n})`:''; } }
 function closePlaybook(){ document.getElementById('pbOv').classList.remove('open'); document.body.style.overflow=''; }
 
 // ── SELF-SCOUT — log your own defense during the game (replaces paper + re-entry) ──
@@ -7135,6 +7301,7 @@ function buildSelfScoutHTML(o){
 
 function flipCanvas(){
   if(!cvCtx) return;
+  cvPushHistory();
   const canvas=document.getElementById('playCanvas');
   const dpr=window.devicePixelRatio||1;
   const cw=canvas.width/dpr;
@@ -7161,6 +7328,7 @@ function flipCanvas(){
 
 function clearCanvas(){
   if(!cvCtx) return;
+  if(cvPlayers.length || (cvRouteCanvas)) cvPushHistory();
   cvPlayers=[];
   cvSelectedSymbol=null;
   cvSelectedPlayer=null; hidePlayerDeleteBtn();
@@ -7288,6 +7456,7 @@ function hidePlayerDeleteBtn(){
 }
 function deleteSelectedPlayer(){
   if(!cvSelectedPlayer) return;
+  cvPushHistory();
   cvPlayers=cvPlayers.filter(p=>p!==cvSelectedPlayer);
   cvSelectedPlayer=null;
   hidePlayerDeleteBtn();
@@ -7304,6 +7473,7 @@ function cvStart(e){
       // Select player and start drag immediately
       cvSelectedPlayer=hit;
       cvDragging=hit;
+      cvGestureSnap=cvSnapshot(); cvGestureStart={x:hit.x,y:hit.y};   // for undo if it moves
       cvDragOffX=p.x-hit.x; cvDragOffY=p.y-hit.y;
       showPlayerDeleteBtn(hit);
       redrawAll();
@@ -7312,6 +7482,7 @@ function cvStart(e){
       cvSelectedPlayer=null;
       hidePlayerDeleteBtn();
       if(cvSelectedSymbol){
+        cvPushHistory();
         cvPlayers.push({id:++cvPid,...cvSelectedSymbol,x:p.x,y:p.y});
       }
       redrawAll();
@@ -7321,6 +7492,7 @@ function cvStart(e){
 
   // Draw Routes mode
   if(!cvRouteCanvas) return;
+  cvGestureSnap=cvSnapshot();                                 // capture pre-stroke state for undo
   cvDrawing=true; cvLX=p.x; cvLY=p.y; cvPMX=p.x; cvPMY=p.y;  // seed smoothing at the start point
   const rCtx=cvRouteCanvas.getContext('2d');
   if(cvTool==='erase'){
@@ -7370,7 +7542,14 @@ function cvMove(e){
   redrawAll();
 }
 
-function cvEnd(e){ cvDrawing=false; cvDragging=null; }
+function cvEnd(e){
+  // Commit the pre-gesture snapshot to history only if something actually changed
+  if(cvDrawing && cvGestureSnap){ cvPushHistory(cvGestureSnap); }
+  else if(cvDragging && cvGestureSnap && cvGestureStart &&
+          (Math.abs(cvDragging.x-cvGestureStart.x)>1 || Math.abs(cvDragging.y-cvGestureStart.y)>1)){ cvPushHistory(cvGestureSnap); }
+  cvGestureSnap=null; cvGestureStart=null;
+  cvDrawing=false; cvDragging=null;
+}
 
 // Wire up canvas events — DOM is already ready (script is at end of <body>)
 // DOMContentLoaded has already fired by the time inline scripts at end-of-body run,
@@ -7387,6 +7566,13 @@ function cvEnd(e){ cvDrawing=false; cvDragging=null; }
   c.addEventListener('touchmove',  e=>cvMove(e.touches[0]?{...e,clientX:e.touches[0].clientX,clientY:e.touches[0].clientY,preventDefault:()=>e.preventDefault()}:e),{passive:false});
   c.addEventListener('touchend',   cvEnd);
 })();
+// Ctrl+Z / Cmd+Z undoes the last canvas action while the Draw Play screen is open
+document.addEventListener('keydown', e=>{
+  if((e.ctrlKey||e.metaKey) && !e.shiftKey && (e.key==='z'||e.key==='Z')){
+    const ov=document.getElementById('canvasOv');
+    if(ov && ov.classList.contains('open')){ e.preventDefault(); cvUndo(); }
+  }
+});
 
 // ── PRACTICE SCRIPT GENERATOR ────────────────────────────────────────────────
 const _HASHES=['Left','Right','Middle','Field','Boundary'];
@@ -8816,7 +9002,7 @@ function maybeShowIosInstallTip(){
     const bar=document.getElementById('iosTip'); if(bar) bar.style.display='flex';
   }catch(e){}
 }
-renderOpps(); syncHdr(); applyGameDay(); applyCVD(); updateProBadge(); maybeShowIosInstallTip(); maybeShowSharedReport();
+renderOpps(); syncHdr(); applyGameDay(); applyCVD(); updateProBadge(); maybeShowIosInstallTip(); maybeShowSharedReport(); updatePbCount();
 if (_loadNotice) setTimeout(() => { try { showToast(_loadNotice, 5000); } catch(_) {} }, 400);
 
 // ── INSTALL SCRIPT ────────────────────────────────────────────────────────────
