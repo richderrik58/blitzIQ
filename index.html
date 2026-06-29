@@ -5482,42 +5482,51 @@ function alignDefense(off, front, strongLeft){
   const LT=ol[0],LG=ol[1],C=ol[2],RG=ol[3],RT=ol[4];
   const recv = off.filter(p=>p.type==='WR'||p.type==='TE').sort((a,b)=>a.xf-b.xf);
   const te = off.find(p=>p.type==='TE');
-  const sgn = strongLeft ? -1 : 1;                           // +1 = strength right
-  const sG=sgn>0?RG:LG, wG=sgn>0?LG:RG, sT=sgn>0?RT:LT, wT=sgn>0?LT:RT;
+  // OPTION A — split strength. FRONT (run) sets to the TE; COVERAGE (pass) sets to
+  // the side with more DETACHED receivers (twins/trips of WRs). So vs Pro L Twins R
+  // the D-line + Sam stay honest to the TE while the overhang/safety roll to the twins.
+  const frontLeft = strongLeft;                              // caller computes TE-first = run strength
+  const _wrs = off.filter(p=>p.type==='WR');
+  const _wl=_wrs.filter(p=>p.xf<0.5).length, _wr=_wrs.length-_wl;   // detached WRs per side
+  const _teL=(te&&te.xf<0.5)?1:0, _teR=(te&&te.xf>0.5)?1:0;
+  const passLeft = (_wl!==_wr) ? (_wl>_wr) : (_teL!==_teR ? _teL>_teR : frontLeft);
+  const sgnF = frontLeft ? -1 : 1;                           // +1 = run strength right (TE side)
+  const sgnP = passLeft  ? -1 : 1;                           // +1 = pass strength right (receiver side)
+  const sG=sgnF>0?RG:LG, wG=sgnF>0?LG:RG, sT=sgnF>0?RT:LT, wT=sgnF>0?LT:RT;
   const left=recv.filter(r=>r.xf<0.5), right=recv.filter(r=>r.xf>0.5);
   const n1L=left[0]||null, n1R=right[right.length-1]||null;
-  const strongR=(sgn>0?right:left).slice().sort((a,b)=>Math.abs(a.xf-0.5)-Math.abs(b.xf-0.5)); // inside→out
-  const weakR=(sgn>0?left:right).slice().sort((a,b)=>Math.abs(a.xf-0.5)-Math.abs(b.xf-0.5));
+  const strongR=(sgnP>0?right:left).slice().sort((a,b)=>Math.abs(a.xf-0.5)-Math.abs(b.xf-0.5)); // coverage strength = receivers, inside→out
+  const weakR=(sgnP>0?left:right).slice().sort((a,b)=>Math.abs(a.xf-0.5)-Math.abs(b.xf-0.5));
   const slot=strongR[1]||null, wslot=weakR[1]||null;
-  const teStrong = te && ((te.xf>0.5)===(sgn>0));
+  const teStrong = te && ((te.xf>0.5)===(sgnF>0));
   const LOS=-38, dLB=-100, dCB=-120, dNK=-100, dSS=-150, dFS=-190, sh=0.02;
   const D=[]; const add=(t,xf,yd)=>D.push({type:t,team:'def',xf:_clampF(xf),yd});
   if(front==='3-4'){
     add('NT',C.xf,LOS); add('DE',sT.xf,LOS); add('DE',wT.xf,LOS);
     add('LB',sG.xf,dLB); add('LB',wG.xf,dLB);                                 // ILBs over the guards
-    add('LB', teStrong? te.xf+sgn*0.03 : sT.xf+sgn*0.05, teStrong?-58:-70);   // strong OLB on TE/edge
-    add('LB', wT.xf-sgn*0.05, -70);                                           // weak OLB off the edge
+    add('LB', teStrong? te.xf+sgnF*0.03 : sT.xf+sgnF*0.05, teStrong?-58:-70); // strong OLB on TE/edge (front)
+    add('LB', wT.xf-sgnF*0.05, -70);                                          // weak OLB off the edge
   } else if(front==='3-3-5'||front==='3-3'){
     add('NT',C.xf,LOS); add('DE',sT.xf,LOS); add('DE',wT.xf,LOS);
     add('MLB',C.xf,-78); add('LB',sT.xf,-78); add('LB',wT.xf,-78);            // 3 LBs stacked behind the DL
   } else {                                                                     // 4-3 (over front)
-    add('DT', C.xf+sgn*0.028, LOS);                                           // 1-tech (strong A)
-    add('DT', wG.xf-sgn*sh, LOS);                                             // 3-tech (weak B)
-    add('DE', sT.xf+sgn*sh, LOS);                                             // strong 5-tech
-    add('DE', wT.xf-sgn*sh, LOS);                                             // weak 5-tech
-    add('LB', teStrong? te.xf+sgn*0.03 : sG.xf+sgn*0.02, teStrong?-78:dLB);   // Sam to TE/strong
-    add('MLB', C.xf+sgn*0.01, dLB);                                           // Mike over center
-    add('LB', wG.xf-sgn*0.01, dLB);                                           // Will over weak guard
+    add('DT', C.xf+sgnF*0.028, LOS);                                          // 1-tech (strong A — TE side)
+    add('DT', wG.xf-sgnF*sh, LOS);                                            // 3-tech (weak B)
+    add('DE', sT.xf+sgnF*sh, LOS);                                            // strong 5-tech
+    add('DE', wT.xf-sgnF*sh, LOS);                                            // weak 5-tech
+    add('LB', teStrong? te.xf+sgnF*0.03 : sG.xf+sgnF*0.02, teStrong?-78:dLB); // Sam to TE (front)
+    add('MLB', C.xf+sgnF*0.01, dLB);                                          // Mike over center
+    add('LB', wG.xf-sgnF*0.01, dLB);                                          // Will over weak guard
   }
-  // Secondary — corners on the #1s
+  // Secondary — corners on the #1s; overhang/safety roll to PASS strength (receivers)
   add('CB', n1L? n1L.xf+0.012 : 0.06, dCB);
   add('CB', n1R? n1R.xf-0.012 : 0.94, dCB);
   if(front==='3-3-5'||front==='3-3'){                                          // 5 DBs: 2 overhangs + deep FS
-    add('SS', slot? slot.xf-sgn*0.03 : (0.5+sgn*0.12), dNK);                   // strong overhang (Spur)
-    add('SS', wslot? wslot.xf+sgn*0.03 : (0.5-sgn*0.12), dNK);                 // weak overhang (Rover)
+    add('SS', slot? slot.xf-sgnP*0.03 : (0.5+sgnP*0.12), dNK);                 // strong overhang (Spur) → receivers
+    add('SS', wslot? wslot.xf+sgnP*0.03 : (0.5-sgnP*0.12), dNK);               // weak overhang (Rover)
     add('FS', 0.5, dFS);
   } else {                                                                     // 4 DBs: overhang to slot + deep FS
-    add('SS', slot? slot.xf-sgn*0.03 : (0.5+sgn*0.16), slot?dNK:dSS);          // nickel/SS over the slot or to strength
+    add('SS', slot? slot.xf-sgnP*0.03 : (0.5+sgnP*0.16), slot?dNK:dSS);        // nickel/SS over the slot (pass strength)
     add('FS', 0.5, dFS);
   }
   return D;
