@@ -5090,6 +5090,10 @@ function offPresetFor(name){
   if(/PRO\s+L\s+WING\s+L\s+TWINS\s+R\s+WEAK/.test(nm)) return 'pro-l-wing-l-twins-r-weak';
   if(/PRO\s+L\s+TWINS\s+R\s+WEAK/.test(nm)) return 'pro-l-twins-r-weak';
   if(/\bTRIO\b/.test(nm)) return (/\bLEFT\b|\bTRIO\s+L\b/.test(nm)) ? 'trio-l' : 'trio';   // trips one way, inline TE backside
+  if(/\bTREY\b/.test(nm)){     // 2 WR + offset-wing TE to one side; strong/weak = the RB offset; defaults to strong
+    const left=/\bLEFT\b|\bTREY\s+L\b/.test(nm), weak=/\bWEAK\b/.test(nm);
+    return left ? (weak?'trey-l-weak':'trey-l-strong') : (weak?'trey-r-weak':'trey-r-strong');
+  }
   if(/TRIPS|TREY/.test(nm)) return 'trips';
   if(/EMPTY/.test(nm)) return 'empty';
   if(/I.FORM|IFORM/.test(nm)) return 'i-form';
@@ -7002,6 +7006,19 @@ const CV_PRESETS = {
     {type:'TE', team:'off', xf:0.60, yd:42},
     {type:'WR', team:'off', xf:0.84, yd:40},
     {type:'WR', team:'off', xf:0.95, yd:30},
+    {type:'QB', team:'off', xf:0.50, yd:72},
+    {type:'RB', team:'off', xf:0.60, yd:72},
+  ],
+  'trey-l-weak':[ // mirror of trey-r-weak: trey LEFT (TE wing left, 2 WR left); single WR backside right; RB weak (right)
+    {type:'WR', team:'off', xf:0.95, yd:30},
+    {type:'OL', team:'off', xf:0.408,yd:30},
+    {type:'OL', team:'off', xf:0.454,yd:30},
+    {type:'C',  team:'off', xf:0.50, yd:30},
+    {type:'OL', team:'off', xf:0.546,yd:30},
+    {type:'OL', team:'off', xf:0.592,yd:30},
+    {type:'TE', team:'off', xf:0.40, yd:42},
+    {type:'WR', team:'off', xf:0.16, yd:40},
+    {type:'WR', team:'off', xf:0.05, yd:30},
     {type:'QB', team:'off', xf:0.50, yd:72},
     {type:'RB', team:'off', xf:0.60, yd:72},
   ],
