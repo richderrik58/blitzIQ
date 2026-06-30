@@ -5301,6 +5301,14 @@ function bootRBFake(nm, preset){
   const rb=preset.find(p=>p.type==='RB')||preset.find(p=>p.type==='FB'); if(!rb) return null;
   return {color:RUNC, fake:true, pts:[[rb.xf,rb.yd],[0.5,54],[_clampF(0.5+opp*0.13),42],[_clampF(0.5+opp*0.22),22]]};  // stretch-fake away from the boot
 }
+// Flexbone orbit/jet motion — the BACKSIDE slotback orbits behind the QB toward the play (dashed gold).
+function orbitMotion(preset, dir){
+  const slots=preset.filter(p=>p.type==='RB').sort((a,b)=>a.xf-b.xf);
+  if(slots.length<2) return null;
+  const back = dir>0 ? slots[0] : slots[slots.length-1];   // the slot away from the play motions across
+  const qb=preset.find(p=>p.type==='QB'); const qy=qb?qb.yd:72;
+  return {color:'#f0a500', motion:true, pts:[[back.xf,back.yd],[0.5,qy+12],[_clampF(0.5+dir*0.12),qy+5],[_clampF(0.5+dir*0.24),qy-2]]};
+}
 // Pre-snap motion (dashed gold line): "Trade L/R" = TE crosses to the called side;
 // "Jet L/R" = backside WR/slot jets across. Shows the look team the motion.
 function motionLines(nm, preset){
@@ -5326,6 +5334,7 @@ function _olRoles(preset, dir){
                : {PST:ol[0],PSG:ol[1],C:ol[2],BSG:ol[3],BST:ol[4]};
 }
 function detectRunScheme(nm){
+  if(/\bISO\b|\bISOLATION\b|\bLEAD\b/.test(nm)) return 'iso';   // FB isolates the LB through the A gap
   if(/\bBUCK\b|\bSWEEP\b/.test(nm)) return 'sweep';
   if(/\bCOUNTER\b/.test(nm)) return 'counter';
   if(/\bPOWER\b/.test(nm)) return 'power';
@@ -5369,6 +5378,11 @@ function schemeBlocks(preset, scheme, dir){
   } else if(scheme==='sweep'){
     lines.push(pullKick(R.PSG), pullWrap(R.BSG), reach(R.C), down(R.PST), hinge(R.BST));
     if(te) lines.push(down(te));
+  } else if(scheme==='iso'){
+    // OL base/drive-block the man on; FB leads through the playside A gap and isolates the LB
+    [R.BST,R.BSG,R.C,R.PSG,R.PST].forEach(p=>lines.push(_blk([[p.xf,p.yd],[_clampF(p.xf+ps*0.004),-16]])));
+    if(te) lines.push(down(te));
+    if(fb) lines.push(_pull([[fb.xf,fb.yd],[_clampF(0.5+ps*0.05),34],[_clampF(0.5+ps*0.05),-22]]));   // FB lead through A gap → onto the Mike/Will
   } else if(scheme==='izone'){
     [R.BST,R.BSG,R.C,R.PSG,R.PST].forEach(p=>lines.push(_blk([[p.xf,p.yd],[_clampF(p.xf+ps*0.02),p.yd-4],[_clampF(p.xf+ps*0.03),-22]])));
     if(te) lines.push(down(te));
@@ -5382,6 +5396,7 @@ function schemeBlocks(preset, scheme, dir){
 function schemeCarrier(sx, sy, scheme, dir){
   const ps=dir, edge=_clampF(0.5+ps*0.20), hole=_clampF(0.5+ps*0.10);
   if(scheme==='counter') return [[sx,sy],[_clampF(sx-ps*0.06),sy-2],[0.5,50],[hole,-4],[_clampF(hole+ps*0.02),-46]];
+  if(scheme==='iso')     return [[sx,sy],[0.5,50],[_clampF(0.5+ps*0.05),-4],[_clampF(0.5+ps*0.05),-46]]; // downhill through the A gap behind the FB
   if(scheme==='sweep')   return [[sx,sy],[0.5,56],[_clampF(0.5+ps*0.16),40],[edge,12],[edge,-30]];
   if(scheme==='trap')    return [[sx,sy],[0.5,48],[_clampF(0.5+ps*0.05),-6],[_clampF(0.5+ps*0.05),-46]];
   if(scheme==='ozone')   return [[sx,sy],[_clampF(0.5+ps*0.10),54],[edge,30],[edge,-6],[_clampF(edge-ps*0.03),-44]];
@@ -5428,6 +5443,7 @@ function buildPlayPolylines(f, offPreset, playName){
       slines.push({color:RUNC, pts: schemeCarrier(sx, sy, scheme, dir)});
       const sboot=bootlegPath(nm,preset); if(sboot) slines.push(sboot);
       slines.push(...motionLines(nm, preset));
+      if(offPreset==='flexbone'){ const orb=orbitMotion(preset,dir); if(orb) slines.push(orb); }  // orbit the backside slot
       return slines;
     }
     const down = /POWER|COUNTER|TRAP/.test(nm);
