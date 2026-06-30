@@ -5089,6 +5089,7 @@ function offPresetFor(name){
   if(/TREY\s+R\s+STRONG/.test(nm)) return 'trey-r-strong';
   if(/PRO\s+L\s+WING\s+L\s+TWINS\s+R\s+WEAK/.test(nm)) return 'pro-l-wing-l-twins-r-weak';
   if(/PRO\s+L\s+TWINS\s+R\s+WEAK/.test(nm)) return 'pro-l-twins-r-weak';
+  if(/\bTRIO\b/.test(nm)) return 'trio';        // 3x1 with a flexed-TE #3
   if(/TRIPS|TREY/.test(nm)) return 'trips';
   if(/EMPTY/.test(nm)) return 'empty';
   if(/I.FORM|IFORM/.test(nm)) return 'i-form';
@@ -5101,7 +5102,7 @@ function offPresetFor(name){
 // preset is drawn, mirror it left↔right. Specific presets (TRIPS L STRONG, PRO L
 // TWINS R…) already encode their side, so they're left alone. The defense aligns to
 // the actual coordinates, so flipping the offense flips the front with it.
-const _MIRRORABLE = new Set(['trips','empty','spread','doubles','i-form','king','queen','single-wing','flexbone']);
+const _MIRRORABLE = new Set(['trips','trio','empty','spread','doubles','i-form','king','queen','single-wing','flexbone']);
 function _presetStrongLeft(arr){                    // TE side → receiver count → RB (coach's strength rule)
   const te=arr.filter(p=>p.type==='TE'), tl=te.filter(p=>p.xf<0.5).length;
   if(te.length && tl!==te.length-tl) return tl>te.length-tl;
@@ -5151,14 +5152,33 @@ const ROUTE_NUM = {0:'HITCH',1:'FLAT',2:'SLANT',3:'COMEBACK',4:'CURL',5:'OUT',6:
 
 // Named pass concepts → routes for the play-side receivers (outside → in).
 const CONCEPT_ROUTES = {
+  // playside, outside → in
   SMASH:['HITCH','CORNER'], FLOOD:['GO','OUT','FLAT'], STICK:['GO','OUT','FLAT'],
   MESH:['CORNER','DRAG','DRAG'], POSTDIG:['POST','DIG'], POSTWHEEL:['WHEEL','POST'],
+  SNAG:['SPOT','CORNER','FLAT'],        // #1 snag/spot, #2 corner, #3 flat — triangle stretch
+  SPACING:['HITCH','SPOT','FLAT'],      // horizontal spacing of quick sits
+  DAGGER:['DIG','SEAM'],                // #1 dig in behind #2's vertical clearout
+  DRIVE:['DIG','DRAG'],                 // dig over a shallow drive
+  LEVELS:['DIG','SLANT'],               // two in-breakers at different depths
+  YCROSS:['CROSS','CORNER','FLAT'],     // Y deep cross with a corner + flat
+  DBLSLANT:['SLANT','SLANT'],           // double slants
+  SLANTFLAT:['SLANT','FLAT'],           // slant-flat
+  CURLFLAT:['CURL','FLAT'],             // curl-flat
 };
 function detectConcept(nm){
   if(/\b(FOUR|4)\s*VERT/.test(nm)) return 'FOURVERT';
   if(/\bALL\s*CURL/.test(nm)) return 'ALLCURL';
   if(/\bSMASH\b/.test(nm)) return 'SMASH';
-  if(/\bFLOOD\b/.test(nm)) return 'FLOOD';
+  if(/\bFLOOD\b|\bSAIL\b/.test(nm)) return 'FLOOD';
+  if(/\bSNAG\b/.test(nm)) return 'SNAG';
+  if(/\bSPACING\b/.test(nm)) return 'SPACING';
+  if(/\bDAGGER\b/.test(nm)) return 'DAGGER';
+  if(/\bLEVELS\b/.test(nm)) return 'LEVELS';
+  if(/\bDRIVE\b|\bSHALLOW\s*CROSS\b/.test(nm)) return 'DRIVE';
+  if(/\bY\s*-?\s*CROSS\b/.test(nm)) return 'YCROSS';
+  if(/\bDOUBLE\s*SLANT/.test(nm)) return 'DBLSLANT';
+  if(/\bSLANT\s*-?\s*FLAT\b/.test(nm)) return 'SLANTFLAT';
+  if(/\bCURL\s*-?\s*FLAT\b/.test(nm)) return 'CURLFLAT';
   if(/\bSTICK\b|\bGHOST\b/.test(nm)) return 'STICK';
   if(/\bMESH\b/.test(nm)) return 'MESH';
   if(/POST\s*-?\s*DIG/.test(nm)) return 'POSTDIG';
@@ -6763,6 +6783,19 @@ const CV_PRESETS = {
     {type:'WR', team:'off', xf:0.77, yd:40},
     {type:'WR', team:'off', xf:0.86, yd:40},
     {type:'WR', team:'off', xf:0.95, yd:30},
+  ],
+  'trio':[ // 3x1 with the #3 a FLEXED TE (H) just off the tackle — split end X weak left, single back
+    {type:'WR', team:'off', xf:0.05, yd:30},   // X — #1 weak (backside)
+    {type:'OL', team:'off', xf:0.408,yd:30},
+    {type:'OL', team:'off', xf:0.454,yd:30},
+    {type:'C',  team:'off', xf:0.50, yd:30},
+    {type:'OL', team:'off', xf:0.546,yd:30},
+    {type:'OL', team:'off', xf:0.592,yd:30},
+    {type:'QB', team:'off', xf:0.50, yd:72},
+    {type:'RB', team:'off', xf:0.60, yd:72},
+    {type:'TE', team:'off', xf:0.66, yd:42},   // H / #3 — flexed just off the tackle
+    {type:'WR', team:'off', xf:0.82, yd:40},   // #2 slot
+    {type:'WR', team:'off', xf:0.95, yd:30},   // Z — #1 outside, on the LOS
   ],
   'doubles':[ // 2x2 no-TE (generic 4-wide look) — also the default fallback
     {type:'WR', team:'off', xf:0.05, yd:30},
