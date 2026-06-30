@@ -5581,11 +5581,11 @@ function alignDefense(off, front, strongLeft, shell){
   return D;
 }
 function playDiagramSVG(f, playName, isRun){
-  const W=340, H=318, LY=205, MX=16, FW=W-2*MX, sc=0.62, SPREAD=1.38;
-  // Spread players out from the center so the box isn't cramped (TE off the tackle,
-  // 3-tech off the 5-tech). Wide receivers cap at the sideline. Defense + blocks map
-  // through the same X(), so everything stays aligned, just roomier.
-  const X = xf => { let e=(xf-0.5)*SPREAD; if(e<-0.47)e=-0.47; if(e>0.47)e=0.47; return +(MX+(0.5+e)*FW).toFixed(1); };
+  const W=340, H=318, LY=205, MX=16, FW=W-2*MX, sc=0.62;
+  // Spread ONLY the box (OL/TE/QB/RB — within 0.18 of center) so the line isn't cramped
+  // (3-tech clears the 5-tech, TE clears the tackle) while slots and split receivers keep
+  // their natural width — no bunching. Defense + blocks map through the same X().
+  const X = xf => { const d=xf-0.5; const e = Math.abs(d)<0.18 ? d*1.5 : d; return +(MX+(0.5+e)*FW).toFixed(1); };
   const Y = yd => +(LY + yd*sc).toFixed(1);
   const offPreset = formationPreset(f);
   const off = CV_PRESETS[offPreset] || CV_PRESETS['spread'];
