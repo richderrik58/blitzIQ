@@ -5241,17 +5241,20 @@ function teDownBlock(p){ const inn=p.xf<0.5?1:-1; return _blk([[p.xf,p.yd],[_cla
 function wrStalk(p){ const out=p.xf<0.5?-1:1; return _blk([[p.xf,p.yd],[_clampF(p.xf+out*0.008),-18]]); }
 // On a run: playside #1 stalks the corner; the playside SLOT inserts to block the
 // playside LB (Will) on zone; backside WRs cut off the backside pursuit — so nobody blocks air.
+function wrRunOff(p){ const o=p.xf<0.5?-1:1; return {color:'#ef4444', pts:[[p.xf,p.yd],[_clampF(p.xf+o*0.01),-44],[_clampF(p.xf+o*0.01),-112]]}; } // run the corner off (clearout)
 function runWRBlocks(preset, dir, scheme){
   const out=[], ps=dir, wrs=preset.filter(p=>p.type==='WR');
   const psWR=wrs.filter(p=> ps>0?p.xf>0.5:p.xf<0.5).sort((a,b)=>Math.abs(b.xf-0.5)-Math.abs(a.xf-0.5)); // outside→in
   const bsWR=wrs.filter(p=> ps>0?p.xf<0.5:p.xf>0.5);
-  if(psWR[0]) out.push(wrStalk(psWR[0]));                                  // playside #1 stalks the corner
+  if(psWR[0]) out.push(wrStalk(psWR[0]));   // playside #1 is on the numbers → stalk the corner
+  // ONLY a true playside SLOT (inside the numbers) blocks the inside backer — and only because the play comes to him
   if(psWR[1]){
-    if(scheme==='ozone'||scheme==='izone')
-      out.push(_blk([[psWR[1].xf,psWR[1].yd],[_clampF(psWR[1].xf-ps*0.05),psWR[1].yd-8],[_clampF(0.5+ps*0.06),-30]])); // slot blocks the playside backer (Will)
-    else out.push(wrStalk(psWR[1]));
+    if(Math.abs(psWR[1].xf-0.5) < 0.36)
+      out.push(_blk([[psWR[1].xf,psWR[1].yd],[_clampF(psWR[1].xf-ps*0.05),psWR[1].yd-8],[_clampF(0.5+ps*0.055),-30]]));  // slot blocks the Will
+    else out.push(wrStalk(psWR[1]));   // a 2nd man on the numbers just stalks his corner
   }
-  bsWR.forEach(p=> out.push(_blk([[p.xf,p.yd],[_clampF(p.xf+ps*0.05),p.yd-8],[_clampF(0.5-ps*0.05),-26]])));  // backside WR cuts off pursuit
+  // Backside WRs are on the numbers → run the corner off (clearout); never block an inside backer
+  bsWR.forEach(p=> out.push(wrRunOff(p)));
   return out;
 }
 // OL pass set — retreat ~1 yd; tackles kick-slide outside
