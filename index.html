@@ -425,6 +425,16 @@
   <!-- Cloudflare Web Analytics -->
   <script defer src='https://static.cloudflareinsights.com/beacon.min.js' data-cf-beacon='{"token": "9af0ec299c304056b75c1834ac3379e0"}'></script>
   <!-- End Cloudflare Web Analytics -->
+  <!-- In-app product funnel (PostHog, privacy-light) — dormant until a key is set -->
+  <script>
+    window.POSTHOG_KEY = "";   // ← paste your PostHog Project API key here to turn the funnel on
+    window._track = function(ev, props){ try{ if(window.posthog && window.posthog.capture) window.posthog.capture(ev, props||{}); }catch(_){} };
+    if(window.POSTHOG_KEY){
+      var _ph=document.createElement('script'); _ph.async=true; _ph.src='https://us-assets.i.posthog.com/static/array.js';
+      _ph.onload=function(){ try{ window.posthog && posthog.init(window.POSTHOG_KEY,{api_host:'https://us.i.posthog.com', autocapture:false, capture_pageview:true, persistence:'memory'}); }catch(_){} };
+      document.head.appendChild(_ph);
+    }
+  </script>
 </head>
 <body>
 
@@ -1397,6 +1407,7 @@ function importBackupFile(input) {
       if (incoming.scheme && !DB.scheme) DB.scheme = incoming.scheme;
       saveDB(); renderOpps();
       if (typeof closeHandoff === 'function' && document.getElementById('handoffOv')?.classList.contains('open')) closeHandoff();
+      _track('scouting_imported', {source:'xlsx'});
       showToast(`Imported — ${added} added, ${updated} updated`);
     } catch (e) {
       showToast('Import failed — ' + (e.message || 'invalid file'));
@@ -1500,12 +1511,13 @@ async function verifyLicense(){
       if(data&&data.success){ ok=true; break; }
     }
     if(ok){ localStorage.setItem(LIC_KEY, JSON.stringify({key, at:new Date().toISOString()}));
-      closeUnlock(); showToast('✓ Season Pass unlocked — thanks, Coach!'); updateProBadge(); renderOpps(); }
+      _track('license_activated'); closeUnlock(); showToast('✓ Season Pass unlocked — thanks, Coach!'); updateProBadge(); renderOpps(); }
     else showToast('That key didn’t verify — double-check it, or email support.');
   }catch(e){ showToast('Couldn’t reach the license server — check your connection.'); }
   finally{ if(btn){btn.disabled=false;btn.textContent='Unlock';} }
 }
 function showUnlock(feature){
+  _track('paywall_viewed', {feature: feature||''});
   const buy=GUMROAD_BUY_URL||'#';
   const featLine = `${feature?`<b style="color:var(--gold)">${feature}</b> is part of the`:'Unlock the'} DefWise <b>Season Pass</b>.`;
   const features = `&#127919; Game Day Predictor + live feedback loop<br>&#128193; Unlimited opponents &amp; multi-game<br>&#128241; iPad game-day handoff (offline)<br>&#9999;&#65039; Play diagrams &amp; practice scripts<br>&#128438;&#65039; Print / PDF everything`;
@@ -1588,6 +1600,7 @@ function importCSV(){
   st.opp.formations=st.opp.formations||[];
   st.opp.formations.push(...forms);
   saveDB(); closeModal('mCSV'); renderForms();
+  _track('scouting_imported', {source:'csv'});
   showToast(`Imported ${forms.length} formation${forms.length===1?'':'s'}`);
 }
 
@@ -1840,6 +1853,7 @@ function demoBanner(onScreen2){
 }
 function loadDemo(){
   if(isDemoLoaded()){ selOpp(DB.opponents.find(o=>o.notes?.includes('DEMO-Riverside-Knights-2025')).id); return; }
+  _track('demo_loaded');
   const mk=(name,playCount,totalPlays,runPct,runs,passes,sits)=>({
     id:uid(),name,runPct,passPct:100-runPct,
     playCount,totalPlays,
@@ -2793,6 +2807,7 @@ async function handlePDF(e) {
   }
 
   const combined=combineResults(results);
+  if(reports.some(r=>r.status==='ok'||r.status==='partial')) _track('scouting_imported', {source:'pdf'});
   openPreview(combined,results);
 }
 
@@ -8081,6 +8096,7 @@ function _buildPracticeScriptText(o){
 
 function showPracticeScript(){
   if(!st.opp) return;
+  _track('report_generated', {type:'practice_script'});
   const o=st.opp;
   document.getElementById('scriptTitle').textContent=`${o.name} ${o.season} — Practice Script`;
   document.getElementById('scriptSub').textContent=`${o.formations.length} formation${o.formations.length!==1?'s':''} · Call Sheet + Adjustments + Scout Team`;
@@ -8143,6 +8159,7 @@ function predictOffense(o, sit){
 function openPredictor(){
   if(!st.opp) return;
   if(!st.opp._demo && !requirePro('The Game Day Predictor')) return;   // demo is free — the try-before-you-buy hook
+  _track('predictor_opened', {demo: !!st.opp._demo});
   const o=st.opp;
   if(!(o.snaps&&o.snaps.length)){ alert("The predictor needs per-snap data — import this opponent's Hudl playlist (Excel) first."); return; }
   st.pred={down:null,dist:null,hash:null,zone:null,qtr:null,form:null};
