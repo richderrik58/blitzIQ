@@ -427,7 +427,7 @@
   <!-- End Cloudflare Web Analytics -->
   <!-- In-app product funnel (PostHog, privacy-light) — dormant until a key is set -->
   <script>
-    window.POSTHOG_KEY = "";   // ← paste your PostHog Project API key here to turn the funnel on
+    window.POSTHOG_KEY = "phc_A3GQTdmgVmPwYYGh3iwJ9iKVg8dRXBKMtiGLWMz5Vgbj";   // PostHog project key (public; client-side product analytics)
     window._track = function(ev, props){ try{ if(window.posthog && window.posthog.capture) window.posthog.capture(ev, props||{}); }catch(_){} };
     if(window.POSTHOG_KEY){
       var _ph=document.createElement('script'); _ph.async=true; _ph.src='https://us-assets.i.posthog.com/static/array.js';
