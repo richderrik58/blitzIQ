@@ -5069,7 +5069,7 @@ const ROUTE_LIB = {
   // CC (deep cross): release over the LBs, cross the formation, finish ~15 yds at the far sideline
   CC:[[0,28],[0,-30],[-0.45,-72],[-0.68,-105]], CROSS:[[0,28],[0,-30],[-0.45,-72],[-0.68,-105]],
 };
-const RUN_WORDS=/\b(ZONE|POWER|ISO|COUNTER|DRAW|SWEEP|KICK|FOLD|SNEAK|PUNCH|BASE|DIVE|TRAP|GUT|BLAST|BELLY|WHAM|LEAD|READ|MIDLINE|VEGAS|BUCK|GAP)\b/;
+const RUN_WORDS=/\b(ZONE|POWER|ISO|COUNTER|DRAW|SWEEP|KICK|FOLD|SNEAK|PUNCH|BASE|DIVE|TRAP|GUT|BLAST|BELLY|WHAM|LEAD|READ|MIDLINE|VEGAS|BUCK|GAP|OPTION|VEER|TRIPLE|RPO)\b/;
 const _clampF = v => Math.max(0.02, Math.min(0.98, v));
 
 // Map a formation name to an offensive alignment preset (shared by the play
@@ -5333,6 +5333,30 @@ function orbitMotion(preset, dir){
   const qb=preset.find(p=>p.type==='QB'); const qy=qb?qb.yd:72;
   return {color:'#f0a500', motion:true, pts:[[back.xf,back.yd],[0.5,qy+12],[_clampF(0.5+dir*0.12),qy+5],[_clampF(0.5+dir*0.24),qy-2]]};
 }
+// The READ-KEY defender (the conflict player the QB reads on option/RPO) — purple dashed eye.
+function readMarker(x, y){ return {read:true, x:_clampF(x), y}; }
+// Speed option: QB attacks the edge, pitch back trails wide, reads the force/EMOL.
+function optionPaths(preset, dir){
+  const ps=dir, out=[], edge=_clampF(0.5+ps*0.22);
+  const qb=preset.find(p=>p.type==='QB');
+  const rb=preset.find(p=>p.type==='RB')||preset.find(p=>p.type==='FB');
+  if(qb) out.push({color:RUNC, pts:[[qb.xf,qb.yd],[_clampF(0.5+ps*0.10),qb.yd-2],[edge,8],[_clampF(edge-ps*0.02),-18]]}); // QB down the line, turn up
+  if(rb) out.push({color:RUNC, pts:[[rb.xf,rb.yd],[_clampF(edge+ps*0.05),rb.yd-2],[_clampF(edge+ps*0.10),-12]]});          // pitch back trails wide
+  out.push(readMarker(0.5+ps*0.22, -38));   // read the force defender
+  return out;
+}
+// RPO: attach the tagged quick route to the playside slot and mark the conflict (overhang) defender.
+function rpoTag(nm, preset, dir){
+  if(!/\b(RPO|GLANCE|BUBBLE|POP|SEAM|NOW|STICK)\b/.test(nm)) return null;
+  const word = /\bBUBBLE\b/.test(nm)?'BUBBLE' : /\bGLANCE\b|\bSLANT\b/.test(nm)?'SLANT'
+             : /\bPOP\b|\bSEAM\b/.test(nm)?'SEAM' : /\bSTICK\b/.test(nm)?'OUT' : 'HITCH';
+  const recv=preset.filter(p=>p.type==='WR'||p.type==='TE');
+  const ps=recv.filter(r=> dir>0?r.xf>0.5:r.xf<0.5).sort((a,b)=>Math.abs(a.xf-0.5)-Math.abs(b.xf-0.5)); // inside→out
+  const slot=ps[0]; if(!slot) return null;
+  const ss=slot.xf<0.5?-1:1;
+  return { line:{color:'#ef4444', pts:(ROUTE_LIB[word]||ROUTE_LIB.SLANT).map(([o,y])=>[_clampF(slot.xf+o*ss),y])},
+           read: readMarker(0.5+dir*0.15, -28) };
+}
 // Pre-snap motion (dashed gold line): "Trade L/R" = TE crosses to the called side;
 // "Jet L/R" = backside WR/slot jets across. Shows the look team the motion.
 function motionLines(nm, preset){
@@ -5456,6 +5480,15 @@ function buildPlayPolylines(f, offPreset, playName){
       else if(rc.carrier==='RB' && rc.gap==='A') scheme='izone';   // 22 / 23 = inside zone
       else if(rc.carrier==='RB' && rc.gap==='D') scheme='ozone';   // 28 / 29 = outside zone
     }
+    // Speed/double option (no gap/zone scheme) — QB attacks the edge, pitch back trails, read the force
+    if(!scheme && /\b(SPEED\s*)?OPTION\b/.test(nm)){
+      const lines = olRunBlocks(preset, dir, false);
+      preset.filter(p=>p.type==='TE').forEach(p=>lines.push(teDownBlock(p)));
+      runWRBlocks(preset, dir, null).forEach(l=>lines.push(l));
+      lines.push(...optionPaths(preset, dir));
+      lines.push(...motionLines(nm, preset));
+      return lines;
+    }
     if(scheme==='trap'){ const _fb=preset.find(p=>p.type==='FB'); if(_fb) carrier=_fb; }  // the trap is the FB
     if(scheme==='sweep'){ const bk=preset.filter(p=>p.type==='RB').filter(b=> dir>0?b.xf>0.5:b.xf<0.5);
       if(bk.length) carrier=bk.sort((a,b)=>Math.abs(b.xf-0.5)-Math.abs(a.xf-0.5))[0]; }  // sweep = the PLAYSIDE back carries it
@@ -5468,6 +5501,12 @@ function buildPlayPolylines(f, offPreset, playName){
       const sboot=bootlegPath(nm,preset); if(sboot) slines.push(sboot);
       slines.push(...motionLines(nm, preset));
       if(offPreset==='flexbone'){ const orb=orbitMotion(preset,dir); if(orb) slines.push(orb); }  // orbit the backside slot
+      if(/\bREAD\b/.test(nm) && !/\bPOWER\b/.test(nm)){          // ZONE READ — QB keeps around the backside edge, reads the EMOL
+        const qb=preset.find(p=>p.type==='QB'); const bs=-dir;
+        if(qb){ slines.push({color:RUNC, pts:[[qb.xf,qb.yd],[_clampF(qb.xf+bs*0.05),qb.yd-3],[_clampF(0.5+bs*0.16),-6],[_clampF(0.5+bs*0.24),-32]]});
+          slines.push(readMarker(0.5+bs*0.18, -38)); }
+      }
+      const rpo=rpoTag(nm, preset, dir); if(rpo){ slines.push(rpo.line, rpo.read); }   // RPO route + conflict read
       return slines;
     }
     const down = /POWER|COUNTER|TRAP/.test(nm);
@@ -5654,6 +5693,10 @@ function playDiagramSVG(f, playName, isRun){
     return `<circle cx="${cx}" cy="${cy}" r="6.5" fill="#fff" stroke="#c0392b" stroke-width="1.5"/>`+lbl(cx,cy,p.type,'#c0392b');
   }).join('');
   const routeSVG = buildPlayPolylines(f, offPreset, playName).map(pl=>{
+    if(pl.read){                                      // option/RPO read-key defender — purple dashed eye
+      const cx=X(pl.x), cy=Y(pl.y);
+      return `<circle cx="${cx}" cy="${cy}" r="9" fill="none" stroke="#7c3aed" stroke-width="1.7" stroke-dasharray="2.6 2"/><text x="${cx}" y="${cy+3}" font-size="8" font-weight="800" fill="#7c3aed" text-anchor="middle">R</text>`;
+    }
     const P = pl.pts.map(([xf,yd])=>[X(xf),Y(yd)]);
     const pts = P.map(p=>p.join(',')).join(' ');
     if(pl.pull){                                      // pulling / kicking lineman — bold path + arrowhead so the movement is obvious
