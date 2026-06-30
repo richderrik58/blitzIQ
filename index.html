@@ -1728,17 +1728,23 @@ function parsePlaylistRows(rows,filename){
 
   for(let r=hdrIdx+1;r<rows.length;r++){
     const row=rows[r]; if(!Array.isArray(row)||!row.length) continue;
-    if(ci.odk>=0 && norm(row[ci.odk])!=='O') continue;       // offense only
+    if(ci.odk>=0 && !/^O/.test(norm(row[ci.odk]))) continue;  // offense only (O / OFF / Offense)
     const form=String(row[ci.form]==null?'':row[ci.form]).trim(); if(!form) continue;
     const typeRaw=norm(row[ci.type]);
-    const type=/^RUN/.test(typeRaw)?'run':/^PASS/.test(typeRaw)?'pass':'other';
+    const type=/^RUN|^RUSH/.test(typeRaw)?'run':/^PASS|^SCRAMBLE|^SACK/.test(typeRaw)?'pass':'other';  // Rush=run; scramble/sack=pass
     const play=ci.play>=0?String(row[ci.play]==null?'':row[ci.play]).trim():'';
     const gn=ci.gnls>=0?intOf(row[ci.gnls]):NaN;
     const dn=ci.dn>=0?intOf(row[ci.dn]):NaN;
     const dist=ci.dist>=0?String(row[ci.dist]==null?'':row[ci.dist]).trim():'';
     const distNum=ci.dist>=0?intOf(row[ci.dist]):NaN;
     const hash=ci.hash>=0?norm(row[ci.hash]).charAt(0):'';   // L / M / R
-    const yard=ci.yard>=0?intOf(row[ci.yard]):NaN;           // Hudl yard line (neg = own side)
+    // Yard line — honor OWN/OPP wording (own=negative, opp=positive) and signed numbers,
+    // so a "OWN 5" row isn't misread as the opponent goal line.
+    let yard=NaN;
+    if(ci.yard>=0){ const yr=String(row[ci.yard]==null?'':row[ci.yard]).toUpperCase();
+      if(/OWN/.test(yr)) yard=-Math.abs(intOf(yr));
+      else if(/OPP|\bOPN\b/.test(yr)) yard=Math.abs(intOf(yr));
+      else yard=intOf(yr); }
     const qtr=ci.qtr>=0?intOf(row[ci.qtr]):NaN;
     if(type==='run'||type==='pass')
       snaps.push({dn:isFinite(dn)?dn:null, dist:isFinite(distNum)?distNum:null, hash,
@@ -8136,9 +8142,9 @@ function predictOffense(o, sit){
   const want={ down:sit.down||null, dist:(sit.dist!=null&&sit.dist!=='')?bk(+sit.dist):null, hash:sit.hash||null, zone:sit.zone||null, qtr:sit.qtr||null, form:sit.form||null };
   const dims=[   // least → most predictive: dropped from the front when the sample is thin
     {on:!!want.qtr, match:s=>s.qtr===want.qtr, label:'Q'+want.qtr},
-    {on:!!want.form, match:s=>s.form===want.form, label:want.form},
     {on:!!want.hash, match:s=>s.hash===want.hash, label:({M:'Mid',L:'Left',R:'Right'}[want.hash]||want.hash)+' hash'},
     {on:!!want.zone, match:s=>fieldZone(s.yard)===want.zone, label:FIELD_ZONES[want.zone]},
+    {on:!!want.form, match:s=>s.form===want.form, label:want.form},   // formation is a strong run/pass tell — keep it longer
     {on:!!want.dist, match:s=>bk(s.dist)===want.dist, label:({S:'short ≤3',M:'med 4-7',L:'long 8+'}[want.dist])},
     {on:!!want.down, match:s=>s.dn===want.down, label:want.down+ordSuffix(want.down)+' down'},
   ];
@@ -8234,8 +8240,14 @@ function renderPrediction(){
   if(!p){ el.innerHTML=''; return; }
   if(!p.n){ el.innerHTML=`<div style="background:var(--navy2);border:1px solid rgba(255,255,255,.08);border-radius:12px;padding:18px;text-align:center;color:var(--gray);font-size:13px">No matching snaps for that situation.</div>`; return; }
   const lean=p.passPct>=58?['PASS','var(--blue)',p.passPct]:p.runPct>=58?['RUN','var(--green)',p.runPct]:['BALANCED','var(--gold)',Math.max(p.runPct,p.passPct)];
-  const conf=p.n>=12?'High':p.n>=5?'Medium':'Low';
-  const confC=p.n>=12?'#22c55e':p.n>=5?'#f0a500':'#ef4444';
+  // Confidence from sample size, BUT degrade it when we had to widen the situation, and a
+  // lopsided split from a thin pool isn't trustworthy (binomial certainty, not just n).
+  let conf = p.n>=12?'High':p.n>=5?'Medium':'Low';
+  const droppedKey = (p.dropped||[]).some(d=>/down|short ≤|med 4|long 8/.test(d));   // dropped the actual down/distance
+  if(p.dropped && p.dropped.length) conf = conf==='High'?'Medium':'Low';             // widened pool → never "High"
+  if(droppedKey) conf='Low';                                                          // ignored the down/distance the coach asked
+  if(p.n<8 && (p.runPct>=85||p.runPct<=15)) conf = conf==='High'?'Medium':conf==='Medium'?'Low':conf;  // extreme split, few snaps
+  const confC = conf==='High'?'#22c55e':conf==='Medium'?'#f0a500':'#ef4444';
   const tf=p.formations[0];
   const rec=generateRecommendation({name:tf?tf.key:'',runPct:p.runPct,passPct:p.passPct});
   const insight=topPlayInsight(p);
@@ -8253,7 +8265,7 @@ function renderPrediction(){
         <div style="font-size:30px;font-weight:900;color:${lean[1]}">${lean[0]} ${lean[2]}%</div>
         <div style="margin-top:6px"><span style="font-size:10px;font-weight:800;letter-spacing:.5px;padding:3px 10px;border-radius:11px;background:${confC}22;color:${confC};border:1px solid ${confC}66">${conf.toUpperCase()} CONFIDENCE</span><span style="font-size:11px;color:var(--gray)"> · ${p.n} snap${p.n!==1?'s':''}${p.dropped.length?` · widened (ignored ${p.dropped.join(', ')})`:''}</span></div>
       </div>
-      ${p.n<5?`<div style="background:rgba(239,68,68,.12);border:1px solid rgba(239,68,68,.4);border-radius:9px;padding:8px 11px;margin-bottom:10px;font-size:11.5px;color:#fca5a5;text-align:center;font-weight:700">&#9888;&#65039; Thin sample — only ${p.n} play${p.n!==1?'s':''}. Treat this as a hint, not a rule.</div>`:''}
+      ${p.n<8?`<div style="background:rgba(239,68,68,.12);border:1px solid rgba(239,68,68,.4);border-radius:9px;padding:8px 11px;margin-bottom:10px;font-size:11.5px;color:#fca5a5;text-align:center;font-weight:700">&#9888;&#65039; Thin sample — only ${p.n} play${p.n!==1?'s':''}${p.dropped&&p.dropped.length?' (had to widen the situation)':''}. Treat this as a hint, not a rule.</div>`:''}
       ${sbar(p.runPct,p.passPct)}
       <div style="margin-top:12px;font-size:13px">Most likely: <b>${tf?esc(tf.key):'—'}</b>${tf?` <span style="color:var(--gray)">(${tf.pct}%)</span>`:''}${p.formations.slice(1).map(f=>` <span style="color:var(--gray)">· ${esc(f.key)} ${f.pct}%</span>`).join('')}</div>
       <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:10px">
@@ -8286,14 +8298,13 @@ function renderPrediction(){
 function logActual(type){
   const o=st.opp; if(!o||!st.pred) return;
   const sit=st.pred, p=predictOffense(o,sit); if(!p) return;
-  const hit=(type==='run')===(p.runPct>=50);
-  o.predLog=o.predLog||[]; o.predLog.push({hit,predRunPct:p.runPct,actual:type});
-  const zy={BU:-5,OWN:-30,PLUS:35,RZ:13,GL:3};
+  const lean = p.runPct>=58?'run' : p.passPct>=58?'pass' : null;     // score against the SAME lean the card showed
+  if(lean){ o.predLog=o.predLog||[]; o.predLog.push({hit:lean===type, predRunPct:p.runPct, actual:type}); }  // balanced = no call → not scored
   o.snaps=o.snaps||[];
   o.snaps.push({dn:sit.down||null, dist:(sit.dist!=null&&sit.dist!=='')?+sit.dist:null, hash:sit.hash||'',
-    yard:sit.zone?zy[sit.zone]:null, form:sit.form||(p.formations[0]?p.formations[0].key:'Live'), play:'(live rep)', type, gn:null});
+    yard:null, form:sit.form||(p.formations[0]?p.formations[0].key:'Live'), play:'(live rep)', type, gn:null, live:true});  // don't fabricate a yard line
   saveDB(); renderPrediction();
-  showToast(hit?'✓ Predicted right' : '✗ They crossed us up — logged');
+  showToast(lean ? (lean===type?'✓ Predicted right':'✗ They crossed us up — logged') : 'Logged — balanced call, not scored');
 }
 function resetPredLog(){ const o=st.opp; if(!o) return; o.predLog=[]; saveDB(); renderPrediction(); }
 // Save the coach's defensive call for the current predicted situation (persists per opponent).
