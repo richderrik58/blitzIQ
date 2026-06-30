@@ -1844,6 +1844,16 @@ function dismissDemo(){
   const o=DB.opponents.find(o=>o.notes?.includes('DEMO-Riverside-Knights-2025'));
   if(o) delOpp(o.id,{stopPropagation:()=>{}});
 }
+// First-visit nudge — lead a brand-new coach straight to the live predictor demo.
+function tryBanner(){
+  const onlySeed = DB.opponents.length<=1 && (!DB.opponents[0] || DB.opponents[0].id===1);
+  if(isDemoLoaded() || !onlySeed) return '';
+  return `<div style="background:linear-gradient(135deg,rgba(240,165,0,.16),rgba(240,165,0,.06));border:1.5px solid rgba(240,165,0,.5);border-radius:12px;padding:14px 16px;margin-bottom:14px;text-align:center">
+    <div style="font-size:13px;font-weight:800;color:var(--white);margin-bottom:3px">&#128075; New here? See it work in 10 seconds.</div>
+    <div style="font-size:11.5px;color:var(--grayl);margin-bottom:11px">Run the live Game-Day Predictor on a full sample opponent — no setup.</div>
+    <button onclick="tryDemo()" style="background:var(--gold);color:var(--navy);border:none;border-radius:10px;padding:12px 22px;font-size:14.5px;font-weight:900;cursor:pointer;font-family:inherit;box-shadow:0 4px 14px rgba(240,165,0,.35)">&#9654; See the live Game-Day Predictor</button>
+  </div>`;
+}
 function demoBanner(onScreen2){
   if(!isDemoLoaded()) return '';
   const uploadBtn=onScreen2
@@ -1856,6 +1866,13 @@ function demoBanner(onScreen2){
     </div>
     ${uploadBtn}
   </div>`;
+}
+// One-tap path to the "wow": load the demo opponent AND drop straight into the live predictor.
+function tryDemo(){
+  try{ if(!DB.scheme){ DB.scheme='4-3'; saveDB(); } }catch(_){}
+  _track('try_demo_clicked');
+  loadDemo();
+  setTimeout(function(){ try{ openPredictor(); }catch(_){} }, 350);
 }
 function loadDemo(){
   if(isDemoLoaded()){ selOpp(DB.opponents.find(o=>o.notes?.includes('DEMO-Riverside-Knights-2025')).id); return; }
@@ -2087,14 +2104,14 @@ function renderOpps() {
           <div style="font-size:14px;font-weight:800;color:var(--gold);margin-bottom:12px">Scout smarter. Call the game from the box.</div>
           <div class="empty-txt" style="margin:0 auto 18px;max-width:350px;line-height:1.6">Import the Hudl tendency export you already pull and know what the offense runs on <b style="color:var(--white)">3rd &amp; long</b> — then call it from your iPad on the sideline, offline.</div>
           <div class="empty-txt" style="margin:0 auto 22px;max-width:350px;line-height:1.55;font-size:13px"><b style="color:var(--white)">No film grind. No four-figure software bill.</b> <span style="color:var(--grayl)">The scouting other tools charge a fortune for — straight from the export you already pull. Free to start.</span></div>
-          <div class="empty-txt" style="margin-bottom:16px;font-weight:800;color:var(--white)">First — what's your base defensive scheme?<br><span style="font-size:12px;color:var(--grayl);font-weight:400">Sets your default alignment on every play canvas.</span></div>
-          <div style="display:flex;flex-direction:column;gap:12px;width:100%;max-width:300px;margin:0 auto 20px">
-            <button onclick="setScheme('4-3')" style="background:var(--navy);color:#fff;border:2px solid var(--gold);border-radius:12px;padding:14px 20px;font-size:15px;font-weight:900;cursor:pointer;font-family:inherit;letter-spacing:.3px">4-3 Defense</button>
-            <button onclick="setScheme('3-4')" style="background:var(--navy);color:#fff;border:2px solid var(--gold);border-radius:12px;padding:14px 20px;font-size:15px;font-weight:900;cursor:pointer;font-family:inherit;letter-spacing:.3px">3-4 Defense</button>
-            <button onclick="setScheme('3-3-5')" style="background:var(--navy);color:#fff;border:2px solid var(--gold);border-radius:12px;padding:14px 20px;font-size:15px;font-weight:900;cursor:pointer;font-family:inherit;letter-spacing:.3px">3-3-5 Stack</button>
+          <button onclick="tryDemo()" style="background:var(--gold);color:var(--navy);border:none;border-radius:12px;padding:16px 24px;font-size:16px;font-weight:900;cursor:pointer;font-family:inherit;letter-spacing:.3px;width:100%;max-width:320px;margin:4px auto 8px;display:block;box-shadow:0 4px 16px rgba(240,165,0,.35)">&#9654; See the live Game-Day Predictor</button>
+          <div style="font-size:12px;color:var(--grayl);text-align:center;max-width:300px;margin:0 auto 24px;line-height:1.5">Free demo opponent — 10 seconds, no sign-up. Then import your own.</div>
+          <div style="font-size:13px;color:var(--grayl);font-weight:700;margin-bottom:10px">Or set up your own defense — base scheme:</div>
+          <div style="display:flex;gap:8px;width:100%;max-width:340px;margin:0 auto 8px">
+            <button onclick="setScheme('4-3')" style="flex:1;background:var(--navy);color:#fff;border:1.5px solid rgba(240,165,0,.5);border-radius:10px;padding:11px 6px;font-size:14px;font-weight:800;cursor:pointer;font-family:inherit">4-3</button>
+            <button onclick="setScheme('3-4')" style="flex:1;background:var(--navy);color:#fff;border:1.5px solid rgba(240,165,0,.5);border-radius:10px;padding:11px 6px;font-size:14px;font-weight:800;cursor:pointer;font-family:inherit">3-4</button>
+            <button onclick="setScheme('3-3-5')" style="flex:1;background:var(--navy);color:#fff;border:1.5px solid rgba(240,165,0,.5);border-radius:10px;padding:11px 6px;font-size:14px;font-weight:800;cursor:pointer;font-family:inherit">3-3-5</button>
           </div>
-          <div style="font-size:11px;color:var(--grayl);text-align:center">You can change this any time in settings</div>
-          <button onclick="DB.scheme='4-3';saveDB();loadDemo()" style="margin-top:18px;background:none;border:none;color:var(--gold);font-size:13px;font-weight:700;cursor:pointer;font-family:inherit;text-decoration:underline">&#9654; Just exploring? Try a sample team</button>
         </div>`;
       return;
     }
@@ -2102,8 +2119,8 @@ function renderOpps() {
       <div class="empty">
         <div class="empty-icon">🏟</div>
         <div class="empty-txt" style="margin-bottom:20px">New here? See what DefWise does in 10 seconds.</div>
-        <button onclick="loadDemo()" style="background:var(--gold);color:var(--navy);border:none;border-radius:12px;padding:16px 28px;font-size:16px;font-weight:900;cursor:pointer;font-family:inherit;letter-spacing:.3px;margin-bottom:10px;display:block;width:100%;max-width:320px;margin-left:auto;margin-right:auto;box-shadow:0 4px 16px rgba(240,165,0,.35)">
-          &#9654; Try a Sample Team
+        <button onclick="tryDemo()" style="background:var(--gold);color:var(--navy);border:none;border-radius:12px;padding:16px 28px;font-size:16px;font-weight:900;cursor:pointer;font-family:inherit;letter-spacing:.3px;margin-bottom:10px;display:block;width:100%;max-width:320px;margin-left:auto;margin-right:auto;box-shadow:0 4px 16px rgba(240,165,0,.35)">
+          &#9654; See the live Game-Day Predictor
         </button>
         <div style="font-size:12px;color:var(--grayl);text-align:center;max-width:300px;margin:0 auto;line-height:1.5">Loads a full sample opponent so you can run the <b style="color:var(--gold)">Game Day Predictor</b> and reports right now — then import your own with <b>Import Scouting PDFs</b>.</div>
       </div>`;
@@ -2121,7 +2138,7 @@ function renderOpps() {
       return;
     }
   }
-  el.innerHTML = (q?'':demoBanner(false)) + opps.map(o => `
+  el.innerHTML = (q?'':tryBanner()) + (q?'':demoBanner(false)) + opps.map(o => `
     <div class="card" onclick="selOpp(${o.id})"${o.self?' style="border-color:rgba(240,165,0,.55)"':''}>
       <div class="card-hd">
         <div><div class="card-name">${esc(o.name)}</div><div class="card-meta">Season ${esc(o.season)} &nbsp;·&nbsp; ${o.formations.length} Formation${o.formations.length!==1?'s':''}</div></div>
@@ -4807,12 +4824,7 @@ ${notes}
 </body>
 </html>`;
 
-  const w=window.open('','_blank','width=820,height=1000');
-  if(!w){alert('Allow pop-ups to print the game plan.');return;}
-  w.document.write(html);
-  w.document.close();
-  w.focus();
-  setTimeout(()=>{w.print();},350);
+  printDoc(html);
 }
 
 // ── AI PLAY GENERATOR ─────────────────────────────────────────────────────────
@@ -4943,10 +4955,7 @@ h1{font-size:16pt;font-weight:900;letter-spacing:1.5px}
 .sec{font-size:8pt;letter-spacing:2px;text-transform:uppercase;font-weight:800;color:#92400e;margin:14px 0 6px;border-left:3px solid #92400e;padding-left:8px}
 .b{font-size:10pt;margin:0 0 3px 14px}.p{font-size:10pt;margin-bottom:6px}</style></head>
 <body><h1>DEFWISE SCOUTING REPORT</h1><div class="sub">${title} &middot; AI-assisted defensive scouting</div>${body}</body></html>`;
-  const w=window.open('','_blank','width=820,height=1100');
-  if(!w){ try{ showToast('Allow pop-ups to print the report'); }catch(_){} return; }
-  w.document.write(html); w.document.close(); w.focus();
-  setTimeout(()=>w.print(),350);
+  printDoc(html);
 }
 
 async function generateScoutingReport(){
@@ -8167,7 +8176,21 @@ function openPredictor(){
   if(!st.opp._demo && !requirePro('The Game Day Predictor')) return;   // demo is free — the try-before-you-buy hook
   _track('predictor_opened', {demo: !!st.opp._demo});
   const o=st.opp;
-  if(!(o.snaps&&o.snaps.length)){ alert("The predictor needs per-snap data — import this opponent's Hudl playlist (Excel) first."); return; }
+  if(!(o.snaps&&o.snaps.length)){   // imported a PDF (formations only) — guide them to the Excel playlist instead of dead-ending
+    document.getElementById('predictTitle').textContent=`${o.name} — Game Day Predictor`;
+    document.getElementById('predictSub').textContent='One step away';
+    document.getElementById('predictBody').innerHTML=`
+      <div style="max-width:440px;margin:22px auto;text-align:center">
+        <div style="font-size:40px;margin-bottom:10px">&#128202;</div>
+        <div style="font-size:17px;font-weight:900;color:var(--white);margin-bottom:8px">Add this opponent's Hudl playlist to unlock play-by-play predictions</div>
+        <div style="font-size:13px;color:var(--grayl);line-height:1.6;margin-bottom:18px">The predictor reads the <b style="color:var(--gold)">Excel playlist export</b> (per-snap data) — that's what powers the down-&amp;-distance call. A scouting <b>PDF</b> gives you formation tendencies, but the live predictor needs the playlist.</div>
+        <button onclick="document.getElementById('predictOv').classList.remove('open'); document.getElementById('xlsxIn').click()" style="background:var(--gold);color:var(--navy);border:none;border-radius:11px;padding:14px 24px;font-size:15px;font-weight:900;cursor:pointer;font-family:inherit;box-shadow:0 4px 16px rgba(240,165,0,.35)">&#11014;&#65039; Import Hudl Playlist (Excel)</button>
+        <div style="font-size:11.5px;color:var(--gray);margin-top:14px;line-height:1.5">In Hudl: open your playlist &rarr; <b>Export</b> &rarr; Excel. It has columns like OFF FORM, PLAY TYPE, DN, DIST.</div>
+      </div>`;
+    document.getElementById('predictOv').classList.add('open');
+    _track('predictor_needs_playlist');
+    return;
+  }
   st.pred={down:null,dist:null,hash:null,zone:null,qtr:null,form:null};
   document.getElementById('predictTitle').textContent=`${o.name} — Game Day Predictor`;
   document.getElementById('predictSub').textContent=`${o.snaps.length} scouted snaps · set the situation`;
@@ -8364,8 +8387,7 @@ function printPlayZoom(){
   <div class="d">${playDiagramSVG(p.f,p.play,p.isRun)}</div>
   <div class="call"><b>${p.isRun?'RUN':'PASS'}:</b> ${esc(p.play)} &nbsp;&middot;&nbsp; <b>DEF:</b> ${esc(p.cov)} &middot; ${esc(p.blitz)}</div>
   </body></html>`;
-  const w=window.open('','_blank','width=820,height=1000'); if(!w){alert('Allow pop-ups to print.');return;}
-  w.document.write(html); w.document.close(); w.focus(); setTimeout(()=>w.print(),300);
+  printDoc(html);
 }
 
 // ── SITUATIONAL TENDENCIES REPORT (from per-snap data) ────────────────────────
@@ -8420,7 +8442,7 @@ function buildSituationReportHTML(o, light){
 }
 function showSituationReport(){
   if(!st.opp) return; const o=st.opp;
-  if(!(o.snaps&&o.snaps.length)){ alert("Import this opponent's Hudl playlist (Excel) first — the situational report needs per-snap data."); return; }
+  if(!(o.snaps&&o.snaps.length)){ showToast("The situational report needs the Hudl playlist (Excel) — tap Import Playlist on the opponent screen", 4500); return; }
   document.getElementById('sitTitle').textContent=`${o.name} — Situational Tendencies`;
   document.getElementById('sitSub').textContent=`${o.season} · ${o.snaps.length} scouted snaps`;
   document.getElementById('sitBody').innerHTML=`<div style="max-width:560px;margin:0 auto">${buildSituationReportHTML(o,false)}</div>`;
@@ -8432,8 +8454,7 @@ function printSituationReport(){
   const html=`<!DOCTYPE html><html><head><meta charset="UTF-8"><title>${esc(o.name)} — Situational Tendencies</title>
   <style>@page{margin:.5in}body{font-family:Arial,Helvetica,sans-serif;color:#111;max-width:7in;margin:0 auto}h1{font-size:16pt;margin:0 0 2px}.sub{font-size:9pt;color:#666;margin-bottom:14px;border-bottom:2px solid #111;padding-bottom:6px}</style></head>
   <body><h1>${esc(o.name)} — Situational Tendencies</h1><div class="sub">${esc(o.season)} &middot; defensive scouting prep</div>${buildSituationReportHTML(o,true)}</body></html>`;
-  const w=window.open('','_blank','width=820,height=1100'); if(!w){alert('Allow pop-ups to print.');return;}
-  w.document.write(html); w.document.close(); w.focus(); setTimeout(()=>w.print(),300);
+  printDoc(html);
 }
 
 // Game-day call sheet: condensed situation→call reference, plus a cut-out
@@ -8497,10 +8518,25 @@ function printCallSheet(){
   <div class="sec" style="page-break-before:always">Wristband Insert — print, cut along the boxes</div>
   <div>${band}</div>
 </body></html>`;
-  const w=window.open('','_blank','width=820,height=1100');
-  if(!w){ try{ showToast('Allow pop-ups to print the call sheet'); }catch(_){} return; }
-  w.document.write(html); w.document.close(); w.focus();
-  setTimeout(()=>w.print(),350);
+  printDoc(html);
+}
+// Print a standalone HTML doc. Installed iOS/Android PWAs BLOCK window.open popups,
+// so print via a hidden iframe there; use a popup window on a desktop browser.
+function printDoc(html){
+  const standalone = (window.navigator.standalone===true) || (window.matchMedia && window.matchMedia('(display-mode: standalone)').matches);
+  if(!standalone){
+    const w=window.open('','_blank','width=820,height=1100');
+    if(w){ w.document.write(html); w.document.close(); try{w.focus();}catch(_){} setTimeout(function(){ try{w.print();}catch(_){} },350); return; }
+  }
+  try{
+    const ifr=document.createElement('iframe'); ifr.setAttribute('aria-hidden','true');
+    ifr.style.cssText='position:fixed;right:0;bottom:0;width:1px;height:1px;border:0;opacity:0';
+    document.body.appendChild(ifr);
+    const d=ifr.contentWindow.document; d.open(); d.write(html); d.close();
+    let done=false;
+    const go=function(){ if(done)return; done=true; try{ ifr.contentWindow.focus(); ifr.contentWindow.print(); }catch(_){} setTimeout(function(){ try{ ifr.parentNode&&ifr.parentNode.removeChild(ifr); }catch(_){} },2000); };
+    ifr.onload=go; setTimeout(go,500);
+  }catch(e){ try{ showToast('Could not open the print view'); }catch(_){} }
 }
 
 function printPracticeScript(){
@@ -8592,10 +8628,7 @@ ${scoutSection}
 <div class="footer">DefWise &nbsp;·&nbsp; Defensive Scouting &nbsp;·&nbsp; richderrik58.github.io/DefWise</div>
 </body></html>`;
 
-  const w=window.open('','_blank','width=820,height=1100');
-  if(!w){alert('Allow pop-ups to print.');return;}
-  w.document.write(html); w.document.close(); w.focus();
-  setTimeout(()=>w.print(),350);
+  printDoc(html);
 }
 
 function sharePracticeScript(){
@@ -9234,6 +9267,7 @@ function maybeShowIosInstallTip(){
   }catch(e){}
 }
 renderOpps(); syncHdr(); applyGameDay(); applyCVD(); updateProBadge(); maybeShowIosInstallTip(); maybeShowSharedReport(); updatePbCount();
+if(/[#&](try|demo)\b/i.test(location.hash||'')) setTimeout(function(){ try{ tryDemo(); }catch(_){} }, 350);  // email/link → straight into the live demo predictor
 if (_loadNotice) setTimeout(() => { try { showToast(_loadNotice, 5000); } catch(_) {} }, 400);
 
 // ── INSTALL SCRIPT ────────────────────────────────────────────────────────────
@@ -9369,10 +9403,7 @@ function printScript(){
       </table>
     </div>`).join('')}
   </body></html>`;
-  const w=window.open('','_blank','width=820,height=1100');
-  if(!w){alert('Allow pop-ups to print.');return;}
-  w.document.write(html);w.document.close();w.focus();
-  setTimeout(()=>w.print(),400);
+  printDoc(html);
 }
 </script>
 <div class="toast" id="toastEl"></div>
