@@ -157,6 +157,8 @@
     .sit-card.pass-lean{border-color:rgba(96,165,250,.3)}
     .sit-card.run-lean{border-color:rgba(34,197,94,.3)}
     .sit-card.sure{border-color:rgba(245,158,11,.5);background:rgba(245,158,11,.04)}
+    .sit-call{margin-top:8px;font-size:11px;font-weight:700;color:var(--gold);background:rgba(240,165,0,.10);border:1px solid rgba(240,165,0,.25);border-radius:7px;padding:5px 8px;line-height:1.35}
+    .sit-call .lbl{font-size:8.5px;letter-spacing:1px;color:var(--grayl);font-weight:800;display:block;margin-bottom:1px}
     .sit-down{font-size:10px;letter-spacing:1px;text-transform:uppercase;color:var(--gray);margin-bottom:4px}
     .sit-dist{font-size:17px;font-weight:800;margin-bottom:10px;padding-right:22px}
     .sit-sure{font-size:11px;font-weight:800;color:var(--amber);margin-top:7px}
@@ -2483,6 +2485,7 @@ function renderSits() {
       <div class="sit-down">${DLBLS[s.down]||s.down+' Down'}</div>
       <div class="sit-dist">${esc(s.distLabel)}</div>
       ${sbar(s.runPct,s.passPct)}
+      ${(s.dc && (s.dc.coverage||s.dc.blitz)) ? `<div class="sit-call"><span class="lbl">🛡 YOUR CALL</span>${esc(s.dc.coverage||'')}${(s.dc.coverage&&s.dc.blitz)?' · ':''}${esc(s.dc.blitz||'')}</div>` : ''}
       ${sitCtxChips(s)}
       ${sure?`<div class="sit-sure">${sure}</div>`:''}
       ${flag&&flag.kind==='count'?`<div class="sit-sure">⚠ ${flag.short}</div>`:''}
