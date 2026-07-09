@@ -1875,7 +1875,19 @@ function tryDemo(){
   try{ if(!DB.scheme){ DB.scheme='4-3'; saveDB(); } }catch(_){}
   _track('try_demo_clicked');
   loadDemo();
-  setTimeout(function(){ try{ openPredictor(); }catch(_){} }, 350);
+  setTimeout(function(){
+    try{
+      openPredictor();
+      // Pre-seed a 3rd & long so the demo opens ON the "wow" — a live call, zero taps.
+      setTimeout(function(){ try{
+        const body=document.getElementById('predictBody'); if(!body||!st.pred) return;
+        const downBtns=[...body.querySelectorAll('button')].filter(b=>(b.getAttribute('onclick')||'').includes("setPred('down'"));
+        if(downBtns[2]) setPred('down',3,downBtns[2]);
+        const di=document.getElementById('predDist'); if(di) di.value=12;
+        setPred('dist',12);
+      }catch(_){} }, 150);
+    }catch(_){}
+  }, 350);
 }
 function loadDemo(){
   if(isDemoLoaded()){ selOpp(DB.opponents.find(o=>o.notes?.includes('DEMO-Riverside-Knights-2025')).id); return; }
@@ -8270,6 +8282,7 @@ function renderPrediction(){
   const p=predictOffense(o, st.pred||{});
   if(!p){ el.innerHTML=''; return; }
   if(!p.n){ el.innerHTML=`<div style="background:var(--navy2);border:1px solid rgba(255,255,255,.08);border-radius:12px;padding:18px;text-align:center;color:var(--gray);font-size:13px">No matching snaps for that situation.</div>`; return; }
+  if(!window._predViewed){ window._predViewed=true; _track('prediction_viewed'); }   // a coach reached a real live call
   const lean=p.passPct>=58?['PASS','var(--blue)',p.passPct]:p.runPct>=58?['RUN','var(--green)',p.runPct]:['BALANCED','var(--gold)',Math.max(p.runPct,p.passPct)];
   // Confidence from sample size, BUT degrade it when we had to widen the situation, and a
   // lopsided split from a thin pool isn't trustworthy (binomial certainty, not just n).
