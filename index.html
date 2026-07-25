@@ -430,10 +430,26 @@
   <!-- In-app product funnel (PostHog, privacy-light) — dormant until a key is set -->
   <script>
     window.POSTHOG_KEY = "phc_A3GQTdmgVmPwYYGh3iwJ9iKVg8dRXBKMtiGLWMz5Vgbj";   // PostHog project key (public; client-side product analytics)
-    window._track = function(ev, props){ try{ if(window.posthog && window.posthog.capture) window.posthog.capture(ev, props||{}); }catch(_){} };
+    // PostHog's library loads async. Anything tracked before it lands used to be
+    // dropped on the floor with no retry, so the earliest (and most important)
+    // funnel steps under-counted. Queue instead, and flush once it's ready.
+    window._trackQ = [];
+    window._trackFlush = function(){
+      try{
+        if(!(window.posthog && window.posthog.capture)) return;
+        var q = window._trackQ || []; window._trackQ = [];
+        for(var i=0;i<q.length;i++) window.posthog.capture(q[i][0], q[i][1]);
+      }catch(_){}
+    };
+    window._track = function(ev, props){
+      try{
+        if(window.posthog && window.posthog.capture){ window._trackFlush(); window.posthog.capture(ev, props||{}); }
+        else { window._trackQ.push([ev, props||{}]); if(window._trackQ.length>50) window._trackQ.shift(); }
+      }catch(_){}
+    };
     if(window.POSTHOG_KEY){
       var _ph=document.createElement('script'); _ph.async=true; _ph.src='https://us-assets.i.posthog.com/static/array.js';
-      _ph.onload=function(){ try{ window.posthog && posthog.init(window.POSTHOG_KEY,{api_host:'https://us.i.posthog.com', autocapture:true, capture_pageview:true, persistence:'localStorage+cookie'}); }catch(_){} };
+      _ph.onload=function(){ try{ window.posthog && posthog.init(window.POSTHOG_KEY,{api_host:'https://us.i.posthog.com', autocapture:true, capture_pageview:true, persistence:'localStorage+cookie'}); window._trackFlush(); }catch(_){} };
       document.head.appendChild(_ph);
     }
   </script>
@@ -880,6 +896,50 @@
 
 <!-- MODAL: ADD OPPONENT -->
 
+
+<!-- QUICK ADD PLAYS — the manual way into the predictor when a Hudl export isn't
+     open on this device. Emits the same snap shape as the Excel import. -->
+<div class="modal-ov" id="mQuick">
+  <div class="modal-sheet">
+    <div class="modal-handle"></div>
+    <div class="modal-hdr">
+      <span class="modal-title">Quick Add Plays</span>
+      <button class="modal-x" aria-label="Close" onclick="closeModal('mQuick')">&#10005;</button>
+    </div>
+    <div class="modal-body">
+      <div style="font-size:12.5px;color:var(--grayl);line-height:1.6;margin-bottom:13px">
+        No Hudl export handy? Log plays straight off the film. <b style="color:var(--gold)">15&ndash;20 plays</b> is enough for the predictor to find a real tendency.
+      </div>
+      <div class="fld">
+        <label class="fld-lbl">Down</label>
+        <div style="display:flex;gap:7px" id="qaDownRow">
+          <button type="button" style="flex:1;padding:12px 6px;background:var(--navy2);color:var(--grayl);border:1px solid rgba(255,255,255,.12);border-radius:10px;font-size:15px;font-weight:800;cursor:pointer;font-family:inherit" onclick="qaSet('dn',1,this)">1st</button>
+          <button type="button" style="flex:1;padding:12px 6px;background:var(--navy2);color:var(--grayl);border:1px solid rgba(255,255,255,.12);border-radius:10px;font-size:15px;font-weight:800;cursor:pointer;font-family:inherit" onclick="qaSet('dn',2,this)">2nd</button>
+          <button type="button" style="flex:1;padding:12px 6px;background:var(--navy2);color:var(--grayl);border:1px solid rgba(255,255,255,.12);border-radius:10px;font-size:15px;font-weight:800;cursor:pointer;font-family:inherit" onclick="qaSet('dn',3,this)">3rd</button>
+          <button type="button" style="flex:1;padding:12px 6px;background:var(--navy2);color:var(--grayl);border:1px solid rgba(255,255,255,.12);border-radius:10px;font-size:15px;font-weight:800;cursor:pointer;font-family:inherit" onclick="qaSet('dn',4,this)">4th</button>
+        </div>
+      </div>
+      <div class="fld">
+        <label class="fld-lbl">Distance (yds to go)</label>
+        <input class="fld-in" id="qaDist" type="number" min="1" max="40" inputmode="numeric" placeholder="e.g. 7">
+      </div>
+      <div class="fld">
+        <label class="fld-lbl">What did they run?</label>
+        <div style="display:flex;gap:7px" id="qaTypeRow">
+          <button type="button" style="flex:1;padding:12px 6px;background:var(--navy2);color:var(--grayl);border:1px solid rgba(255,255,255,.12);border-radius:10px;font-size:15px;font-weight:800;cursor:pointer;font-family:inherit" onclick="qaSet('type','run',this)">RUN</button>
+          <button type="button" style="flex:1;padding:12px 6px;background:var(--navy2);color:var(--grayl);border:1px solid rgba(255,255,255,.12);border-radius:10px;font-size:15px;font-weight:800;cursor:pointer;font-family:inherit" onclick="qaSet('type','pass',this)">PASS</button>
+        </div>
+      </div>
+      <div class="fld">
+        <label class="fld-lbl">Formation (optional)</label>
+        <input class="fld-in" id="qaForm" type="text" placeholder="e.g. Trips Right">
+      </div>
+      <button class="btn-save" style="width:100%" onclick="qaAdd()">+ Add Play</button>
+      <div id="qaList" style="margin-top:14px"></div>
+    </div>
+    <div class="modal-foot"><button class="btn-pri" onclick="qaSave()">Save plays &amp; predict</button></div>
+  </div>
+</div>
 
 <div class="modal-ov" id="mOpp">
   <div class="modal-sheet">
@@ -6410,6 +6470,25 @@ function esc(s){return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').
 // ── PLAY CANVAS ───────────────────────────────────────────────────────────────
 // State
 let cvCtx=null, cvDrawing=false, cvColor='#ef4444', cvWidth=3, cvTool='pen', cvLX=0, cvLY=0, cvPMX=0, cvPMY=0;
+let _cvPenAt=0;                       // last time a real stylus was used (palm rejection)
+let _cvPr=null;                       // smoothed pen pressure across samples
+
+// A stylus wins over fingers: once the coach has used a Pencil, ignore touch input
+// for a moment so a palm resting on the iPad doesn't leave stray marks.
+function _cvReject(e){
+  const t=e&&e.pointerType;
+  if(t==='pen'){ _cvPenAt=performance.now(); return false; }
+  // Only while drawing — in Place mode a finger is a legitimate way to drag players.
+  return cvMode==='draw' && t==='touch' && _cvPenAt>0 && (performance.now()-_cvPenAt)<1500;
+}
+// Pen pressure → stroke width, smoothed so the line tapers instead of jittering.
+// Mouse/finger have no useful pressure, so they keep the coach's chosen width.
+function _cvW(e){
+  if(!e || e.pointerType!=='pen'){ return cvWidth; }
+  const raw=(typeof e.pressure==='number' && e.pressure>0) ? e.pressure : 0.5;
+  _cvPr = (_cvPr==null) ? raw : (_cvPr*0.6 + raw*0.4);
+  return Math.max(cvWidth*0.4, Math.min(cvWidth*1.6, cvWidth*(0.5+1.05*_cvPr)));
+}
 let cvMode='place';                   // 'place' | 'draw'
 let cvPlayers=[];                     // [{id,type,team,x,y}]
 let cvSelectedSymbol=null;            // {type,team} currently selected from toolbar
@@ -6516,7 +6595,21 @@ function drawField(ctx,w,h){
 }
 
 // ── CANVAS FIELD & COMPOSITE ──────────────────────────────────────────────────
+// ── DRAW PIPELINE ─────────────────────────────────────────────────────────────
+// Repainting the scene means re-running gap assignments and redrawing the field,
+// zones, every player, labels and arrows. An Apple Pencil fires up to 240 pointer
+// events/sec; doing that work per event is what makes the line lag the tip.
+// redrawAll() now coalesces to at most one repaint per animation frame. Anything
+// that reads pixels back (toDataURL) must call cvFlush() first to force it now.
+let _cvRafPending=false;
 function redrawAll(){
+  if(!cvCtx || _cvRafPending) return;
+  _cvRafPending=true;
+  requestAnimationFrame(()=>{ _cvRafPending=false; redrawAllNow(); });
+}
+function cvFlush(){ _cvRafPending=false; redrawAllNow(); }
+
+function redrawAllNow(){
   if(!cvCtx) return;
   const canvas=document.getElementById('playCanvas');
   const dpr=window.devicePixelRatio||1;
@@ -7247,6 +7340,7 @@ let _pbFilter='all', _pbCat='Defense', _pbSearch='';
 function drawAPlay(){ window._pbEntry=null; window._pbBlank=true; openCanvas(); }
 function saveToPlaybook(){
   if(!cvCtx){ showToast('Open or draw a play first'); return; }
+  cvFlush();                       // paint any pending frame before grabbing the thumb
   const canvas=document.getElementById('playCanvas');
   window._pbDraft={ players:cvPlayers.map(p=>({...p})),
     routes:cvRouteCanvas?cvRouteCanvas.toDataURL('image/png'):null,
@@ -7582,7 +7676,7 @@ function clearCanvas(){
 
 function saveCanvas(){
   if(!cvCtx||!st.sit) return;
-  redrawAll();
+  cvFlush();                       // synchronous — redrawAll() only queues a frame
   const canvas=document.getElementById('playCanvas');
   st.sit.dc.playCanvas=canvas.toDataURL('image/png');
   st.sit.dc.cvRoutes=cvRouteCanvas?cvRouteCanvas.toDataURL('image/png'):null;
@@ -7717,7 +7811,9 @@ function deleteSelectedPlayer(){
 }
 
 function cvStart(e){
+  if(_cvReject(e)) return;
   e.preventDefault();
+  _cvPr=null;                     // fresh pressure ramp for this stroke
   const p=cvGetPos(e);
 
   if(cvMode==='place'){
@@ -7755,13 +7851,14 @@ function cvStart(e){
     rCtx.fillStyle='rgba(0,0,0,1)'; rCtx.fill();
     rCtx.restore();
   } else {
-    rCtx.beginPath(); rCtx.arc(p.x,p.y,cvWidth/2,0,Math.PI*2);
+    rCtx.beginPath(); rCtx.arc(p.x,p.y,_cvW(e)/2,0,Math.PI*2);
     rCtx.fillStyle=cvColor; rCtx.fill();
   }
   redrawAll();
 }
 
 function cvMove(e){
+  if(_cvReject(e)) return;
   e.preventDefault();
   const p=cvGetPos(e);
 
@@ -7776,6 +7873,18 @@ function cvMove(e){
   const rCtx=cvRouteCanvas.getContext('2d');
   rCtx.save();
   rCtx.lineCap='round'; rCtx.lineJoin='round';
+  // A 120Hz Pencil generates several points between two delivered pointermove
+  // events. getCoalescedEvents() hands back the ones the browser batched up —
+  // drawing all of them is the difference between a smooth curve and a polygon.
+  const batch = (typeof e.getCoalescedEvents==='function') ? e.getCoalescedEvents() : null;
+  const pts = (batch && batch.length) ? batch : [e];
+  for(let i=0;i<pts.length;i++){ _cvSeg(rCtx, cvGetPos(pts[i]), _cvW(pts[i])); }
+  rCtx.restore();
+  redrawAll();
+}
+
+// One smoothed segment of the current stroke, from the last point to p.
+function _cvSeg(rCtx,p,w){
   if(cvTool==='erase'){
     rCtx.globalCompositeOperation='destination-out';
     rCtx.strokeStyle='rgba(0,0,0,1)';
@@ -7784,15 +7893,13 @@ function cvMove(e){
   } else {
     rCtx.globalCompositeOperation='source-over';
     rCtx.strokeStyle=cvColor;
-    rCtx.lineWidth=cvWidth;
+    rCtx.lineWidth=w;
     // Quadratic smoothing: curve from the last midpoint through the prev point to the new midpoint
     const mx=(cvLX+p.x)/2, my=(cvLY+p.y)/2;
     rCtx.beginPath(); rCtx.moveTo(cvPMX,cvPMY); rCtx.quadraticCurveTo(cvLX,cvLY,mx,my); rCtx.stroke();
     cvPMX=mx; cvPMY=my;
   }
-  rCtx.restore();
   cvLX=p.x; cvLY=p.y;
-  redrawAll();
 }
 
 function cvEnd(e){
@@ -7814,10 +7921,14 @@ function cvEnd(e){
   c.addEventListener('pointermove',cvMove,{passive:false});
   c.addEventListener('pointerup',cvEnd);
   c.addEventListener('pointercancel',cvEnd);
-  // Touch fallback for older iOS
-  c.addEventListener('touchstart', e=>cvStart(e.touches[0]?{...e,clientX:e.touches[0].clientX,clientY:e.touches[0].clientY,preventDefault:()=>e.preventDefault()}:e),{passive:false});
-  c.addEventListener('touchmove',  e=>cvMove(e.touches[0]?{...e,clientX:e.touches[0].clientX,clientY:e.touches[0].clientY,preventDefault:()=>e.preventDefault()}:e),{passive:false});
-  c.addEventListener('touchend',   cvEnd);
+  // Touch fallback for older iOS — ONLY where Pointer Events are unavailable.
+  // Attaching both on a modern iPad fires each gesture twice (doubling strokes
+  // and pushing two undo entries per action).
+  if(!window.PointerEvent){
+    c.addEventListener('touchstart', e=>cvStart(e.touches[0]?{...e,clientX:e.touches[0].clientX,clientY:e.touches[0].clientY,preventDefault:()=>e.preventDefault()}:e),{passive:false});
+    c.addEventListener('touchmove',  e=>cvMove(e.touches[0]?{...e,clientX:e.touches[0].clientX,clientY:e.touches[0].clientY,preventDefault:()=>e.preventDefault()}:e),{passive:false});
+    c.addEventListener('touchend',   cvEnd);
+  }
 })();
 // Ctrl+Z / Cmd+Z undoes the last canvas action while the Draw Play screen is open
 document.addEventListener('keydown', e=>{
@@ -8204,16 +8315,21 @@ function openPredictor(){
         <div style="font-size:40px;margin-bottom:10px">&#128202;</div>
         <div style="font-size:17px;font-weight:900;color:var(--white);margin-bottom:8px">Add this opponent's Hudl playlist to unlock play-by-play predictions</div>
         <div style="font-size:13px;color:var(--grayl);line-height:1.6;margin-bottom:18px">The predictor reads the <b style="color:var(--gold)">Excel playlist export</b> (per-snap data) — that's what powers the down-&amp;-distance call. A scouting <b>PDF</b> gives you formation tendencies, but the live predictor needs the playlist.</div>
-        <button onclick="document.getElementById('predictOv').classList.remove('open'); document.getElementById('xlsxIn').click()" style="background:var(--gold);color:var(--navy);border:none;border-radius:11px;padding:14px 24px;font-size:15px;font-weight:900;cursor:pointer;font-family:inherit;box-shadow:0 4px 16px rgba(240,165,0,.35)">&#11014;&#65039; Import Hudl Playlist (Excel)</button>
+        <button onclick="document.getElementById('predictOv').classList.remove('open'); document.body.style.overflow=''; document.getElementById('xlsxIn').click()" style="background:var(--gold);color:var(--navy);border:none;border-radius:11px;padding:14px 24px;font-size:15px;font-weight:900;cursor:pointer;font-family:inherit;box-shadow:0 4px 16px rgba(240,165,0,.35)">&#11014;&#65039; Import Hudl Playlist (Excel)</button>
+        <div style="font-size:11.5px;color:var(--gray);margin:13px 0 9px">&mdash; or, if the export isn't handy &mdash;</div>
+        <button onclick="openQuickAdd()" style="background:rgba(240,165,0,.15);color:var(--gold);border:1px solid rgba(240,165,0,.5);border-radius:10px;padding:12px 20px;font-size:13.5px;font-weight:800;cursor:pointer;font-family:inherit">&#9999;&#65039; Add plays manually &mdash; 5 minutes</button>
         <div style="font-size:11.5px;color:var(--gray);margin-top:14px;line-height:1.5">In Hudl: open your playlist &rarr; <b>Export</b> &rarr; Excel. It has columns like OFF FORM, PLAY TYPE, DN, DIST.</div>
       </div>`;
     document.getElementById('predictOv').classList.add('open');
     _track('predictor_needs_playlist');
     return;
   }
-  st.pred={down:null,dist:null,hash:null,zone:null,qtr:null,form:null};
+  // Open ON a real call rather than an empty situation. 3rd & 7 is the down every
+  // coordinator game-plans for, so the panel shows what the tool actually does
+  // before the coach touches anything. They can change it below.
+  st.pred={down:3,dist:7,hash:null,zone:null,qtr:null,form:null};
   document.getElementById('predictTitle').textContent=`${o.name} — Game Day Predictor`;
-  document.getElementById('predictSub').textContent=`${o.snaps.length} scouted snaps · set the situation`;
+  document.getElementById('predictSub').textContent=`${o.snaps.length} scouted snaps · showing 3rd &amp; 7 — change it below`;
   const forms=[...new Set(o.snaps.map(s=>s.form))].filter(Boolean).sort();
   const bs='flex:1;min-width:44px;padding:13px 6px;background:var(--navy2);color:var(--grayl);border:1px solid rgba(255,255,255,.12);border-radius:10px;font-size:16px;font-weight:800;cursor:pointer;font-family:inherit';
   const bz='flex:1;min-width:0;padding:11px 2px;background:var(--navy2);color:var(--grayl);border:1px solid rgba(255,255,255,.12);border-radius:9px;font-size:11px;font-weight:700;cursor:pointer;font-family:inherit';
@@ -8240,6 +8356,11 @@ function openPredictor(){
         </select></div>
       <div id="predictOut"></div>
     </div>`;
+  // Show the pre-seeded 3rd & 7 as selected, so the controls match the call on screen.
+  const _pb2=document.getElementById('predictBody');
+  const _dnBtn=[..._pb2.querySelectorAll('button')].find(b=>(b.getAttribute('onclick')||'').includes("setPred('down',3"));
+  if(_dnBtn){ _dnBtn.style.background='var(--gold)'; _dnBtn.style.color='var(--navy)'; }
+  const _dsIn=document.getElementById('predDist'); if(_dsIn) _dsIn.value=7;
   renderPrediction();
   document.getElementById('predictOv').classList.add('open');
   document.body.style.overflow='hidden';
@@ -8248,6 +8369,87 @@ function setPred(key,val,btn){
   st.pred=st.pred||{};
   st.pred[key]=val;
   if(btn){ [...btn.parentElement.children].forEach(c=>{ const on=c===btn; c.style.background=on?'var(--gold)':'var(--navy2)'; c.style.color=on?'var(--navy)':'var(--grayl)'; }); }
+  renderPrediction();
+}
+// ── QUICK ADD PLAYS ───────────────────────────────────────────────────────────
+// Manual entry path into the predictor. Every row it produces is the SAME shape
+// the Hudl Excel import emits ({dn,dist,hash,yard,qtr,form,play,type,gn}), so
+// predictOffense and every downstream report treat it identically.
+let qaDraft={dn:null,dist:null,type:null};
+let qaRows=[];
+function _qaResetRow(id){
+  const r=document.getElementById(id); if(!r) return;
+  [...r.children].forEach(c=>{ c.style.background='var(--navy2)'; c.style.color='var(--grayl)'; });
+}
+function openQuickAdd(){
+  if(!st.opp){ showToast('Pick an opponent first'); return; }
+  qaRows=[]; qaDraft={dn:null,dist:null,type:null};
+  ['qaDist','qaForm'].forEach(id=>{ const e=document.getElementById(id); if(e) e.value=''; });
+  _qaResetRow('qaDownRow'); _qaResetRow('qaTypeRow');
+  qaRender();
+  document.getElementById('predictOv').classList.remove('open');
+  document.body.style.overflow='';
+  openModal('mQuick');
+}
+function qaSet(k,v,btn){
+  qaDraft[k]=v;
+  if(btn) [...btn.parentElement.children].forEach(c=>{ const on=c===btn;
+    c.style.background=on?'var(--gold)':'var(--navy2)'; c.style.color=on?'var(--navy)':'var(--grayl)'; });
+}
+function qaAdd(){
+  const distEl=document.getElementById('qaDist');
+  const dist=parseInt(distEl?distEl.value:'',10);
+  if(!qaDraft.dn){ showToast('Pick a down'); return; }
+  if(!isFinite(dist)||dist<1){ showToast('Enter the distance'); return; }
+  if(!qaDraft.type){ showToast('Run or pass?'); return; }
+  const fEl=document.getElementById('qaForm');
+  qaRows.push({dn:qaDraft.dn, dist, hash:'', yard:null, qtr:null,
+    form:(fEl&&fEl.value||'').trim(), play:'', type:qaDraft.type, gn:null});
+  // Keep down + formation so logging a series is fast; clear what changes per play.
+  if(distEl) distEl.value='';
+  qaDraft.type=null; _qaResetRow('qaTypeRow');
+  qaRender();
+}
+function qaDel(i){ qaRows.splice(i,1); qaRender(); }
+function qaRender(){
+  const el=document.getElementById('qaList'); if(!el) return;
+  if(!qaRows.length){ el.innerHTML='<div style="text-align:center;color:var(--gray);font-size:12px;padding:10px">No plays added yet.</div>'; return; }
+  el.innerHTML='<div style="font-size:11px;letter-spacing:1px;text-transform:uppercase;color:var(--gray);font-weight:800;margin-bottom:6px">'+
+    qaRows.length+' play'+(qaRows.length===1?'':'s')+' added</div>'+
+    qaRows.map((r,i)=>`<div style="display:flex;align-items:center;gap:8px;padding:7px 10px;background:var(--navy2);border-radius:8px;margin-bottom:5px;font-size:12.5px">
+      <span style="font-weight:800;color:var(--white)">${r.dn}${ordSuffix(r.dn)} &amp; ${r.dist}</span>
+      <span style="font-weight:800;color:${r.type==='run'?'var(--green)':'var(--blue)'}">${r.type.toUpperCase()}</span>
+      <span style="color:var(--gray);flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(r.form||'')}</span>
+      <button type="button" onclick="qaDel(${i})" aria-label="Remove play" style="background:none;border:none;color:var(--gray);font-size:17px;cursor:pointer;font-family:inherit;line-height:1;flex-shrink:0">&times;</button>
+    </div>`).join('');
+}
+function qaSave(){
+  if(!qaRows.length){ showToast('Add at least one play first'); return; }
+  if(!st.opp){ showToast('Pick an opponent first'); return; }
+  st.opp.snaps=(st.opp.snaps||[]).concat(qaRows);
+  saveDB();
+  const n=qaRows.length;
+  _track('scouting_imported', {source:'manual', plays:n});
+  qaRows=[];
+  closeModal('mQuick');
+  showToast(`✓ ${n} play${n===1?'':'s'} added`);
+  setTimeout(openPredictor, 260);
+}
+
+// Escape hatch when a coach has narrowed past what the data supports: drop the
+// optional dimensions (keep down & distance) and re-run.
+function clearPredFilters(){
+  if(!st.pred) return;
+  st.pred.hash=null; st.pred.zone=null; st.pred.qtr=null; st.pred.form=null;
+  const body=document.getElementById('predictBody');
+  if(body){
+    [...body.querySelectorAll('button')].forEach(b=>{
+      if(/setPred\('(hash|zone|qtr)'/.test(b.getAttribute('onclick')||'')){
+        b.style.background='var(--navy2)'; b.style.color='var(--grayl)';
+      }
+    });
+    const sel=body.querySelector('select'); if(sel) sel.value='';
+  }
   renderPrediction();
 }
 // Turn the single most-likely play into a concrete front/fit instruction — the
@@ -8278,10 +8480,33 @@ function topPlayInsight(p){
   return `🎯 Most likely: <b>${esc(top.key)}</b> (${top.pct}% of passes here). Make the underneath defender squat on it — don't let him bail off.`;
 }
 function renderPrediction(){
-  const o=st.opp, el=document.getElementById('predictOut'); if(!el) return;
+  const o=st.opp, el=document.getElementById('predictOut'); if(!o||!el) return;
   const p=predictOffense(o, st.pred||{});
-  if(!p){ el.innerHTML=''; return; }
-  if(!p.n){ el.innerHTML=`<div style="background:var(--navy2);border:1px solid rgba(255,255,255,.08);border-radius:12px;padding:18px;text-align:center;color:var(--gray);font-size:13px">No matching snaps for that situation.</div>`; return; }
+  // Never dead-end on a blank panel. Both of these used to render nothing at all,
+  // which is where coaches were silently losing the predictor.
+  if(!p){
+    _track('prediction_blocked', {reason:'no_play_data'});
+    el.innerHTML=`
+      <div style="background:var(--navy2);border:1px solid rgba(240,165,0,.35);border-radius:12px;padding:20px;text-align:center">
+        <div style="font-size:34px;margin-bottom:8px">&#128202;</div>
+        <div style="font-size:15px;font-weight:900;color:var(--white);margin-bottom:6px">No play-by-play data for ${esc(o.name)} yet</div>
+        <div style="font-size:12.5px;color:var(--grayl);line-height:1.6;margin-bottom:14px">The predictor needs the <b style="color:var(--gold)">Hudl Excel playlist</b> (per-snap rows). A scouting PDF gives formation tendencies, but not the live call.</div>
+        <button onclick="document.getElementById('predictOv').classList.remove('open'); document.body.style.overflow=''; document.getElementById('xlsxIn').click()" style="background:var(--gold);color:var(--navy);border:none;border-radius:11px;padding:13px 22px;font-size:14px;font-weight:900;cursor:pointer;font-family:inherit">&#11014;&#65039; Import Hudl Playlist (Excel)</button>
+        <div style="font-size:11.5px;color:var(--gray);margin:12px 0 8px">&mdash; or, if the export isn't handy &mdash;</div>
+        <button onclick="openQuickAdd()" style="background:rgba(240,165,0,.15);color:var(--gold);border:1px solid rgba(240,165,0,.5);border-radius:10px;padding:11px 18px;font-size:13px;font-weight:800;cursor:pointer;font-family:inherit">&#9999;&#65039; Add plays manually</button>
+      </div>`;
+    return;
+  }
+  if(!p.n){
+    _track('prediction_blocked', {reason:'no_match'});
+    el.innerHTML=`
+      <div style="background:var(--navy2);border:1px solid rgba(255,255,255,.08);border-radius:12px;padding:18px;text-align:center">
+        <div style="font-size:14px;font-weight:800;color:var(--white);margin-bottom:6px">No snaps match that exact situation</div>
+        <div style="font-size:12.5px;color:var(--gray);line-height:1.6;margin-bottom:12px">You've narrowed it further than this opponent's data goes. Clear the optional filters (field position, quarter, formation) to widen the pool.</div>
+        <button onclick="clearPredFilters()" style="background:rgba(240,165,0,.15);color:var(--gold);border:1px solid rgba(240,165,0,.5);border-radius:10px;padding:11px 18px;font-size:13px;font-weight:800;cursor:pointer;font-family:inherit">&#8634; Clear optional filters</button>
+      </div>`;
+    return;
+  }
   if(!window._predViewed){ window._predViewed=true; _track('prediction_viewed'); }   // a coach reached a real live call
   const lean=p.passPct>=58?['PASS','var(--blue)',p.passPct]:p.runPct>=58?['RUN','var(--green)',p.runPct]:['BALANCED','var(--gold)',Math.max(p.runPct,p.passPct)];
   // Confidence from sample size, BUT degrade it when we had to widen the situation, and a
@@ -8965,6 +9190,7 @@ function _buildPrintHeader(formName, sitLabel, runPct, passPct){
 
 function printPlayCard(){
   if(!st.form||!st.sit) return;
+  cvFlush();
   const canvas=document.getElementById('playCanvas');
   const img=canvas.toDataURL('image/png');
   const dc=st.sit.dc||{};
@@ -9331,7 +9557,8 @@ function buildInstallTable(){
 
 function addToScript(){
   if(!cvPlayers.some(p=>p.team==='def')){showToast('Place defenders on the canvas first');return;}
-  const canvas=document.getElementById('cvCanvas');
+  cvFlush();
+  const canvas=document.getElementById('playCanvas');   // was 'cvCanvas' — no such element, threw on every click
   const dc=window._cvDefCall||{};
   const formName=window._cvFormName||'Formation';
   const playName=`${formName}${dc.coverage?' — '+dc.coverage:''}${dc.blitz?' / '+dc.blitz:''}`;
