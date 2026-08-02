@@ -1517,7 +1517,7 @@ function closeHandoff(){ document.getElementById('handoffOv').classList.remove('
 
 // ── SEASON PASS PAYWALL (Gumroad license keys) ───────────────────────────────
 // Ships OFF. At launch: set PAYWALL_ENABLED=true, GUMROAD_BUY_URL, GUMROAD_PERMALINK.
-const PAYWALL_ENABLED=true;      // LIVE: paid features gated behind the Season Pass
+const PAYWALL_ENABLED=false;     // FREE FOR THE SEASON: no gate — every feature open. Season Pass stays a soft, optional support link (see updateProBadge). Flip back to true to re-gate.
 const GUMROAD_BUY_URL='https://richderrik.gumroad.com/l/oyvvj';
 const GUMROAD_PERMALINK='oyvvj'; // product permalink (buy URL / display)
 const GUMROAD_PRODUCT_ID='0Gv0qO8aT5Ig5PFavcbFzg=='; // Gumroad now REQUIRES product_id (not permalink) to verify licenses
@@ -1543,16 +1543,17 @@ function updateProBadge(){
     el.textContent='🛡 PRO';
     el.style.cssText='display:inline-block;background:rgba(34,197,94,.18);color:#22c55e;border:1px solid rgba(34,197,94,.55);font-size:9px;font-weight:900;letter-spacing:1px;padding:2px 7px;border-radius:10px;cursor:pointer';
     el.title='Season Pass active on this device — tap to deactivate';
-  } else if(PAYWALL_ENABLED){
-    // Free user: header badge becomes an always-visible upgrade entry point
-    // so pricing is discoverable without bumping into a locked feature.
+  } else {
+    // No license: show the Season Pass badge as a soft, ALWAYS-OPTIONAL entry point.
+    // Nothing is gated (paywall off) — this just lets a coach who loves it support
+    // the app / grab a pass. They are never blocked or forced here.
     el.textContent='⭐ Season Pass';
     el.style.cssText='display:inline-block;background:rgba(240,165,0,.18);color:var(--gold);border:1px solid rgba(240,165,0,.55);font-size:9px;font-weight:900;letter-spacing:.5px;padding:2px 8px;border-radius:10px;cursor:pointer';
-    el.title='See the DefWise Season Pass';
-  } else { el.style.display='none'; el.textContent=''; }
+    el.title='DefWise is free this season — tap to see the optional Season Pass';
+  }
 }
 function proBadgeClick(){
-  if(!loadLicense()){ if(PAYWALL_ENABLED) showUnlock(''); return; } // free user → open pricing
+  if(!loadLicense()){ showUnlock(''); return; } // no license → open the (optional) Season Pass pricing
   if(confirm('Deactivate your Season Pass on THIS device?\n\nYou can re-activate anytime by pasting your license key. Your scouting data stays put.')){
     localStorage.removeItem(LIC_KEY); showToast('Season Pass deactivated on this device.'); updateProBadge(); renderOpps();
   }
