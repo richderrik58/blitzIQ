@@ -8677,6 +8677,12 @@ function buildSituationReportHTML(o, light){
     const tr=topOf(g.rP), tp=topOf(g.pP);
     return `<div style="margin-bottom:9px;break-inside:avoid"><div style="display:flex;align-items:center;gap:10px"><div style="width:118px;font-size:12px;font-weight:700;color:${c.txt};flex-shrink:0">${dndLabel(k)}</div><div style="flex:1">${ibar(rp)}</div><div style="width:78px;text-align:right;font-size:11px;color:${c.mut};flex-shrink:0">${rp}% R · ${n}</div></div>${(tr||tp)?`<div style="font-size:10px;color:${c.sub};margin:2px 0 0 128px">${tr?`&#127939; ${esc(tr)}`:''}${tr&&tp?'  ·  ':''}${tp?`&#9992; ${esc(tp)}`:''}</div>`:''}</div>`;
   }).join('');
+  // By Formation — each formation's run/pass lean + go-to run & pass play (the pre-snap tell)
+  const fmG=new Map();
+  snaps.forEach(s=>{ const k=s.form; if(!k)return; let g=fmG.get(k); if(!g){g={run:0,pass:0,rP:new Map(),pP:new Map()};fmG.set(k,g);} g[s.type]++; if(s.play){const m=s.type==='run'?g.rP:g.pP; m.set(s.play,(m.get(s.play)||0)+1);} });
+  const fmRows=[...fmG.entries()].sort((a,b)=>(b[1].run+b[1].pass)-(a[1].run+a[1].pass)).map(([k,g])=>{ const n=g.run+g.pass, rp=n?Math.round(g.run/n*100):50; const tr=topOf(g.rP), tp=topOf(g.pP);
+    return `<div style="margin-bottom:9px;break-inside:avoid"><div style="display:flex;align-items:center;gap:10px"><div style="width:150px;font-size:11.5px;font-weight:700;color:${c.txt};flex-shrink:0">${esc(k)}</div><div style="flex:1">${ibar(rp)}</div><div style="width:78px;text-align:right;font-size:11px;color:${c.mut};flex-shrink:0">${rp}% R · ${n}</div></div>${(tr||tp)?`<div style="font-size:10px;color:${c.sub};margin:2px 0 0 160px">${tr?`&#127939; ${esc(tr)}`:''}${tr&&tp?'  ·  ':''}${tp?`&#9992; ${esc(tp)}`:''}</div>`:''}</div>`;
+  }).join('');
   // Top Keys — the strongest, best-sampled down & distance tendencies, surfaced up top
   const keyArr=[]; dndG.forEach((g,k)=>{ const n=g.run+g.pass; if(n<4) return; const rp=Math.round(g.run/n*100); const lean=Math.abs(rp-50); if(lean<15) return; keyArr.push({label:dndLabel(k),rp,n,lean,go:rp>=50?topOf(g.rP):topOf(g.pP)}); });
   keyArr.sort((a,b)=>b.lean-a.lean||b.n-a.n);
@@ -8685,6 +8691,7 @@ function buildSituationReportHTML(o, light){
     <div style="text-align:center;margin-bottom:18px"><div style="font-size:24px;font-weight:900;color:${c.txt}">${totRunPct}% RUN <span style="color:${c.sub};font-size:15px">/ ${100-totRunPct}% PASS</span></div><div style="font-size:11px;color:${c.sub}">${tot} offensive snaps scouted</div></div>
     ${keysHTML}
     ${dndRows?`<div style="margin-bottom:18px;break-inside:avoid"><div style="font-size:10px;letter-spacing:1.5px;text-transform:uppercase;color:${c.gold};font-weight:800;margin-bottom:8px">By Down &amp; Distance</div>${dndRows}</div>`:''}
+    ${fmRows?`<div style="margin-bottom:18px;break-inside:avoid"><div style="font-size:10px;letter-spacing:1.5px;text-transform:uppercase;color:${c.gold};font-weight:800;margin-bottom:8px">By Formation &mdash; pre-snap tell</div>${fmRows}</div>`:''}
     ${section('By Down',split(s=>s.dn>=1&&s.dn<=4?s.dn:null),[1,2,3,4],k=>k+ordSuffix(k)+' down')}
     ${section('By Distance',split(s=>s.dist==null?null:(s.dist<=3?'S':s.dist<=7?'M':'L')),['S','M','L'],k=>({S:'Short ≤3',M:'Med 4-7',L:'Long 8+'}[k]))}
     ${section('By Field Position',split(s=>fieldZone(s.yard)),['BU','OWN','PLUS','RZ','GL'],k=>FIELD_ZONES[k])}
