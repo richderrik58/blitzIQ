@@ -478,6 +478,10 @@
 <div class="screen active" id="screen1">
   <p class="sc-title">Opponents</p>
   <p class="sc-sub">Select a team to begin scouting</p>
+  <!-- FRONT DOOR: the activation path that works before opponent film exists —
+       log a handful of plays off last year's tape, no export needed. -->
+  <button style="width:100%;margin-bottom:6px;background:var(--gold);color:var(--navy);font-weight:900;font-size:14px;padding:15px;border:none;border-radius:11px;cursor:pointer;font-family:inherit;box-shadow:0 4px 16px rgba(240,165,0,.3)" onclick="quickStart()">&#9889; Quick Start &mdash; log plays, get your first read</button>
+  <p style="text-align:center;font-size:11px;color:var(--gray);margin:0 0 14px">No Hudl export? Log 15&ndash;20 plays off last year's film in ~10 min.</p>
   <div class="action-row">
     <button class="act-pri" onclick="openModal('mOpp')">+ Add Opponent</button>
     <button class="act-sec" onclick="document.getElementById('pdfIn').click()">&#8679; Import Scouting PDFs</button>
@@ -8404,6 +8408,18 @@ function _qaResetRow(id){
   const r=document.getElementById(id); if(!r) return;
   [...r.children].forEach(c=>{ c.style.background='var(--navy2)'; c.style.color='var(--grayl)'; });
 }
+// Front-door activation: spin up a fresh opponent and drop the coach straight
+// into logging plays — no PDF/Excel, works in the first week of August.
+function quickStart(){
+  if(!canAddOpponent()) return;
+  let yr='2026'; try{ yr=String(new Date().getFullYear()); }catch(_){}
+  const o={id:uid(), name:'My Opponent', season:yr, runPct:50, passPct:50,
+    notes:'Logged with Quick Add.', keyPlayers:'', gameNotes:'', formations:[], snaps:[]};
+  DB.opponents.push(o); saveDB();
+  st.opp=o; renderForms(); showScreen(2);
+  _track('quick_start');
+  openQuickAdd();
+}
 function openQuickAdd(){
   if(!st.opp){ showToast('Pick an opponent first'); return; }
   qaRows=[]; qaDraft={dn:null,dist:null,type:null};
@@ -8576,6 +8592,7 @@ function renderPrediction(){
       <input id="predBlitz" value="${esc(blz)}" onchange="saveCoachCall()" placeholder="Blitz / front" spellcheck="false" style="width:100%;font-size:14px;font-weight:700;color:var(--white);background:transparent;border:none;border-bottom:1px dashed rgba(255,255,255,.18);outline:none;font-family:inherit;padding:4px 0;margin-bottom:5px">
       <div style="font-size:11px;color:var(--grayl);line-height:1.4">${saved?'Your saved call for this situation — edit, or clear both to use our suggestion.':esc(rec.reason)+' · Tap to set your own call (saved for game day).'}</div>
     </div>
+    <button onclick="emailMeThis('predictor')" style="width:100%;margin-top:12px;padding:12px;background:rgba(96,165,250,.12);border:1px solid rgba(96,165,250,.4);border-radius:11px;color:#93c5fd;font-size:13px;font-weight:800;cursor:pointer;font-family:inherit">&#128231; Email me this game plan + weekly tips</button>
     <div style="margin-top:12px;background:var(--navy2);border:1px solid rgba(255,255,255,.08);border-radius:14px;padding:14px">
       <div style="font-size:10px;letter-spacing:1.5px;text-transform:uppercase;color:var(--gray);font-weight:800;margin-bottom:8px">After the snap — log what they ran <span style="color:var(--grayl);text-transform:none;letter-spacing:0;font-weight:600">(the app learns &amp; tracks accuracy)</span></div>
       <div style="display:flex;gap:8px">
@@ -8755,6 +8772,31 @@ function saveCoachEmail(source){
   _track('email_captured',{source:(window._emailSrc||source||''), email:email});
   closeModal('mEmail');
   showToast("You're on the list, Coach — thanks.");
+  if(window._emailThen==='share'){ window._emailThen=null; _emailShareCurrent(); }
+}
+// Explicit opt-in from the predictor ("Email me this") — works even on the demo,
+// no import needed. Captures first, then emails the coach the current read.
+function emailMeThis(source){
+  window._emailSrc=source||'predictor';
+  if(getCoachEmail()){ _emailShareCurrent(); return; }
+  window._emailThen='share';
+  openModal('mEmail');
+}
+function _emailShareCurrent(){
+  try{
+    const o=st.opp; if(!o) return;
+    const sit=st.pred||{};
+    const p=(typeof predictOffense==='function')?predictOffense(o,sit):null;
+    const dd=(sit.down?sit.down+ordSuffix(sit.down):'')+((sit.dist!=null&&sit.dist!=='')?' & '+sit.dist:'');
+    let body='DefWise — '+o.name+'\n';
+    if(dd) body+='Situation: '+dd+'\n';
+    if(p&&p.n){ const lean=p.passPct>=58?('PASS '+p.passPct+'%'):p.runPct>=58?('RUN '+p.runPct+'%'):'BALANCED';
+      body+='Read: '+lean+'  ('+p.n+' snaps)\n';
+      const tf=p.formations&&p.formations[0]; if(tf) body+='Most likely: '+tf.key+' ('+tf.pct+'%)\n'; }
+    body+='\nBuilt free at https://defwise.com\n';
+    const to=getCoachEmail(), subject='Your DefWise game plan — '+o.name;
+    window.open('mailto:'+encodeURIComponent(to)+'?subject='+encodeURIComponent(subject)+'&body='+encodeURIComponent(body),'_blank');
+  }catch(_){}
 }
 function dismissEmailAsk(){ try{ localStorage.setItem(EMAIL_ASKED,'1'); }catch(_){} closeModal('mEmail'); }
 // Ask once, at a value moment, only if we don't already have it and haven't asked.
