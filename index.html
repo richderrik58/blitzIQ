@@ -478,23 +478,24 @@
 <div class="screen active" id="screen1">
   <p class="sc-title">Opponents</p>
   <p class="sc-sub">Select a team to begin scouting</p>
-  <!-- FRONT DOOR: the activation path that works before opponent film exists —
-       log a handful of plays off last year's tape, no export needed. -->
-  <button style="width:100%;margin-bottom:6px;background:var(--gold);color:var(--navy);font-weight:900;font-size:14px;padding:15px;border:none;border-radius:11px;cursor:pointer;font-family:inherit;box-shadow:0 4px 16px rgba(240,165,0,.3)" onclick="quickStart()">&#9889; Quick Start &mdash; log plays, get your first read</button>
-  <p style="text-align:center;font-size:11px;color:var(--gray);margin:0 0 14px">No Hudl export? Log 15&ndash;20 plays off last year's film in ~10 min.</p>
+  <!-- AUGUST FRONT DOOR: Self-Scout needs ZERO external data — no opponent, no film,
+       no export. A coach logs his own defense and sees what he's tipping. Works today,
+       maps to what every DC already does in camp. Opponent scouting is the graduate path. -->
+  <button style="width:100%;margin-bottom:6px;background:var(--gold);color:var(--navy);font-weight:900;font-size:15px;padding:16px;border:none;border-radius:11px;cursor:pointer;font-family:inherit;box-shadow:0 4px 16px rgba(240,165,0,.3)" onclick="showSelfScout()">&#128737;&#65039; Self-Scout My Defense &mdash; what am I tipping?</button>
+  <p style="text-align:center;font-size:11px;color:var(--gray);margin:0 0 14px">No film, no opponent, no export. Log your own calls &amp; see if you're too predictable &mdash; before Week 1.</p>
   <button class="act-sec" style="width:100%;margin-bottom:14px" onclick="openDemoVid()">&#9654;&#65039; Watch the 30-second demo</button>
   <div class="action-row">
     <button class="act-pri" onclick="openModal('mOpp')">+ Add Opponent</button>
-    <button class="act-sec" onclick="document.getElementById('pdfIn').click()">&#8679; Import Scouting PDFs</button>
+    <button class="act-sec" onclick="startImport('pdf')">&#8679; Import Scouting PDFs</button>
   </div>
-  <button class="act-sec" style="width:100%;margin-bottom:14px" onclick="document.getElementById('xlsxIn').click()">&#128202; Import Playlist (Excel) &mdash; with Explosive Plays</button>
+  <button class="act-sec" style="width:100%;margin-bottom:14px" onclick="startImport('xlsx')">&#128202; Import Playlist (Excel) &mdash; with Explosive Plays</button>
+  <button class="act-sec" style="width:100%;margin-bottom:14px" onclick="quickStart()">&#9889; Scout an opponent &mdash; log plays manually (no export)</button>
   <button class="act-sec" style="width:100%;margin-bottom:14px" onclick="showBlitzLib()">&#9889; Blitz Library — 12 Packages</button>
   <button class="act-sec" style="width:100%;margin-bottom:14px;background:rgba(240,165,0,.12);border-color:rgba(240,165,0,.45);color:var(--gold)" onclick="showHandoff()">&#128241; Game-Day iPad Setup</button>
   <div style="display:flex;gap:10px;margin-bottom:14px">
     <button class="act-sec" style="flex:1;background:rgba(124,92,255,.12);border-color:rgba(124,92,255,.45);color:#b9a6ff" onclick="showPlaybook()">&#128210; My Playbook<span id="pbCountBadge"></span></button>
     <button class="act-sec" style="flex:1;background:rgba(124,92,255,.12);border-color:rgba(124,92,255,.45);color:#b9a6ff" onclick="drawAPlay()">&#9998; Draw a Play</button>
   </div>
-  <button class="act-sec" style="width:100%;margin-bottom:14px;background:rgba(34,197,94,.1);border-color:rgba(34,197,94,.4);color:#4ade80" onclick="showSelfScout()">&#128737;&#65039; Self-Scout — Log My Defense</button>
   <button class="act-sec" id="compareBtn" style="width:100%;margin-bottom:14px;display:none" onclick="openCompare()">&#9878; Compare Two Teams</button>
   <!-- Hudl export guide -->
   <div style="background:var(--navy2);border:1px solid rgba(240,165,0,.2);border-radius:12px;margin-bottom:18px;overflow:hidden">
@@ -1963,7 +1964,7 @@ function tryBanner(){
 function demoBanner(onScreen2){
   if(!isDemoLoaded()) return '';
   const uploadBtn=onScreen2
-    ?`<button onclick="document.getElementById('pdfIn').click()" style="background:var(--gold);color:var(--navy);border:none;border-radius:6px;padding:5px 12px;font-size:11px;font-weight:900;cursor:pointer;font-family:inherit;white-space:nowrap">Import Scouting PDF</button>`
+    ?`<button onclick="startImport('pdf')" style="background:var(--gold);color:var(--navy);border:none;border-radius:6px;padding:5px 12px;font-size:11px;font-weight:900;cursor:pointer;font-family:inherit;white-space:nowrap">Import Scouting PDF</button>`
     :`<button onclick="dismissDemo()" style="background:none;border:1px solid rgba(240,165,0,.5);color:var(--gold);font-size:11px;font-weight:700;padding:4px 10px;border-radius:6px;cursor:pointer;font-family:inherit;white-space:nowrap">Dismiss</button>`;
   return `<div style="background:rgba(240,165,0,.12);border:1.5px solid rgba(240,165,0,.45);border-radius:10px;padding:10px 14px;margin-bottom:12px;display:flex;align-items:center;gap:10px;flex-wrap:wrap">
     <div style="flex:1;min-width:0">
@@ -8358,7 +8359,7 @@ function openPredictor(){
         <div style="font-size:40px;margin-bottom:10px">&#128202;</div>
         <div style="font-size:17px;font-weight:900;color:var(--white);margin-bottom:8px">Add this opponent's Hudl playlist to unlock play-by-play predictions</div>
         <div style="font-size:13px;color:var(--grayl);line-height:1.6;margin-bottom:18px">The predictor reads the <b style="color:var(--gold)">Excel playlist export</b> (per-snap data) — that's what powers the down-&amp;-distance call. A scouting <b>PDF</b> gives you formation tendencies, but the live predictor needs the playlist.</div>
-        <button onclick="document.getElementById('predictOv').classList.remove('open'); document.body.style.overflow=''; document.getElementById('xlsxIn').click()" style="background:var(--gold);color:var(--navy);border:none;border-radius:11px;padding:14px 24px;font-size:15px;font-weight:900;cursor:pointer;font-family:inherit;box-shadow:0 4px 16px rgba(240,165,0,.35)">&#11014;&#65039; Import Hudl Playlist (Excel)</button>
+        <button onclick="document.getElementById('predictOv').classList.remove('open'); document.body.style.overflow=''; startImport('xlsx')" style="background:var(--gold);color:var(--navy);border:none;border-radius:11px;padding:14px 24px;font-size:15px;font-weight:900;cursor:pointer;font-family:inherit;box-shadow:0 4px 16px rgba(240,165,0,.35)">&#11014;&#65039; Import Hudl Playlist (Excel)</button>
         <div style="font-size:11.5px;color:var(--gray);margin:13px 0 9px">&mdash; or, if the export isn't handy &mdash;</div>
         <button onclick="openQuickAdd()" style="background:rgba(240,165,0,.15);color:var(--gold);border:1px solid rgba(240,165,0,.5);border-radius:10px;padding:12px 20px;font-size:13.5px;font-weight:800;cursor:pointer;font-family:inherit">&#9999;&#65039; Add plays manually &mdash; 5 minutes</button>
         <div style="font-size:11.5px;color:var(--gray);margin-top:14px;line-height:1.5">In Hudl: open your playlist &rarr; <b>Export</b> &rarr; Excel. It has columns like OFF FORM, PLAY TYPE, DN, DIST.</div>
@@ -8435,6 +8436,14 @@ function quickStart(){
   st.opp=o; renderForms(); showScreen(2);
   _track('quick_start');
   openQuickAdd();
+}
+// Import funnel denominator: fire when a coach REACHES an import (opens the file
+// picker), so import_started → scouting_imported tells us if people find it and
+// bail vs. never find it. Then trigger the actual file input.
+function startImport(kind){
+  try{ _track('import_started', {kind:kind}); }catch(_){}
+  var el=document.getElementById(kind==='pdf'?'pdfIn':'xlsxIn');
+  if(el) el.click();
 }
 // 30-second demo video — play on open, pause on close.
 function openDemoVid(){ openModal('mDemo'); try{ var v=document.getElementById('demoVid'); if(v){ v.currentTime=0; v.play().catch(function(){}); } }catch(_){} _track('demo_video_opened'); }
@@ -8549,7 +8558,7 @@ function renderPrediction(){
         <div style="font-size:34px;margin-bottom:8px">&#128202;</div>
         <div style="font-size:15px;font-weight:900;color:var(--white);margin-bottom:6px">No play-by-play data for ${esc(o.name)} yet</div>
         <div style="font-size:12.5px;color:var(--grayl);line-height:1.6;margin-bottom:14px">The predictor needs the <b style="color:var(--gold)">Hudl Excel playlist</b> (per-snap rows). A scouting PDF gives formation tendencies, but not the live call.</div>
-        <button onclick="document.getElementById('predictOv').classList.remove('open'); document.body.style.overflow=''; document.getElementById('xlsxIn').click()" style="background:var(--gold);color:var(--navy);border:none;border-radius:11px;padding:13px 22px;font-size:14px;font-weight:900;cursor:pointer;font-family:inherit">&#11014;&#65039; Import Hudl Playlist (Excel)</button>
+        <button onclick="document.getElementById('predictOv').classList.remove('open'); document.body.style.overflow=''; startImport('xlsx')" style="background:var(--gold);color:var(--navy);border:none;border-radius:11px;padding:13px 22px;font-size:14px;font-weight:900;cursor:pointer;font-family:inherit">&#11014;&#65039; Import Hudl Playlist (Excel)</button>
         <div style="font-size:11.5px;color:var(--gray);margin:12px 0 8px">&mdash; or, if the export isn't handy &mdash;</div>
         <button onclick="openQuickAdd()" style="background:rgba(240,165,0,.15);color:var(--gold);border:1px solid rgba(240,165,0,.5);border-radius:10px;padding:11px 18px;font-size:13px;font-weight:800;cursor:pointer;font-family:inherit">&#9999;&#65039; Add plays manually</button>
       </div>`;
