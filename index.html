@@ -7560,6 +7560,9 @@ function logDefPlay(type){
   const gv=document.getElementById('ssYds')?.value, gn=(gv==null||gv==='')?null:parseInt(gv);
   o.snaps.push({dn:d.dn,dist,hash:'',yard:null,qtr:d.qtr,type,gn:(gn==null||isNaN(gn))?null:gn,form:'',play:'',cov:d.cov,blitz:d.blitz,game:d.game||'Game 1'});
   saveDB();
+  // Activation signal for the Self-Scout front door — fire once per session on the
+  // first logged play (a real coach using the zero-data path).
+  if(!window._ssLoggedFired){ window._ssLoggedFired=true; _track('self_scout_logged'); }
   if(document.getElementById('ssYds')) document.getElementById('ssYds').value='';
   renderLogger();
   showToast(`Logged ${type.toUpperCase()} — ${d.cov}${d.blitz!=='None'?' / '+d.blitz:''}`);
