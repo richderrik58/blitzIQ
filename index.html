@@ -8801,11 +8801,6 @@ function saveCoachEmail(source){
   try{ localStorage.setItem(EMAIL_KEY,email); localStorage.setItem(EMAIL_ASKED,'1'); }catch(_){}
   try{ if(window.posthog&&window.posthog.identify){ window.posthog.identify(email); if(window.posthog.people&&window.posthog.people.set) window.posthog.people.set({email:email}); } }catch(_){}
   _track('email_captured',{source:(window._emailSrc||source||''), email:email});
-  // Durable mirror — POST every capture to Formsubmit (no backend/account needed);
-  // it forwards to the founder's inbox, so the list exists outside PostHog too.
-  try{ fetch('https://formsubmit.co/ajax/richderrik58@gmail.com',{method:'POST',
-    headers:{'Content-Type':'application/json','Accept':'application/json'},
-    body:JSON.stringify({coach_email:email, source:(window._emailSrc||source||''), _subject:'DefWise signup: '+email, _template:'table'})}).catch(function(){}); }catch(_){}
   closeModal('mEmail');
   showToast("You're on the list, Coach — thanks.");
   if(window._emailThen==='share'){ window._emailThen=null; _emailShareCurrent(); }
