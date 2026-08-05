@@ -973,12 +973,15 @@
     </div>
     <div class="modal-body">
       <div style="font-size:13px;color:var(--grayl);line-height:1.6;margin-bottom:13px">
-        I built DefWise solo, and it's <b style="color:var(--gold)">free all season</b>. Drop your email if you're open to me checking in on how it's working and sending opponent-prep tips. Optional, no spam &mdash; just a coach who wants this to actually help you win Friday.
+        I built DefWise solo, and it's <b style="color:var(--gold)">free all season</b>. No export handy right now? Tell me who you open with and <b style="color:var(--gold)">I'll build their breakdown myself</b> and send it to you &mdash; free, no catch. Just a coach who wants this to actually help you win Friday.
       </div>
       <div class="fld">
         <input class="fld-in" id="emailInput" type="email" inputmode="email" autocomplete="email" placeholder="you@school.org">
       </div>
-      <button class="btn-save" style="width:100%" onclick="saveCoachEmail('modal')">Keep me posted</button>
+      <div class="fld" style="margin-top:9px">
+        <input class="fld-in" id="emailOppInput" type="text" autocomplete="off" placeholder="Your Week 1 opponent (optional)">
+      </div>
+      <button class="btn-save" style="width:100%;margin-top:11px" onclick="saveCoachEmail('modal')">Send me my opponent breakdown</button>
       <button onclick="dismissEmailAsk()" style="width:100%;margin-top:8px;background:none;border:none;color:var(--gray);font-size:12px;cursor:pointer;font-family:inherit;text-decoration:underline">No thanks</button>
     </div>
   </div>
@@ -1990,6 +1993,11 @@ function tryDemo(){
         const di=document.getElementById('predDist'); if(di) di.value=12;
         setPred('dist',12);
       }catch(_){} }, 150);
+      // Ask for the email HERE — the demo predictor is the first real value moment a
+      // coach can reach with no Hudl export in hand. Every other ask (tendencies
+      // report, call sheet) sits behind an import, which is exactly the step that
+      // stops a coach in August. Delay so they watch the live call land first.
+      setTimeout(function(){ try{ maybeAskEmail('demo_predictor'); }catch(_){} }, 4200);
     }catch(_){}
   }, 350);
 }
@@ -8798,11 +8806,13 @@ function saveCoachEmail(source){
   const inp=document.getElementById('emailInput');
   const email=(inp?inp.value:'').trim();
   if(!_validEmail(email)){ showToast('Enter a valid email'); return; }
+  const oppEl=document.getElementById('emailOppInput');
+  const week1=(oppEl?oppEl.value:'').trim().slice(0,120);
   try{ localStorage.setItem(EMAIL_KEY,email); localStorage.setItem(EMAIL_ASKED,'1'); }catch(_){}
-  try{ if(window.posthog&&window.posthog.identify){ window.posthog.identify(email); if(window.posthog.people&&window.posthog.people.set) window.posthog.people.set({email:email}); } }catch(_){}
-  _track('email_captured',{source:(window._emailSrc||source||''), email:email});
+  try{ if(window.posthog&&window.posthog.identify){ window.posthog.identify(email); if(window.posthog.people&&window.posthog.people.set) window.posthog.people.set({email:email, week1_opponent:week1}); } }catch(_){}
+  _track('email_captured',{source:(window._emailSrc||source||''), email:email, week1_opponent:week1});
   closeModal('mEmail');
-  showToast("You're on the list, Coach — thanks.");
+  showToast(week1 ? "Got it, Coach — I'll build "+week1+" and send it over." : "You're on the list, Coach — thanks.");
   if(window._emailThen==='share'){ window._emailThen=null; _emailShareCurrent(); }
 }
 // Explicit opt-in from the predictor ("Email me this") — works even on the demo,
