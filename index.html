@@ -1743,8 +1743,13 @@ function _mergePlaylists(usable){
   const srcAll=usable.map(d=>({rows:d.srcRows,name:d.srcName}));
   if(usable.length===1) return Object.assign({},usable[0],{srcAll:srcAll});
   const snaps=usable.reduce((a,d)=>a.concat(d.snaps||[]),[]);
+  const defSnaps=usable.reduce((a,d)=>a.concat(d.defSnaps||[]),[]);
+  const top=(arr,k)=>{const m=new Map();arr.forEach(s=>{if(s[k])m.set(s[k],(m.get(s[k])||0)+1);});
+    return [...m.entries()].sort((a,b)=>b[1]-a[1]).slice(0,4).map(e=>e[0]);};
   const agg=aggregateFromSnaps(snaps);
   return Object.assign({},usable[0],{
+    defSnaps:defSnaps,
+    defInfo:{n:defSnaps.length, covs:top(defSnaps,'cov'), blitzes:top(defSnaps,'blitz')},
     snaps:snaps, formations:agg.formations,
     runPct:agg.runPct, passPct:100-agg.runPct,
     confidence: snaps.length>=20?90:snaps.length>=8?70:45,
@@ -1879,6 +1884,12 @@ function parsePlaylistRows(rows,filename,sideOpt){
     yard: idxOf(['YARD LN','YARD LINE','YARDLN','YL','YARD']),
     qtr:  idxOf(['QTR','QUARTER','QTR.']),
     odk:  idxOf(['ODK']),
+    // Defensive call columns. On a Hudl playlist these are filled in on the rows
+    // where the FILMING team was on defense — i.e. their own calls, charted
+    // alongside the opponent's offense. Only ever read with explicit consent.
+    front: idxOf(['DEF FRONT','FRONT']),
+    cov:   idxOf(['COVERAGE','COV']),
+    blitz: idxOf(['BLITZ','PRESSURE']),
   };
   if(ci.form<0||ci.type<0) return empty('Could not find OFF FORM / PLAY TYPE columns — is this a Hudl playlist export?');
 
@@ -1905,6 +1916,7 @@ function parsePlaylistRows(rows,filename,sideOpt){
 
   const groups=new Map();
   const snaps=[];                       // raw per-snap rows for the in-game predictor
+  const defSnaps=[];                    // filming team's own defensive calls (opt-in only)
   let totRun=0,totPass=0,totSnaps=0;
   const rawLines=[];
   const intOf=v=>{ const n=parseInt(String(v).replace(/[^\d.\-]/g,''),10); return isFinite(n)?n:NaN; };
@@ -1932,6 +1944,18 @@ function parsePlaylistRows(rows,filename,sideOpt){
     if(type==='run'||type==='pass')
       snaps.push({dn:isFinite(dn)?dn:null, dist:isFinite(distNum)?distNum:null, hash,
         yard:isFinite(yard)?yard:null, qtr:isFinite(qtr)?qtr:null, form, play, type, gn:isFinite(gn)?gn:null});
+
+    // Charting the D side means the filming team was on defense on this snap, so a
+    // call in these columns is THEIRS. Collect it separately — nothing is stored
+    // unless the coach confirms in the preview that the film is his.
+    if(side==='D'&&(type==='run'||type==='pass')){
+      const cell=i=>i>=0?String(row[i]==null?'':row[i]).trim():'';
+      const cov=cell(ci.cov), front=cell(ci.front), blitz=cell(ci.blitz);
+      if(cov||front||blitz)
+        defSnaps.push({dn:isFinite(dn)?dn:null, dist:isFinite(distNum)?distNum:null, hash:'',
+          yard:null, qtr:isFinite(qtr)?qtr:null, type, gn:isFinite(gn)?gn:null,
+          form:'', play:'', cov:cov, blitz:blitz, front:front});
+    }
 
     let g=groups.get(form);
     if(!g){ g={snaps:0,run:0,pass:0,runPlays:new Map(),passPlays:new Map(),downs:new Map(),explosive:[]}; groups.set(form,g); }
@@ -1983,7 +2007,11 @@ function parsePlaylistRows(rows,filename,sideOpt){
     sourceFiles:[filename],extractionLog:log,
     odkSide:side, srcRows:rows, srcName:filename,
     odkSides:{O:{snaps:survey.O.n,forms:topForms(survey.O.forms)},
-              D:{snaps:survey.D.n,forms:topForms(survey.D.forms)}}};
+              D:{snaps:survey.D.n,forms:topForms(survey.D.forms)}},
+    defSnaps:defSnaps,
+    defInfo:{n:defSnaps.length,
+      covs:topForms(defSnaps.reduce((m,s)=>(s.cov&&m.set(s.cov,(m.get(s.cov)||0)+1),m),new Map())),
+      blitzes:topForms(defSnaps.reduce((m,s)=>(s.blitz&&m.set(s.blitz,(m.get(s.blitz)||0)+1),m),new Map()))}};
 }
 
 // ── STATE ─────────────────────────────────────────────────────────────────────
@@ -4606,8 +4634,31 @@ function openPreview(data,results){
       <div style="display:flex;gap:9px;flex-wrap:wrap">${sideCard('O')}${sideCard('D')}</div>
     </div>`:'';
 
+  // The D rows carry whoever-was-on-defense's own calls. If this is the coach's own
+  // game film that's his call sheet and Self-Scout can fill itself. If he pulled the
+  // playlist off the exchange it's another staff's playbook — so we ask, and default
+  // to no. Never opt in silently.
+  const di=data.defInfo;
+  const defUI=(di&&di.n>0)?`
+    <div style="background:rgba(96,165,250,.07);border:1.5px solid rgba(96,165,250,.34);border-radius:11px;padding:12px 13px;margin-bottom:12px">
+      <div style="font-size:12.5px;font-weight:800;color:var(--white);margin-bottom:3px">This file also has defensive calls on it</div>
+      <div style="font-size:11.5px;color:var(--grayl);line-height:1.55">
+        ${di.n} snaps carry a coverage or pressure call${di.covs.length?` — ${esc(di.covs.slice(0,3).join(', '))}`:''}${di.blitzes.length?`, ${esc(di.blitzes.slice(0,2).join(', '))}`:''}.
+        Those belong to whoever was on defense. If that's <b>your</b> staff, Self-Scout can chart them for you
+        instead of you logging every play by hand.
+      </div>
+      <label style="display:flex;gap:9px;align-items:flex-start;margin-top:10px;cursor:pointer">
+        <input type="checkbox" id="p_defMine" style="width:17px;height:17px;flex-shrink:0;margin-top:1px;accent-color:var(--gold)">
+        <span style="font-size:12px;color:var(--white);font-weight:700;line-height:1.45">
+          These are my defense's calls — add them to Self-Scout
+          <span style="display:block;font-weight:400;color:var(--gray);font-size:11px;margin-top:2px">Leave unticked if this playlist came from another program.</span>
+        </span>
+      </label>
+    </div>`:'';
+
   document.getElementById('prevBody').innerHTML=`
     ${sideUI}
+    ${defUI}
     <div class="conf-msg ${msgCls}">${msgTxt}</div>
 
     <div class="prev-sec">
@@ -4783,7 +4834,18 @@ function importPreview(){
   applyRecommendations(newOpp);      // generate formation-level recommendations
   autoFillSituationDC(newOpp);       // auto-fill defensive calls for each situation
   DB.opponents.push(newOpp);
+
+  // Only if the coach ticked the box confirming the defensive calls are his own.
+  // Unticked (the default) and they are dropped with the rest of the raw rows.
+  let defAdded=0;
+  if(document.getElementById('p_defMine')?.checked && (prevData.defSnaps||[]).length){
+    const self=ensureSelfTeam();
+    const game=(name||'Imported')+' '+(season||'');
+    (prevData.defSnaps||[]).forEach(s=>{ self.snaps.push(Object.assign({},s,{game:game.trim()})); defAdded++; });
+  }
+
   saveDB(); closePreview(); renderOpps(); showScreen(1);
+  if(defAdded) showToast(`Added ${defAdded} of your defensive calls to Self-Scout`);
 }
 
 // ── DEFWISE RECOMMENDATION ENGINE ────────────────────────────────────────────
