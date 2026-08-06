@@ -583,8 +583,8 @@
 
 <!-- HIDDEN FILE INPUT (multiple) -->
 <input type="file" id="pdfIn" accept=".pdf,application/pdf" multiple style="display:none" onchange="handlePDF(event)">
-<input type="file" id="xlsxIn" accept=".xlsx,.xls" style="display:none" onchange="handleXLSX(event)">
-<input type="file" id="addGameIn" accept=".xlsx,.xls" style="display:none" onchange="handleAddGameXLSX(event)">
+<input type="file" id="xlsxIn" accept=".xlsx,.xls" multiple style="display:none" onchange="handleXLSX(event)">
+<input type="file" id="addGameIn" accept=".xlsx,.xls" multiple style="display:none" onchange="handleAddGameXLSX(event)">
 
 <!-- LOADING (single-file fallback spinner) -->
 <div class="load-ov" id="loadOv">
@@ -1719,28 +1719,65 @@ function importCSV(){
 // GN/LS (gain/loss yards), OFF FORM, OFF PLAY, DN/DIST. We aggregate those snaps
 // into formation records (same shape the PDF importer produces) and flag explosive
 // plays directly from GN/LS. Aggregating snaps avoids the PDF _findForm fragility.
+// Read one playlist file into parsed data. Promise form so the multi-file
+// importers below can await each file in turn.
+function _readPlaylistFile(file){
+  return new Promise(function(resolve,reject){
+    const reader=new FileReader();
+    reader.onload=function(){
+      try{
+        const wb=XLSX.read(reader.result,{type:'array'});
+        const ws=wb.Sheets[wb.SheetNames[0]];
+        const rows=XLSX.utils.sheet_to_json(ws,{header:1,blankrows:false,defval:''});
+        resolve(parsePlaylistRows(rows,file.name));
+      }catch(err){ reject(err); }
+    };
+    reader.onerror=function(){ reject(new Error('Could not read '+file.name)); };
+    reader.readAsArrayBuffer(file);
+  });
+}
+
 async function handleXLSX(e){
-  const file=e.target.files&&e.target.files[0];
+  const files=Array.from((e.target&&e.target.files)||[]);
   if(e.target) e.target.value='';
-  if(!file) return;
+  if(!files.length) return;
   try { await ensureXLSX(); } catch(err){ alert('Spreadsheet parser failed to load — check your connection and try again.'); return; }
-  const reader=new FileReader();
-  reader.onload=()=>{
-    try{
-      const wb=XLSX.read(reader.result,{type:'array'});
-      const ws=wb.Sheets[wb.SheetNames[0]];
-      const rows=XLSX.utils.sheet_to_json(ws,{header:1,blankrows:false,defval:''});
-      const data=parsePlaylistRows(rows,file.name);
-      if(!data.formations.length){
-        alert((data.extractionLog&&data.extractionLog[data.extractionLog.length-1])
-          ||'No offensive formations found — is this a Hudl playlist export with OFF FORM / PLAY TYPE columns?');
-        return;
-      }
-      openPreview(data);
-    }catch(err){ console.error(err); alert('Could not read this spreadsheet: '+((err&&err.message)||'unknown error')); }
-  };
-  reader.onerror=()=>alert('Could not read file');
-  reader.readAsArrayBuffer(file);
+
+  const parsed=[], failed=[];
+  for(const f of files){
+    try{ parsed.push(await _readPlaylistFile(f)); }
+    catch(err){ console.error(err); failed.push(f.name); }
+  }
+  const usable=parsed.filter(d=>d&&(d.snaps||[]).length);
+  if(!usable.length){
+    const first=parsed[0];
+    alert((first&&first.extractionLog&&first.extractionLog[first.extractionLog.length-1])
+      ||'No offensive formations found — is this a Hudl playlist export with OFF FORM / PLAY TYPE columns?');
+    return;
+  }
+
+  // One file behaves exactly as before. Several: pool every snap and re-aggregate
+  // so tendencies come off the combined sample instead of just the first game —
+  // sample size is what makes a down-and-distance split callable.
+  let data=usable[0];
+  if(usable.length>1){
+    const snaps=usable.reduce((a,d)=>a.concat(d.snaps||[]),[]);
+    const agg=aggregateFromSnaps(snaps);
+    data=Object.assign({},usable[0],{
+      snaps:snaps, formations:agg.formations,
+      runPct:agg.runPct, passPct:100-agg.runPct,
+      confidence: snaps.length>=20?90:snaps.length>=8?70:45,
+      sourceFiles: usable.reduce((a,d)=>a.concat(d.sourceFiles||[]),[]),
+      extractionLog: ['✓ Combined '+usable.length+' playlist files — '+snaps.length+' offensive snaps total']
+        .concat(usable[0].extractionLog||[])
+    });
+  }
+  if(failed.length) showToast('Skipped '+failed.length+' file(s) that could not be read');
+  if(!data.formations.length){
+    alert('No offensive formations found — is this a Hudl playlist export with OFF FORM / PLAY TYPE columns?');
+    return;
+  }
+  openPreview(data);
 }
 
 // Re-aggregate the formation cards from a combined snap pool (multi-game).
@@ -1776,29 +1813,29 @@ function aggregateFromSnaps(snaps){
 // Add another scouted game (playlist) to the current opponent — more games =
 // better in-game predictions. Appends snaps and re-aggregates the formations.
 async function handleAddGameXLSX(e){
-  const file=e.target.files&&e.target.files[0]; if(e.target) e.target.value='';
-  if(!file||!st.opp) return;
+  const files=Array.from((e.target&&e.target.files)||[]); if(e.target) e.target.value='';
+  if(!files.length||!st.opp) return;
   try { await ensureXLSX(); } catch(err){ alert('Spreadsheet parser failed to load — check your connection and try again.'); return; }
-  const reader=new FileReader();
-  reader.onload=()=>{
-    try{
-      const wb=XLSX.read(reader.result,{type:'array'});
-      const rows=XLSX.utils.sheet_to_json(wb.Sheets[wb.SheetNames[0]],{header:1,blankrows:false,defval:''});
-      const data=parsePlaylistRows(rows,file.name);
-      const add=data.snaps||[];
-      if(!add.length){ alert('No offensive snaps found — is this a Hudl playlist export?'); return; }
-      const o=st.opp;
-      o.snaps=(o.snaps||[]).concat(add);
-      const agg=aggregateFromSnaps(o.snaps);
-      o.formations=agg.formations; o.runPct=agg.runPct; o.passPct=100-agg.runPct;
-      applyRecommendations(o); autoFillSituationDC(o);
-      o.gameCount=(o.gameCount||1)+1;   // ODK games combined (distinct from the Season-Trend games[] list)
-      saveDB(); renderForms();
-      showToast(`Added ${add.length} snaps — ${o.snaps.length} total across ${o.gameCount} games`);
-    }catch(err){ console.error(err); alert('Could not read this spreadsheet: '+((err&&err.message)||'unknown error')); }
-  };
-  reader.onerror=()=>alert('Could not read file');
-  reader.readAsArrayBuffer(file);
+
+  const o=st.opp; const failed=[]; let added=0, games=0;
+  for(const f of files){
+    let data=null;
+    try{ data=await _readPlaylistFile(f); }
+    catch(err){ console.error(err); failed.push(f.name); continue; }
+    const add=(data&&data.snaps)||[];
+    if(!add.length){ failed.push(f.name); continue; }
+    o.snaps=(o.snaps||[]).concat(add); added+=add.length; games++;
+  }
+  if(!added){ alert('No offensive snaps found — is this a Hudl playlist export?'); return; }
+
+  // Re-aggregate once, after every file is pooled.
+  const agg=aggregateFromSnaps(o.snaps);
+  o.formations=agg.formations; o.runPct=agg.runPct; o.passPct=100-agg.runPct;
+  applyRecommendations(o); autoFillSituationDC(o);
+  o.gameCount=(o.gameCount||1)+games;   // ODK games combined (distinct from the Season-Trend games[] list)
+  saveDB(); renderForms();
+  showToast(`Added ${added} snaps from ${games} game${games!==1?'s':''} — ${o.snaps.length} total across ${o.gameCount} games`
+    + (failed.length?` (${failed.length} skipped)`:''));
 }
 
 // Aggregate per-snap rows into the importer's `data` shape (+ explosivePlays).
