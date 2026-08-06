@@ -1737,6 +1737,33 @@ function _readPlaylistFile(file){
   });
 }
 
+// Pool one or more parsed playlists into a single preview payload. Keeps the raw
+// rows on `srcAll` so the ODK side can be switched without re-picking the files.
+function _mergePlaylists(usable){
+  const srcAll=usable.map(d=>({rows:d.srcRows,name:d.srcName}));
+  if(usable.length===1) return Object.assign({},usable[0],{srcAll:srcAll});
+  const snaps=usable.reduce((a,d)=>a.concat(d.snaps||[]),[]);
+  const agg=aggregateFromSnaps(snaps);
+  return Object.assign({},usable[0],{
+    snaps:snaps, formations:agg.formations,
+    runPct:agg.runPct, passPct:100-agg.runPct,
+    confidence: snaps.length>=20?90:snaps.length>=8?70:45,
+    sourceFiles: usable.reduce((a,d)=>a.concat(d.sourceFiles||[]),[]),
+    srcAll:srcAll,
+    extractionLog: ['✓ Combined '+usable.length+' playlist files — '+snaps.length+' offensive snaps total']
+      .concat(usable[0].extractionLog||[])
+  });
+}
+
+// Re-read the same files charting the other sideline, then reopen the preview.
+function switchOdkSide(side){
+  const src=(prevData&&prevData.srcAll)||[];
+  if(!src.length) return;
+  const parsed=src.map(s=>parsePlaylistRows(s.rows,s.name,side)).filter(d=>d&&(d.snaps||[]).length);
+  if(!parsed.length){ showToast('No offensive snaps tagged on that side'); return; }
+  openPreview(_mergePlaylists(parsed));
+}
+
 async function handleXLSX(e){
   const files=Array.from((e.target&&e.target.files)||[]);
   if(e.target) e.target.value='';
@@ -1759,19 +1786,7 @@ async function handleXLSX(e){
   // One file behaves exactly as before. Several: pool every snap and re-aggregate
   // so tendencies come off the combined sample instead of just the first game —
   // sample size is what makes a down-and-distance split callable.
-  let data=usable[0];
-  if(usable.length>1){
-    const snaps=usable.reduce((a,d)=>a.concat(d.snaps||[]),[]);
-    const agg=aggregateFromSnaps(snaps);
-    data=Object.assign({},usable[0],{
-      snaps:snaps, formations:agg.formations,
-      runPct:agg.runPct, passPct:100-agg.runPct,
-      confidence: snaps.length>=20?90:snaps.length>=8?70:45,
-      sourceFiles: usable.reduce((a,d)=>a.concat(d.sourceFiles||[]),[]),
-      extractionLog: ['✓ Combined '+usable.length+' playlist files — '+snaps.length+' offensive snaps total']
-        .concat(usable[0].extractionLog||[])
-    });
-  }
+  const data=_mergePlaylists(usable);
   if(failed.length) showToast('Skipped '+failed.length+' file(s) that could not be read');
   if(!data.formations.length){
     alert('No offensive formations found — is this a Hudl playlist export with OFF FORM / PLAY TYPE columns?');
@@ -1839,7 +1854,7 @@ async function handleAddGameXLSX(e){
 }
 
 // Aggregate per-snap rows into the importer's `data` shape (+ explosivePlays).
-function parsePlaylistRows(rows,filename){
+function parsePlaylistRows(rows,filename,sideOpt){
   const year=String(new Date().getFullYear());
   const empty=extra=>({teamName:'Imported Team',season:year,runPct:50,passPct:50,
     formations:[],rawLines:[],confidence:0,sourceFiles:[filename],extractionLog:[`Playlist import: ${filename}`,extra]});
@@ -1867,6 +1882,27 @@ function parsePlaylistRows(rows,filename){
   };
   if(ci.form<0||ci.type<0) return empty('Could not find OFF FORM / PLAY TYPE columns — is this a Hudl playlist export?');
 
+  // A playlist can be tagged from either sideline. Your own game film has YOUR
+  // offense as ODK=O. A playlist pulled off the Hudl exchange to scout an
+  // opponent has THEIR offense as ODK=D — the O rows are the filming team.
+  // Survey both sides before choosing, so we never silently chart the wrong team.
+  const survey={O:{n:0,forms:new Map()},D:{n:0,forms:new Map()}};
+  if(ci.odk>=0){
+    for(let r=hdrIdx+1;r<rows.length;r++){
+      const row=rows[r]; if(!Array.isArray(row)||!row.length) continue;
+      const tag=norm(row[ci.odk]);
+      const s=/^O/.test(tag)?'O':(/^D/.test(tag)?'D':null); if(!s) continue;
+      const f=String(row[ci.form]==null?'':row[ci.form]).trim(); if(!f) continue;
+      if(!/^RUN|^RUSH|^PASS|^SCRAMBLE|^SACK/.test(norm(row[ci.type]))) continue;
+      survey[s].n++; survey[s].forms.set(f,(survey[s].forms.get(f)||0)+1);
+    }
+  }
+  const topForms=m=>[...m.entries()].sort((a,b)=>b[1]-a[1]).slice(0,4).map(e=>e[0]);
+  // Explicit choice wins. Otherwise prefer O (own film, the common case) but fall
+  // back to D so a scouting export doesn't come back empty.
+  const side=(sideOpt==='O'||sideOpt==='D')?sideOpt
+    :(survey.O.n>0?'O':(survey.D.n>0?'D':'O'));
+
   const groups=new Map();
   const snaps=[];                       // raw per-snap rows for the in-game predictor
   let totRun=0,totPass=0,totSnaps=0;
@@ -1875,7 +1911,7 @@ function parsePlaylistRows(rows,filename){
 
   for(let r=hdrIdx+1;r<rows.length;r++){
     const row=rows[r]; if(!Array.isArray(row)||!row.length) continue;
-    if(ci.odk>=0 && !/^O/.test(norm(row[ci.odk]))) continue;  // offense only (O / OFF / Offense)
+    if(ci.odk>=0){ const tag=norm(row[ci.odk]); if(side==='D'? !/^D/.test(tag) : !/^O/.test(tag)) continue; }
     const form=String(row[ci.form]==null?'':row[ci.form]).trim(); if(!form) continue;
     const typeRaw=norm(row[ci.type]);
     const type=/^RUN|^RUSH/.test(typeRaw)?'run':/^PASS|^SCRAMBLE|^SACK/.test(typeRaw)?'pass':'other';  // Rush=run; scramble/sack=pass
@@ -1944,7 +1980,10 @@ function parsePlaylistRows(rows,filename){
   return {teamName,season:year,runPct:teamRun,passPct:100-teamRun,
     formations:kept,rawLines,snaps,
     confidence:totSnaps>=20?90:totSnaps>=8?70:45,
-    sourceFiles:[filename],extractionLog:log};
+    sourceFiles:[filename],extractionLog:log,
+    odkSide:side, srcRows:rows, srcName:filename,
+    odkSides:{O:{snaps:survey.O.n,forms:topForms(survey.O.forms)},
+              D:{snaps:survey.D.n,forms:topForms(survey.D.forms)}}};
 }
 
 // ── STATE ─────────────────────────────────────────────────────────────────────
@@ -4543,7 +4582,32 @@ function openPreview(data,results){
 
   const allSits=data.formations.flatMap(f=>f.situations);
 
+  // Both sidelines charted? Make the coach choose — importing the wrong one gives
+  // a confident-looking report for the wrong team, with nothing to signal it.
+  const sd=data.odkSides;
+  const bothSides=!!(sd&&sd.O&&sd.D&&sd.O.snaps>0&&sd.D.snaps>0&&(data.srcAll||[]).length);
+  const sideCard=k=>{
+    const s=sd[k], on=data.odkSide===k;
+    return `<button onclick="switchOdkSide('${k}')" style="flex:1;min-width:150px;text-align:left;cursor:pointer;font-family:inherit;
+      background:${on?'rgba(240,165,0,.14)':'rgba(255,255,255,.04)'};
+      border:1.5px solid ${on?'rgba(240,165,0,.6)':'rgba(255,255,255,.1)'};border-radius:10px;padding:10px 12px">
+      <div style="font-size:10px;font-weight:900;letter-spacing:1px;color:${on?'var(--gold)':'var(--gray)'}">${on?'&#10003; CHARTING':'TAP TO USE'}</div>
+      <div style="font-size:13px;font-weight:800;color:var(--white);margin-top:3px">ODK ${k} &middot; ${s.snaps} snaps</div>
+      <div style="font-size:10.5px;color:var(--grayl);margin-top:3px;line-height:1.4">${esc(s.forms.slice(0,3).join(' · ')||'—')}</div>
+    </button>`;
+  };
+  const sideUI=bothSides?`
+    <div style="background:rgba(240,165,0,.08);border:1.5px solid rgba(240,165,0,.4);border-radius:11px;padding:12px 13px;margin-bottom:12px">
+      <div style="font-size:12.5px;font-weight:800;color:var(--white);margin-bottom:3px">Two teams are charted in this file</div>
+      <div style="font-size:11.5px;color:var(--grayl);line-height:1.55;margin-bottom:10px">
+        Your own film tags your offense <b>O</b>. A playlist pulled off the exchange to scout an opponent tags them <b>D</b>.
+        Pick the offense you're scouting — the formation names will tell you which is which.
+      </div>
+      <div style="display:flex;gap:9px;flex-wrap:wrap">${sideCard('O')}${sideCard('D')}</div>
+    </div>`:'';
+
   document.getElementById('prevBody').innerHTML=`
+    ${sideUI}
     <div class="conf-msg ${msgCls}">${msgTxt}</div>
 
     <div class="prev-sec">
