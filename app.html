@@ -9218,13 +9218,38 @@ function _emailShareCurrent(){
     window.open('mailto:'+encodeURIComponent(to)+'?subject='+encodeURIComponent(subject)+'&body='+encodeURIComponent(body),'_blank');
   }catch(_){}
 }
-function dismissEmailAsk(){ try{ localStorage.setItem(EMAIL_ASKED,'1'); }catch(_){} closeModal('mEmail'); }
+function dismissEmailAsk(){
+  try{ localStorage.setItem(EMAIL_ASKED,String(Date.now())); }catch(_){}
+  _track('email_ask_dismissed',{source:(window._emailSrc||'')});
+  closeModal('mEmail');
+}
 // Ask once, at a value moment, only if we don't already have it and haven't asked.
+const EMAIL_ASK_COOLDOWN=7*24*60*60*1000;
 function maybeAskEmail(source){
   if(getCoachEmail()) return;
-  try{ if(localStorage.getItem(EMAIL_ASKED)) return; localStorage.setItem(EMAIL_ASKED,'1'); }catch(_){}
+  try{
+    const t=localStorage.getItem(EMAIL_ASKED);
+    if(t){
+      // Legacy flag was the string '1' with no timestamp. Treat it as long-expired so
+      // a browser that burned its one ask before this fix gets asked again, once.
+      const when=(t==='1')?0:(parseInt(t,10)||0);
+      if(Date.now()-when < EMAIL_ASK_COOLDOWN) return;
+    }
+  }catch(_){}
   window._emailSrc=source||'';
-  setTimeout(function(){ try{ if(!getCoachEmail()) openModal('mEmail'); }catch(_){} }, 700);
+  setTimeout(function(){
+    try{
+      if(getCoachEmail()) return;
+      openModal('mEmail');
+      // Record the ask only once the modal is actually on screen. Setting it up front
+      // meant a coach who closed the tab during the 700ms delay burned their single
+      // lifetime ask without ever seeing it.
+      try{ localStorage.setItem(EMAIL_ASKED,String(Date.now())); }catch(_){}
+      // Without this we cannot tell "never shown" from "shown and ignored" — the exact
+      // ambiguity that made a zero capture count impossible to diagnose.
+      _track('email_ask_shown',{source:window._emailSrc||''});
+    }catch(_){}
+  }, 700);
 }
 
 // Game-day call sheet: condensed situation→call reference, plus a cut-out
