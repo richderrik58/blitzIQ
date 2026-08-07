@@ -879,6 +879,9 @@
         <button class="clr-btn" style="background:#22c55e" onclick="setDrawColor('#22c55e',this)" title="Green"></button>
         <div class="tool-sep"></div>
         <button class="ctool-btn active" onclick="setDrawTool('pen',this)">&#9998; Draw</button>
+        <button class="ctool-btn" onclick="setDrawTool('arrow',this)" title="Straight route with an arrowhead">&#8594; Route</button>
+        <button class="ctool-btn" onclick="setDrawTool('block',this)" title="Blocking assignment — line with a T-cap">&#8866; Block</button>
+        <button class="ctool-btn" onclick="setDrawTool('line',this)" title="Plain straight line">&#9585; Line</button>
         <button class="ctool-btn" onclick="setDrawTool('erase',this)">&#9633; Erase</button>
         <div class="tool-sep"></div>
         <button class="cw-btn active" onclick="setDrawWidth(3,this)">&#11835;</button>
@@ -6695,6 +6698,12 @@ function esc(s){return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').
 // ── PLAY CANVAS ───────────────────────────────────────────────────────────────
 // State
 let cvCtx=null, cvDrawing=false, cvColor='#ef4444', cvWidth=3, cvTool='pen', cvLX=0, cvLY=0, cvPMX=0, cvPMY=0;
+// Straight-shape tools (route arrow / blocking T-cap / plain line). The route layer is a
+// raster canvas, so rubber-banding a shape means restoring the pre-shape pixels on every
+// move — getImageData/putImageData is synchronous, unlike the dataURL path undo uses.
+let cvShapeBase=null, cvSX=0, cvSY=0;
+const CV_SHAPE_TOOLS={arrow:1,block:1,line:1};
+function cvIsShape(){ return !!CV_SHAPE_TOOLS[cvTool]; }
 let _cvPenAt=0;                       // last time a real stylus was used (palm rejection)
 let _cvPr=null;                       // smoothed pen pressure across samples
 
@@ -8072,6 +8081,14 @@ function cvStart(e){
   cvGestureSnap=cvSnapshot();                                 // capture pre-stroke state for undo
   cvDrawing=true; cvLX=p.x; cvLY=p.y; cvPMX=p.x; cvPMY=p.y;  // seed smoothing at the start point
   const rCtx=cvRouteCanvas.getContext('2d');
+  if(cvIsShape()){
+    // Anchor the shape and keep the pixels underneath, so every move can rubber-band
+    // from a clean slate instead of smearing each intermediate line onto the layer.
+    cvSX=p.x; cvSY=p.y;
+    try{ cvShapeBase=rCtx.getImageData(0,0,cvRouteCanvas.width,cvRouteCanvas.height); }
+    catch(_){ cvShapeBase=null; }
+    return;
+  }
   if(cvTool==='erase'){
     rCtx.save();
     rCtx.globalCompositeOperation='destination-out';
@@ -8099,6 +8116,11 @@ function cvMove(e){
 
   if(!cvDrawing||!cvRouteCanvas) return;
   const rCtx=cvRouteCanvas.getContext('2d');
+  if(cvIsShape()){
+    if(cvShapeBase) rCtx.putImageData(cvShapeBase,0,0);
+    _cvShape(rCtx,cvSX,cvSY,p.x,p.y);
+    redrawAll(); return;
+  }
   rCtx.save();
   rCtx.lineCap='round'; rCtx.lineJoin='round';
   // A 120Hz Pencil generates several points between two delivered pointermove
@@ -8109,6 +8131,33 @@ function cvMove(e){
   for(let i=0;i<pts.length;i++){ _cvSeg(rCtx, cvGetPos(pts[i]), _cvW(pts[i])); }
   rCtx.restore();
   redrawAll();
+}
+
+// Straight shapes. Arrowhead = ball carrier / route; perpendicular T-cap = a block —
+// the same notation the auto-generated diagrams use (_blk / _pull further up).
+function _cvShape(rCtx,x0,y0,x1,y1){
+  rCtx.save();
+  rCtx.globalCompositeOperation='source-over';
+  rCtx.strokeStyle=cvColor; rCtx.fillStyle=cvColor;
+  rCtx.lineWidth=cvWidth; rCtx.lineCap='round'; rCtx.lineJoin='round';
+  rCtx.beginPath(); rCtx.moveTo(x0,y0); rCtx.lineTo(x1,y1); rCtx.stroke();
+  const ang=Math.atan2(y1-y0,x1-x0);
+  if(cvTool==='arrow'){
+    const h=Math.max(10,cvWidth*3.4), sp=0.42;
+    rCtx.beginPath();
+    rCtx.moveTo(x1,y1);
+    rCtx.lineTo(x1-h*Math.cos(ang-sp), y1-h*Math.sin(ang-sp));
+    rCtx.lineTo(x1-h*Math.cos(ang+sp), y1-h*Math.sin(ang+sp));
+    rCtx.closePath(); rCtx.fill();
+  } else if(cvTool==='block'){
+    const c=Math.max(8,cvWidth*3);
+    const px=Math.cos(ang+Math.PI/2), py=Math.sin(ang+Math.PI/2);
+    rCtx.beginPath();
+    rCtx.moveTo(x1-c*px, y1-c*py);
+    rCtx.lineTo(x1+c*px, y1+c*py);
+    rCtx.stroke();
+  }
+  rCtx.restore();
 }
 
 // One smoothed segment of the current stroke, from the last point to p.
@@ -8135,7 +8184,7 @@ function cvEnd(e){
   if(cvDrawing && cvGestureSnap){ cvPushHistory(cvGestureSnap); }
   else if(cvDragging && cvGestureSnap && cvGestureStart &&
           (Math.abs(cvDragging.x-cvGestureStart.x)>1 || Math.abs(cvDragging.y-cvGestureStart.y)>1)){ cvPushHistory(cvGestureSnap); }
-  cvGestureSnap=null; cvGestureStart=null;
+  cvGestureSnap=null; cvGestureStart=null; cvShapeBase=null;
   cvDrawing=false; cvDragging=null;
 }
 
