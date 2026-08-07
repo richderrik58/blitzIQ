@@ -211,9 +211,28 @@ function playFull(){
     started=true;
     sh.classList.remove('tap','novid');
   }
+  // Cloudflare Pages answers a Range request with 200 and the whole file instead of a
+  // 206, and iOS Safari will not decode video from a host that does that. Rather than
+  // ship the 1.1MB animated fallback to everyone, fetch it only once playback has
+  // actually failed — an image is immune to every autoplay restriction there is.
+  var gifTried=false;
+  function useGif(){
+    if(gifTried||started) return;
+    gifTried=true;
+    var img=new Image();
+    img.onload=function(){
+      if(started) return;
+      sh.style.backgroundImage='url(demo-loop.gif)';
+      sh.classList.remove('tap');       // it is animating; no tap target needed
+      sh.classList.add('novid','isgif');
+    };
+    img.src='demo-loop.gif';
+  }
+
   function fail(){
     if(started) return;
     sh.classList.add('tap','novid');
+    useGif();
   }
 
   // 'playing' can fire before a frame is actually decoded; a moving clock is proof.
@@ -250,8 +269,12 @@ function playFull(){
     sh.classList.remove('novid');
     v.controls=true;
     attempt();
-    // If even a direct tap will not play it, the working demo is one link away.
-    setTimeout(function(){ if(!started) location.href='/app#demo'; }, 1200);
+    useGif();
+    // If even a direct tap will not play it and the animation never arrived, the
+    // working demo is one link away. Don't hijack the tap once the GIF is looping.
+    setTimeout(function(){
+      if(!started && !sh.classList.contains('isgif')) location.href='/app#demo';
+    }, 1500);
   });
 })();
 </script>
