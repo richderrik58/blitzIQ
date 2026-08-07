@@ -50,7 +50,20 @@
   .vid-sec{padding-top:8px}
   .vid-shell{max-width:470px;margin:26px auto 0;border-radius:18px;overflow:hidden;
     border:1px solid var(--line);box-shadow:0 30px 80px rgba(0,0,0,.45);background:#000;position:relative}
-  .vid-shell video{width:100%;display:block;background:#000}
+  /* The poster sits behind the video as a background too, so if the media never
+     decodes (iOS is strict about byte-range support) the frame still shows rather
+     than a black box on the page every emailed coach lands on. */
+  .vid-shell{background:#000 url(demo-poster.jpg) center/cover no-repeat}
+  .vid-shell video{width:100%;display:block;background:transparent}
+  .vid-shell.novid video{visibility:hidden}
+  .vid-shell.novid{aspect-ratio:640/666}
+  .vid-tap{position:absolute;inset:0;display:none;align-items:center;justify-content:center;
+    flex-direction:column;gap:10px;background:rgba(6,16,28,.55);border:0;width:100%;
+    color:#fff;font-family:inherit;cursor:pointer;-webkit-backdrop-filter:blur(2px);backdrop-filter:blur(2px)}
+  .vid-shell.tap .vid-tap{display:flex}
+  .vid-tap .pl{width:58px;height:58px;border-radius:50%;background:var(--gold);color:var(--navy);
+    display:flex;align-items:center;justify-content:center;font-size:22px;padding-left:4px}
+  .vid-tap .lb{font-size:13px;font-weight:700;letter-spacing:.3px}
   .vid-cap{text-align:center;color:var(--gray);font-size:13px;margin-top:14px}
   .mock{max-width:420px;margin:46px auto 0;background:linear-gradient(180deg,var(--card),var(--navy2));border:1px solid var(--line);border-radius:20px;box-shadow:0 30px 80px rgba(0,0,0,.45);overflow:hidden;text-align:left}
   .mock-top{display:flex;align-items:center;gap:7px;padding:12px 16px;border-bottom:1px solid var(--line)}
@@ -154,13 +167,18 @@
   <div class="ey" style="text-align:center">See it work</div>
   <h2 class="sec">Hudl export in. Call sheet out.</h2>
   <p class="lead">Thirty seconds, no narration needed — a real export, the real app.</p>
-  <div class="vid-shell">
+  <div class="vid-shell" id="vidShell">
     <!-- Muted + playsinline are what make autoplay legal; browsers block audio autoplay
          outright. This is the 326KB 12s cut, not the 4MB full demo — autoplay means every
-         visitor pays for it whether they watch or not, and a lot of them are on phones. -->
+         visitor pays for it whether they watch or not, and a lot of them are on phones.
+         preload=auto, not metadata: at 326KB the whole clip is cheaper than the round trip,
+         and iOS often never starts a metadata-only preload. -->
     <video id="loopVid" src="demo-loop.mp4" poster="demo-poster.jpg"
-           autoplay muted loop playsinline preload="metadata"
+           autoplay muted loop playsinline webkit-playsinline preload="auto"
            aria-label="DefWise in use — a Hudl export becoming a situational call sheet"></video>
+    <button class="vid-tap" id="vidTap" type="button" aria-label="Play the demo video">
+      <span class="pl">&#9654;</span><span class="lb">Tap to play</span>
+    </button>
     <button id="fullBtn" onclick="playFull()" style="position:absolute;right:10px;bottom:10px;padding:7px 13px;border-radius:8px;border:1px solid rgba(255,255,255,.3);background:rgba(10,21,37,.75);color:#fff;font-size:12px;font-weight:700;cursor:pointer;font-family:inherit;backdrop-filter:blur(4px)">&#9654; Full 30s</button>
   </div>
   <p class="vid-cap">Prefer to just use it? <a href="https://defwise.com/#demo" style="color:var(--gold)">Open the live demo</a> — no signup.</p>
@@ -175,6 +193,67 @@ function playFull(){
   var p=v.play(); if(p&&p.catch) p.catch(function(){ v.controls=true; });
   if(b) b.style.display='none';
 }
+
+// iOS ignores the autoplay attribute in more cases than the spec suggests: Low Power
+// Mode, Low Data Mode, Settings > Auto-Play = Never, and — the one that bit us — a host
+// that answers a Range request with 200 instead of 206. Never assume it started. Watch
+// for actual playback, and if it hasn't begun, fall back to the poster with a tap target
+// rather than leaving a dead black rectangle.
+(function(){
+  var v=document.getElementById('loopVid'),
+      sh=document.getElementById('vidShell'),
+      tap=document.getElementById('vidTap');
+  if(!v||!sh) return;
+  var started=false;
+
+  function ok(){
+    if(started) return;
+    started=true;
+    sh.classList.remove('tap','novid');
+  }
+  function fail(){
+    if(started) return;
+    sh.classList.add('tap','novid');
+  }
+
+  // 'playing' can fire before a frame is actually decoded; a moving clock is proof.
+  v.addEventListener('timeupdate', function(){ if(v.currentTime>0.05) ok(); });
+  v.addEventListener('playing', function(){ if(v.currentTime>0) ok(); });
+  v.addEventListener('error', fail);
+  v.addEventListener('stalled', fail);
+  v.addEventListener('suspend', function(){ if(v.readyState<2) fail(); });
+
+  function attempt(){
+    if(started) return;
+    var p;
+    try{ p=v.play(); }catch(e){ fail(); return; }
+    if(p&&p.catch) p.catch(fail);
+  }
+
+  v.addEventListener('loadeddata', attempt);
+  v.addEventListener('canplay', attempt);
+  attempt();
+
+  // Nothing moving after 4s means it is not going to start on its own.
+  setTimeout(function(){ if(!started) fail(); }, 4000);
+
+  // A real gesture relaxes every autoplay restriction, so retry on first touch anywhere.
+  ['touchstart','click'].forEach(function(evt){
+    document.addEventListener(evt, function once(){
+      document.removeEventListener(evt, once);
+      if(!started) attempt();
+    }, {passive:true, once:true});
+  });
+
+  if(tap) tap.addEventListener('click', function(e){
+    e.preventDefault();
+    sh.classList.remove('novid');
+    v.controls=true;
+    attempt();
+    // If even a direct tap will not play it, the working demo is one link away.
+    setTimeout(function(){ if(!started) location.href='/app#demo'; }, 1200);
+  });
+})();
 </script>
 </div></section>
 
