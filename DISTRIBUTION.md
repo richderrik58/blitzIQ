@@ -7,9 +7,9 @@
 ---
 
 ## The one-sentence pitch (use everywhere)
-> "Free, film-less scouting that breaks down your Hudl export and **predicts the offense play-by-play from the box** — no $2,500 Hudl Assist."
+> "Free. Drop in the Hudl export you already pull and DefWise turns your charting into a **one-page situational call sheet** — and tells you what they run on 3rd & 7 from that hash, before the snap."
 
-Audience: **high-school defensive coordinators** (budget-conscious, already have Hudl exports, hate charting, want help on game day).
+Audience: **high-school defensive coordinators** (budget-conscious, already pull Hudl exports, and — important — they LIKE breaking down film; do not sell "film-less" or "no charting", coaches defend that work as part of the job. Sell getting what they charted into the box on Friday).
 
 ---
 
@@ -40,7 +40,7 @@ Format: 15–30s, strong first 2 seconds, caption asks a question.
 - **"Can you guess the play? 3rd & 8, they run THIS 84% of the time 👀"** → reveal in app.
 - **"POV: you're in the box and the app already told you it's a pass."**
 - **"Stop charting tendencies by hand. Watch this."** (before/after)
-- **"Coaches are paying $2,500 for what this free tool does."** (price hook)
+- **"Scout breakdowns run $750–$1,700 a season. This part is free."** (price hook — Hudl Assist w/ scout games is $750–$1,700/team/season; NEVER say $2,500, that is Hudl's platform tier, not Assist, and coaches know the real numbers)
 - 3–5x/week. Same clip cross-posts to Reels + Shorts.
 
 ### IG feed / Stories
@@ -71,7 +71,7 @@ Format: 15–30s, strong first 2 seconds, caption asks a question.
 > Built a free tool for breaking down opponents without film. You drop in your Hudl playlist/PDF export and it gives you formation + down-and-distance tendencies, and a game-day predictor you can run from the box (down/distance/hash/field/quarter → run-pass % + likely play). Film-less, works offline on an iPad, data stays on your device. Free for one opponent — would love feedback from DCs: [coachblitziq.com]
 
 **X / Twitter (hook thread):**
-> Most HS staffs can't afford Hudl Assist. So I built blitzIQ: drop in your Hudl export → instant opponent tendencies + a play predictor you run from the box. Free to try 🧵👇
+> Adding scout games to Hudl Assist runs $750–$1,700 a season, so plenty of staffs go without. I built DefWise: drop in the export you already pull → your tendencies on a one-page call sheet, plus what they run on 3rd & 7 from that hash. Free 🧵👇
 
 **TikTok/Reel script (15s):**
 > [On screen: "3rd & 8. What do they run?"] "This team's been scouted — watch." [tap predictor] "78% pass. Most likely: 23 Dig. The app called it before the snap. Link in bio, free to try."
@@ -92,3 +92,19 @@ Each week note: signups, free→paid conversions, and **which channel** drove th
 
 ## Etsy (optional, low priority)
 Not a fit to sell the app (wrong audience). If you want a tiny top-of-funnel: list a **$3 printable defensive call-sheet / scouting template** that mentions blitzIQ — minor credibility + traffic, not a real revenue channel.
+
+## Positioning guardrails (from coach research, 2026-08-07)
+
+Sourced from CoachHuey threads + App Store reviews. Verified quotes, not inference.
+
+**Never say:** "film-less", "no charting", "no film grind", "we break it down for you", "$2,500 Hudl Assist".
+Coaches actively defend doing their own breakdown — orion320: *"I wouldn't pay for it... you actually get to watch it. Imagine how much you might miss if you had someone else do it for you."* coachpsl: *"The data input has become part of my routine. It forces me to watch and really take in what i see."* Selling "we remove the breakdown" offers to take away the part they think IS the job.
+
+**Never say:** "recommended call", "the app tells you what to call".
+Play-callers describe calling as instinct — coachbw: *"80% of my playcalls are just by gut or feel."* Frame as informing the gut, not replacing it: *"prep is to inform your 'gut'."*
+
+**Do say:** their words — "break down film", "the breakdown", "data input", "tagging", "ODK", "DN/DIST/HASH", "self-scout", "tendency chart", "call sheet", "gut", "feel", "trade film", "old Hudl", "assist".
+
+**The validated pain** is not the labor of charting — it is that the charting never reaches the caller in time. scoresomemore: *"you have good ones up your sleeve at the end of the night, but what good did that do you? make sure they get called!"* Lead with the printed one-page call-sheet insert; coaches carry paper — dacoachmo: *"plenty of pencils (they never screw up in the rain)."*
+
+**Real Hudl Assist football pricing** (verified from hudl.com/pricing/assist/football, Aug 2026): $250 / $400 / $450 / $650 your games; $750 / $1,200 / $1,250 / $1,700 with scout games. Per team, per season.
