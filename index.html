@@ -14,14 +14,14 @@
   <meta property="og:type" content="website">
   <meta property="og:site_name" content="DefWise">
   <meta property="og:url" content="https://defwise.com/">
-  <meta property="og:title" content="DefWise — Scout smarter. Call the game from the box.">
+  <meta property="og:title" content="DefWise — Your Hudl export, on your call sheet">
   <meta property="og:description" content="You already pull the Hudl export — DefWise turns it into a game-day call sheet: what's coming on 3rd &amp; long, the red zone, by formation. Free for HS coaches, no film grind.">
   <meta property="og:image" content="https://defwise.com/og-image.png">
   <meta property="og:image:width" content="1200">
   <meta property="og:image:height" content="630">
   <meta property="og:image:alt" content="DefWise — defensive scouting and game-day predictor for high-school coaches.">
   <meta name="twitter:card" content="summary_large_image">
-  <meta name="twitter:title" content="DefWise — Scout smarter. Call the game from the box.">
+  <meta name="twitter:title" content="DefWise — Your Hudl export, on your call sheet">
   <meta name="twitter:description" content="You already pull the Hudl export — DefWise turns it into a game-day call sheet: what's coming on 3rd &amp; long, the red zone, by formation. Free for HS coaches, no film grind.">
   <meta name="twitter:image" content="https://defwise.com/og-image.png">
   <!-- Structured data: helps Google understand this is a free coaching app with paid tiers -->
@@ -32,7 +32,7 @@
     "name":"DefWise",
     "applicationCategory":"SportsApplication",
     "operatingSystem":"Web, iPadOS, Android",
-    "description":"Free film-less defensive football scouting and a game-day predictor for high-school coaches. Import your Hudl tendency export and know what the offense runs on 3rd & long — on your iPad, offline.",
+    "description":"Free for high-school defensive coaches. Drop in the Hudl export you already pull and DefWise turns your charting into a one-page situational call sheet — plus what they actually run on 3rd & 7 from that hash.",
     "url":"https://defwise.com/",
     "offers":[
       {"@type":"Offer","name":"Free","price":"0","priceCurrency":"USD"},
@@ -583,8 +583,8 @@
 
 <!-- HIDDEN FILE INPUT (multiple) -->
 <input type="file" id="pdfIn" accept=".pdf,application/pdf" multiple style="display:none" onchange="handlePDF(event)">
-<input type="file" id="xlsxIn" accept=".xlsx,.xls" multiple style="display:none" onchange="handleXLSX(event)">
-<input type="file" id="addGameIn" accept=".xlsx,.xls" multiple style="display:none" onchange="handleAddGameXLSX(event)">
+<input type="file" id="xlsxIn" accept=".xlsx,.xls,.csv" multiple style="display:none" onchange="handleXLSX(event)">
+<input type="file" id="addGameIn" accept=".xlsx,.xls,.csv" multiple style="display:none" onchange="handleAddGameXLSX(event)">
 
 <!-- LOADING (single-file fallback spinner) -->
 <div class="load-ov" id="loadOv">
@@ -1703,6 +1703,16 @@ function parseFormationsCSV(text){
   return forms;
 }
 function openCSVImport(){ if(!st.opp) return; document.getElementById('csvText').value=''; openModal('mCSV'); }
+// A coach with a .csv on disk shouldn't have to open it and copy-paste. Read it
+// into the same textarea so the existing parser and the review step are unchanged.
+function loadCSVFile(e){
+  const f=e.target.files&&e.target.files[0]; if(e.target) e.target.value='';
+  if(!f) return;
+  const r=new FileReader();
+  r.onload=()=>{ const ta=document.getElementById('csvText'); if(ta){ ta.value=String(r.result||''); showToast('Loaded '+f.name+' — review, then Import'); } };
+  r.onerror=()=>showToast('Could not read that file');
+  r.readAsText(f);
+}
 function importCSV(){
   if(!st.opp) return;
   const forms=parseFormationsCSV(document.getElementById('csvText').value);
@@ -2332,7 +2342,7 @@ function renderOpps() {
         <div class="empty">
           <div class="empty-icon">🛡</div>
           <div style="font-size:22px;font-weight:900;color:var(--text);margin-bottom:4px">DefWise</div>
-          <div style="font-size:14px;font-weight:800;color:var(--gold);margin-bottom:12px">Scout smarter. Call the game from the box.</div>
+          <div style="font-size:14px;font-weight:800;color:var(--gold);margin-bottom:12px">You already broke down the film. Now carry it into the box.</div>
           <div class="empty-txt" style="margin:0 auto 18px;max-width:350px;line-height:1.6">Import the Hudl tendency export you already pull and know what the offense runs on <b style="color:var(--white)">3rd &amp; long</b> — then call it from your iPad on the sideline, offline.</div>
           <div class="empty-txt" style="margin:0 auto 22px;max-width:350px;line-height:1.55;font-size:13px"><b style="color:var(--white)">You already pull the Hudl export.</b> <span style="color:var(--grayl)">DefWise turns it into a game-day call sheet — what's coming on 3rd &amp; long, the red zone, by formation. Free to start.</span></div>
           <button onclick="tryDemo()" style="background:var(--gold);color:var(--navy);border:none;border-radius:12px;padding:16px 24px;font-size:16px;font-weight:900;cursor:pointer;font-family:inherit;letter-spacing:.3px;width:100%;max-width:320px;margin:4px auto 8px;display:block;box-shadow:0 4px 16px rgba(240,165,0,.35)">&#9654; See the live Game-Day Predictor</button>
@@ -10077,6 +10087,9 @@ function printScript(){
       <div style="font-size:11px;color:var(--gray);background:var(--navyc);border-radius:8px;padding:10px;font-family:monospace;white-space:pre;overflow-x:auto;margin-bottom:12px">formation,run,pass,run play,pass play,personnel
 Trips R,30,70,Jet Sweep,Four Verts,11
 I-Form,80,20,Power O,PA Boot,21</div>
+      <input type="file" id="csvFileIn" accept=".csv,.txt" style="display:none" onchange="loadCSVFile(event)">
+      <button onclick="document.getElementById('csvFileIn').click()" style="width:100%;margin-bottom:9px;padding:11px;background:rgba(240,165,0,.12);border:1px solid rgba(240,165,0,.4);border-radius:9px;color:var(--gold);font-size:13px;font-weight:800;cursor:pointer;font-family:inherit">&#8679; Choose a .csv file</button>
+      <div style="font-size:11px;color:var(--gray);text-align:center;margin-bottom:9px">or paste below</div>
       <textarea class="fld-ta" id="csvText" style="min-height:140px;font-family:monospace;font-size:12px" placeholder="Paste CSV rows here…"></textarea>
     </div>
     <div class="modal-foot">
