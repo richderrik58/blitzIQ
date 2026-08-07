@@ -1,9 +1,11 @@
 // DefWise service worker — makes the app installable and usable offline.
 // Bump CACHE when shipping changes so clients pick up the new app shell.
-const CACHE = 'defwise-v1';
+const CACHE = 'defwise-v2';
+// The app now lives at /app — '/' is the marketing page and is deliberately NOT
+// part of the offline shell, so an installed PWA never boots into the pitch.
 const SHELL = [
-  './',
-  './index.html',
+  './app',
+  './app.html',
   './manifest.webmanifest',
   './icon-192.png',
   './icon-512.png',
@@ -32,8 +34,8 @@ self.addEventListener('fetch', (e) => {
   if (req.mode === 'navigate') {
     e.respondWith(
       fetch(req)
-        .then((res) => { const copy = res.clone(); caches.open(CACHE).then((c) => c.put('./index.html', copy)); return res; })
-        .catch(() => caches.match('./index.html').then((r) => r || caches.match('./')))
+        .then((res) => { const copy = res.clone(); caches.open(CACHE).then((c) => c.put('./app.html', copy)); return res; })
+        .catch(() => caches.match('./app.html').then((r) => r || caches.match('./app')))
     );
     return;
   }
