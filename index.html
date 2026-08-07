@@ -767,6 +767,19 @@
   </div>
 </div>
 
+<!-- WRISTBAND / CALL-SHEET OPTIONS DIALOG (sits above the playbook) -->
+<div id="wbOv" style="display:none;position:fixed;inset:0;z-index:6000;background:rgba(0,0,0,.6);align-items:center;justify-content:center;padding:20px">
+  <div style="width:100%;max-width:380px;max-height:88vh;overflow:auto;background:var(--navy);border:1px solid rgba(255,255,255,.12);border-radius:16px;padding:20px">
+    <div style="font-size:17px;font-weight:900;color:var(--white);margin-bottom:4px">&#8986; Wristband / Call Sheet</div>
+    <div style="font-size:11px;color:var(--gray);margin-bottom:6px">Numbered play grid — print, fold, tape to a wristband.</div>
+    <div id="wbBody"></div>
+    <div style="display:flex;gap:9px;margin-top:16px">
+      <button onclick="closeWristband()" style="flex:1;padding:12px;border-radius:9px;border:1px solid rgba(255,255,255,.2);background:transparent;color:var(--grayl);font-weight:700;cursor:pointer;font-family:inherit">Cancel</button>
+      <button onclick="printWristband()" style="flex:2;padding:12px;border-radius:9px;border:none;background:var(--gold);color:var(--navy);font-weight:800;cursor:pointer;font-family:inherit">&#128438; Print</button>
+    </div>
+  </div>
+</div>
+
 <!-- BLITZ LIBRARY OVERLAY -->
 <div class="prev-ov" id="blitzLibOv">
   <div class="prev-hdr">
@@ -7649,9 +7662,10 @@ function showPlaybook(){
   const cnt=c=> c==='all'?pb.length:pb.filter(p=>p.category===c).length;
   const chips=['all',...PB_CATS].map(c=>`<button onclick="_pbFilter='${c}';showPlaybook()" style="padding:6px 12px;border-radius:20px;font-size:12px;font-weight:700;cursor:pointer;font-family:inherit;border:1px solid ${c===_pbFilter?'var(--gold)':'rgba(255,255,255,.15)'};background:${c===_pbFilter?'rgba(240,165,0,.18)':'transparent'};color:${c===_pbFilter?'var(--gold)':'var(--grayl)'};${cnt(c)===0&&c!=='all'?'opacity:.4':''}">${c==='all'?'All':c} (${cnt(c)})</button>`).join('');
   const installBtn=pb.length?`<button onclick="printInstallSheet()" title="Print all plays as a handout" style="margin-left:auto;padding:6px 12px;border-radius:8px;font-size:12px;font-weight:700;cursor:pointer;font-family:inherit;border:1px solid rgba(124,92,255,.5);background:rgba(124,92,255,.16);color:#b9a6ff">&#128438; Install Sheet</button>`:'';
+  const wbBtn=pb.length?`<button onclick="openWristband()" title="Print a numbered call sheet you can fold into a wristband" style="padding:6px 12px;border-radius:8px;font-size:12px;font-weight:700;cursor:pointer;font-family:inherit;border:1px solid rgba(240,165,0,.5);background:rgba(240,165,0,.16);color:var(--gold)">&#8986; Wristband / Call Sheet</button>`:'';
   const search=pb.length?`<input id="pbSearch" value="${esc(_pbSearch)}" oninput="_pbSearch=this.value;filterPlaybook()" placeholder="Search plays by name or note…" autocomplete="off" style="width:100%;padding:10px 14px;background:var(--navy2);border:1px solid rgba(255,255,255,.12);border-radius:10px;color:var(--white);font-size:14px;font-family:inherit;margin-bottom:12px">`:'';
   document.getElementById('pbBody').innerHTML=`
-    <div style="display:flex;gap:7px;flex-wrap:wrap;align-items:center;margin-bottom:12px">${chips}${installBtn}</div>
+    <div style="display:flex;gap:7px;flex-wrap:wrap;align-items:center;margin-bottom:12px">${chips}${installBtn}${wbBtn}</div>
     ${search}
     ${pb.length&&_pbFilter==='all'&&!_pbSearch.trim()?`<div style="font-size:10px;color:var(--gray);margin-bottom:8px">Drag a card — or use &#9650;/&#9660; — to set priority order.</div>`:''}
     <div id="pbGrid" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(170px,1fr));gap:12px">${_pbCardsHTML()}</div>`;
@@ -7712,6 +7726,73 @@ function printInstallSheet(){
   <div class="grid">${cards}</div>
   <script>window.onload=function(){setTimeout(function(){window.print()},350)}<\/script></body></html>`);
   w.document.close();
+}
+// ── WRISTBAND / CALL SHEET — numbered play grid, printed for the sideline ────
+let _wbOpts={cols:4,per:20,names:true,cats:PB_CATS.slice()};
+function openWristband(){
+  if(!(DB.playbook||[]).length){ showToast('Save a play to your playbook first'); return; }
+  _wbOpts.cats=(_pbFilter==='all')?PB_CATS.slice():[_pbFilter];
+  renderWristbandOpts();
+  document.getElementById('wbOv').style.display='flex';
+}
+function closeWristband(){ document.getElementById('wbOv').style.display='none'; }
+function _wbSet(k,v){ _wbOpts[k]=v; renderWristbandOpts(); }
+function _wbToggleCat(c){ const i=_wbOpts.cats.indexOf(c); if(i<0) _wbOpts.cats.push(c); else _wbOpts.cats.splice(i,1); renderWristbandOpts(); }
+function _wbPlays(){ return (DB.playbook||[]).filter(p=>_wbOpts.cats.indexOf(p.category)>=0); }
+function renderWristbandOpts(){
+  const pb=DB.playbook||[];
+  const SL='font-size:10px;letter-spacing:1px;text-transform:uppercase;color:var(--gray);font-weight:700;margin:13px 0 6px';
+  const chip=(label,active,onclick,dim)=>`<button onclick="${onclick}" style="padding:8px 12px;border-radius:8px;font-size:12px;font-weight:700;cursor:pointer;font-family:inherit;border:1px solid ${active?'var(--gold)':'rgba(255,255,255,.18)'};background:${active?'rgba(240,165,0,.18)':'transparent'};color:${active?'var(--gold)':'var(--grayl)'}${dim?';opacity:.45':''}">${label}</button>`;
+  const n=_wbPlays().length, per=_wbOpts.per;
+  document.getElementById('wbBody').innerHTML=`
+    <div style="${SL}">Columns</div>
+    <div style="display:flex;gap:5px">${[3,4,5].map(c=>chip(c,_wbOpts.cols===c,`_wbSet('cols',${c})`)).join('')}</div>
+    <div style="${SL}">Plays per page</div>
+    <div style="display:flex;gap:5px">${[12,16,20,24].map(x=>chip(x,per===x,`_wbSet('per',${x})`)).join('')}</div>
+    <div style="${SL}">Play names</div>
+    <div style="display:flex;gap:5px">${chip('On',_wbOpts.names,`_wbSet('names',true)`)}${chip('Off',!_wbOpts.names,`_wbSet('names',false)`)}</div>
+    <div style="${SL}">Categories</div>
+    <div style="display:flex;gap:5px;flex-wrap:wrap">${PB_CATS.map(c=>{const cn=pb.filter(p=>p.category===c).length;
+      return chip(`${c} (${cn})`,_wbOpts.cats.indexOf(c)>=0,`_wbToggleCat('${c}')`,cn===0);}).join('')}</div>
+    <div style="margin-top:14px;font-size:12px;color:${n?'var(--grayl)':'var(--red)'}">${n?`${n} play${n!==1?'s':''} &middot; ${Math.ceil(n/per)} page${Math.ceil(n/per)!==1?'s':''} &middot; numbered 1&ndash;${n}`:'No plays in the selected categories.'}</div>`;
+}
+function printWristband(){
+  const plays=_wbPlays();
+  if(!plays.length){ showToast('No plays in the selected categories'); return; }
+  const cols=_wbOpts.cols, per=_wbOpts.per, names=_wbOpts.names;
+  const rows=Math.ceil(per/cols);
+  const imgH=Math.max(.5,(9.4/rows)-(names?.5:.34)).toFixed(2);   // fit rows inside one letter page
+  const numPt=cols===3?18:cols===4?15:12;
+  const namePt=cols===3?9:cols===4?8:7;
+  const pages=[];
+  for(let i=0;i<plays.length;i+=per) pages.push(plays.slice(i,i+per));
+  const stamp=new Date().toLocaleDateString();
+  const body=pages.map((pg,pi)=>`<div class="pg">
+    <div class="hd"><span>Wristband / Call Sheet</span><span class="hdr">DefWise &middot; ${esc(stamp)} &middot; Page ${pi+1} of ${pages.length}</span></div>
+    <div class="gr">${pg.map((p,j)=>`<div class="cell">
+      <div class="top"><span class="num">${pi*per+j+1}</span>${names?`<span class="nm">${esc(p.name)}</span>`:''}</div>
+      <img src="${p.thumb}" alt=""></div>`).join('')}</div>
+  </div>`).join('');
+  const html=`<!DOCTYPE html><html><head><meta charset="UTF-8">
+<title>DefWise — Wristband / Call Sheet</title>
+<style>
+  @page{margin:.5in}
+  *{margin:0;padding:0;box-sizing:border-box}
+  html,body{background:#fff;color:#000;-webkit-print-color-adjust:exact;print-color-adjust:exact}
+  body{font-family:Arial,Helvetica,sans-serif}
+  .pg{page-break-after:always}
+  .pg:last-child{page-break-after:auto}
+  .hd{display:flex;justify-content:space-between;align-items:baseline;font-size:9pt;font-weight:800;letter-spacing:1.5px;text-transform:uppercase;border-bottom:1.5px solid #000;padding-bottom:4px;margin-bottom:7px}
+  .hdr{font-size:7pt;font-weight:400;letter-spacing:0;text-transform:none;color:#555}
+  .gr{display:grid;grid-template-columns:repeat(${cols},1fr);gap:5px}
+  .cell{border:1px solid #999;border-radius:3px;overflow:hidden;break-inside:avoid;page-break-inside:avoid}
+  .top{display:flex;align-items:baseline;gap:5px;padding:1px 5px 3px;border-bottom:1px solid #ccc}
+  .num{font-size:${numPt}pt;font-weight:900;line-height:1.05}
+  .nm{flex:1;min-width:0;font-size:${namePt}pt;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .cell img{display:block;width:100%;height:${imgH}in;object-fit:contain;background:#fff}
+</style></head><body>${body}</body></html>`;
+  closeWristband();
+  printDoc(html);
 }
 function updatePbCount(){ const el=document.getElementById('pbCountBadge'); if(el){ const n=(DB.playbook||[]).length; el.textContent=n?` (${n})`:''; } }
 function closePlaybook(){ document.getElementById('pbOv').classList.remove('open'); document.body.style.overflow=''; }
