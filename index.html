@@ -6221,21 +6221,17 @@ function applyGeneratedPlay(playData){
     }
 
     // Draw routes on the route canvas using canvas-relative coords
+    // Store these as vector strokes rather than painting them on. Routes live in cvVec
+    // now, and any later erase/undo/shape replays the layer from it — painting straight
+    // onto the canvas would survive exactly until the coach touched anything.
     if(cvRouteCanvas && playData.routes){
-      const rCtx = cvRouteCanvas.getContext('2d');
-      rCtx.clearRect(0,0,cvRouteCanvas.width,cvRouteCanvas.height);
+      cvVec=[]; cvBaseImg=null;
       playData.routes.forEach(r => {
-        const x1=cw*r.x1, y1=los+r.y1, x2=cw*r.x2, y2=los+r.y2;
-        rCtx.save();
-        rCtx.strokeStyle=r.color||'#ef4444';
-        rCtx.lineWidth=r.dashed?2:2.5;
-        if(r.dashed) rCtx.setLineDash([7,4]);
-        rCtx.lineCap='round'; rCtx.lineJoin='round';
-        rCtx.beginPath(); rCtx.moveTo(x1,y1); rCtx.lineTo(x2,y2); rCtx.stroke();
-        rCtx.setLineDash([]);
-        drawRouteArrow(rCtx,x1,y1,x2,y2,r.color||'#ef4444');
-        rCtx.restore();
+        cvVec.push({ tool:'arrow', color:r.color||'#ef4444', width:r.dashed?2:2.5,
+                     dashed:!!r.dashed,
+                     pts:[[cw*r.x1, los+r.y1],[cw*r.x2, los+r.y2]] });
       });
+      _cvRenderRoutes();
     }
 
     redrawAll();
@@ -6702,6 +6698,11 @@ let cvCtx=null, cvDrawing=false, cvColor='#ef4444', cvWidth=3, cvTool='pen', cvL
 // raster canvas, so rubber-banding a shape means restoring the pre-shape pixels on every
 // move — getImageData/putImageData is synchronous, unlike the dataURL path undo uses.
 let cvShapeBase=null, cvSX=0, cvSY=0;
+// Routes are now VECTOR. cvVec is the source of truth — an array of
+// {tool,color,width,pts:[[x,y],...]}; cvRouteCanvas is only a render target we
+// rebuild from it. That buys per-stroke erase, exact undo, and clean rescaling.
+// cvBase holds a raster PNG for plays saved before this change so they still open.
+let cvVec=[], cvCur=null, cvBaseImg=null;
 const CV_SHAPE_TOOLS={arrow:1,block:1,line:1};
 function cvIsShape(){ return !!CV_SHAPE_TOOLS[cvTool]; }
 let _cvPenAt=0;                       // last time a real stylus was used (palm rejection)
@@ -6739,7 +6740,7 @@ let cvGestureSnap=null, cvGestureStart=null;  // pre-gesture state for drag/draw
 // Snapshot = deep copy of players + a PNG of the freehand-route layer. We push the
 // PRE-action state before each mutating action, then cvUndo() restores the top.
 function cvSnapshot(){ return { players: cvPlayers.map(p=>({...p})),
-  routes: (cvRouteCanvas? cvRouteCanvas.toDataURL('image/png') : null) }; }
+  vec: cvVec.map(st=>({...st, pts: st.pts.map(q=>[q[0],q[1]])})) }; }
 function cvPushHistory(snap){ cvHistory.push(snap||cvSnapshot()); if(cvHistory.length>20) cvHistory.shift(); cvUpdateUndoBtn(); }
 function cvUpdateUndoBtn(){ const b=document.getElementById('cvUndoBtn'); if(!b) return;
   b.disabled=cvHistory.length===0; b.style.opacity=cvHistory.length?'1':'.4'; }
@@ -6755,7 +6756,9 @@ function cvUndo(){
   const snap=cvHistory.pop();
   cvPlayers=(snap.players||[]).map(p=>({...p}));
   cvSelectedPlayer=null; hidePlayerDeleteBtn();
-  cvRestoreRoutes(snap.routes, ()=>redrawAll());
+  // Restoring strokes is a plain array swap now — no image decode, no async gap.
+  cvVec=(snap.vec||[]).map(st=>({...st, pts:(st.pts||[]).map(q=>[q[0],q[1]])}));
+  _cvRenderRoutes();
   redrawAll();
   cvUpdateUndoBtn();
 }
@@ -7521,16 +7524,22 @@ function openCanvas(onReady){
     // Source: a saved playbook entry (My Playbook / Draw a Play) or the scouted situation's DC
     const _pb=window._pbEntry, _blank=window._pbBlank;
     cvPlayers=((_pb?_pb.players:(_blank?[]:st.sit?.dc?.cvPlayers))||[]).map(p=>({...p}));
-    const routeSrc=_pb?_pb.routes:(_blank?null:st.sit?.dc?.cvRoutes);
+    // A play saved after this change carries `vec` and stays fully editable. One saved
+    // before it has only a PNG — keep that as an immovable base layer so it still opens
+    // and can be drawn over, instead of silently losing the coach's work.
+    cvVec=[]; cvCur=null; cvBaseImg=null;
+    const vecSrc=_pb?_pb.vec:null;
+    if(vecSrc && vecSrc.length){ cvVec=vecSrc.map(v=>({...v, pts:(v.pts||[]).map(q=>[q[0],q[1]])})); }
+    const routeSrc=(vecSrc&&vecSrc.length)?null:(_pb?_pb.routes:(_blank?null:st.sit?.dc?.cvRoutes));
     const legacySrc=(_pb||_blank)?null:st.sit?.dc?.playCanvas;
     if(routeSrc){
       const img=new Image();
-      img.onload=()=>{ rCtx.drawImage(img,0,0,cw,ch); redrawAll(); };
+      img.onload=()=>{ cvBaseImg=img; _cvRenderRoutes(); redrawAll(); };
       img.src=routeSrc;
     } else if(legacySrc&&!cvPlayers.length){
-      // Legacy single-layer save — load as routes
+      // Legacy single-layer save — an immovable base beneath any new strokes
       const img=new Image();
-      img.onload=()=>{ rCtx.drawImage(img,0,0,cw,ch); redrawAll(); };
+      img.onload=()=>{ cvBaseImg=img; _cvRenderRoutes(); redrawAll(); };
       img.src=legacySrc;
     } else {
       redrawAll();
@@ -7577,7 +7586,8 @@ function saveToPlaybook(){
   cvFlush();                       // paint any pending frame before grabbing the thumb
   const canvas=document.getElementById('playCanvas');
   window._pbDraft={ players:cvPlayers.map(p=>({...p})),
-    routes:cvRouteCanvas?cvRouteCanvas.toDataURL('image/png'):null,
+    routes:cvRouteCanvas?cvRouteCanvas.toDataURL('image/png'):null,  // still written — thumbnails, print and older paths read it
+    vec:cvVec.map(st=>({...st, pts:st.pts.map(q=>[q[0],q[1]])})),    // the editable truth
     thumb:canvas.toDataURL('image/jpeg',0.55) };
   _pbCat='Defense';
   document.getElementById('pbName').value='';
@@ -7594,7 +7604,7 @@ function pbSaveConfirm(){
   if(!name){ document.getElementById('pbName').focus(); showToast('Give the play a name'); return; }
   DB.playbook=DB.playbook||[];
   DB.playbook.unshift({ id:uid(), name, category:_pbCat, notes:document.getElementById('pbNotes').value.trim(),
-    players:_pbDraft.players, routes:_pbDraft.routes, thumb:_pbDraft.thumb, created:new Date().toISOString() });
+    players:_pbDraft.players, routes:_pbDraft.routes, vec:_pbDraft.vec, thumb:_pbDraft.thumb, created:new Date().toISOString() });
   saveDB();
   updatePbCount();
   document.getElementById('pbSaveOv').style.display='none';
@@ -7659,7 +7669,7 @@ function renamePlaybookPlay(id, ev){ if(ev) ev.stopPropagation();
 function duplicatePlaybookPlay(id, ev){ if(ev) ev.stopPropagation();
   const e=(DB.playbook||[]).find(p=>p.id===id); if(!e) return;
   const copy={ ...e, id:uid(), name:(e.name||'Play')+' (copy)',
-    players:(e.players||[]).map(x=>({...x})), routes:e.routes, thumb:e.thumb, created:new Date().toISOString() };
+    players:(e.players||[]).map(x=>({...x})), routes:e.routes, vec:e.vec, thumb:e.thumb, created:new Date().toISOString() };
   const pb=DB.playbook; const i=pb.findIndex(p=>p.id===id); pb.splice(i<0?pb.length:i+1,0,copy);
   saveDB(); updatePbCount(); showPlaybook(); showToast('Duplicated — '+copy.name); }
 function movePlaybookPlay(id, dir, ev){ if(ev) ev.stopPropagation();
@@ -7882,16 +7892,22 @@ function flipCanvas(){
 
   // Mirror route canvas horizontally
   if(cvRouteCanvas){
-    const snap=document.createElement('canvas');
-    snap.width=cvRouteCanvas.width; snap.height=cvRouteCanvas.height;
-    snap.getContext('2d').drawImage(cvRouteCanvas,0,0);
-    const rCtx=cvRouteCanvas.getContext('2d');
-    rCtx.clearRect(0,0,cvRouteCanvas.width,cvRouteCanvas.height);
-    rCtx.save();
-    rCtx.translate(cvRouteCanvas.width,0);
-    rCtx.scale(-1,1);
-    rCtx.drawImage(snap,0,0);
-    rCtx.restore();
+    // Mirror the vector points. Flipping pixels alone would be undone the moment
+    // anything replayed the layer from cvVec.
+    const dpr=window.devicePixelRatio||1, cwF=cvRouteCanvas.width/dpr;
+    cvVec.forEach(st=>{ st.pts=st.pts.map(q=>[cwF-q[0], q[1]]); });
+    if(cvBaseImg){
+      // A legacy raster base has no points to mirror — bake the flip into a new bitmap.
+      const snap=document.createElement('canvas');
+      snap.width=cvRouteCanvas.width; snap.height=cvRouteCanvas.height;
+      const sc=snap.getContext('2d');
+      sc.translate(cvRouteCanvas.width,0); sc.scale(-1,1);
+      sc.drawImage(cvBaseImg,0,0,cvRouteCanvas.width,cvRouteCanvas.height);
+      const flipped=new Image();
+      flipped.onload=()=>{ cvBaseImg=flipped; _cvRenderRoutes(); redrawAll(); };
+      flipped.src=snap.toDataURL('image/png');
+    }
+    _cvRenderRoutes();
   }
 
   redrawAll();
@@ -7904,6 +7920,7 @@ function clearCanvas(){
   cvSelectedSymbol=null;
   cvSelectedPlayer=null; hidePlayerDeleteBtn();
   document.querySelectorAll('.pbtn').forEach(b=>b.classList.remove('selected'));
+  cvVec=[]; cvCur=null; cvBaseImg=null;
   if(cvRouteCanvas){
     const rCtx=cvRouteCanvas.getContext('2d');
     rCtx.clearRect(0,0,cvRouteCanvas.width,cvRouteCanvas.height);
@@ -8081,24 +8098,16 @@ function cvStart(e){
   cvGestureSnap=cvSnapshot();                                 // capture pre-stroke state for undo
   cvDrawing=true; cvLX=p.x; cvLY=p.y; cvPMX=p.x; cvPMY=p.y;  // seed smoothing at the start point
   const rCtx=cvRouteCanvas.getContext('2d');
-  if(cvIsShape()){
-    // Anchor the shape and keep the pixels underneath, so every move can rubber-band
-    // from a clean slate instead of smearing each intermediate line onto the layer.
-    cvSX=p.x; cvSY=p.y;
-    try{ cvShapeBase=rCtx.getImageData(0,0,cvRouteCanvas.width,cvRouteCanvas.height); }
-    catch(_){ cvShapeBase=null; }
+  if(cvTool==='erase'){
+    // Vector erase lifts the whole stroke you touched rather than rubbing a hole in the
+    // pixels — closer to how a coach thinks: that route is wrong, take it off.
+    _cvEraseAt(p.x,p.y);
+    redrawAll();
     return;
   }
-  if(cvTool==='erase'){
-    rCtx.save();
-    rCtx.globalCompositeOperation='destination-out';
-    rCtx.beginPath(); rCtx.arc(p.x,p.y,cvWidth*2.5,0,Math.PI*2);
-    rCtx.fillStyle='rgba(0,0,0,1)'; rCtx.fill();
-    rCtx.restore();
-  } else {
-    rCtx.beginPath(); rCtx.arc(p.x,p.y,_cvW(e)/2,0,Math.PI*2);
-    rCtx.fillStyle=cvColor; rCtx.fill();
-  }
+  cvCur={tool:cvTool, color:cvColor, width:cvIsShape()?cvWidth:_cvW(e), pts:[[p.x,p.y]]};
+  cvVec.push(cvCur);
+  if(!cvIsShape()) _cvStroke(rCtx,cvCur);   // dot, so a tap still marks
   redrawAll();
 }
 
@@ -8116,9 +8125,11 @@ function cvMove(e){
 
   if(!cvDrawing||!cvRouteCanvas) return;
   const rCtx=cvRouteCanvas.getContext('2d');
+  if(cvTool==='erase'){ _cvEraseAt(p.x,p.y); redrawAll(); return; }
   if(cvIsShape()){
-    if(cvShapeBase) rCtx.putImageData(cvShapeBase,0,0);
-    _cvShape(rCtx,cvSX,cvSY,p.x,p.y);
+    // Rubber-band: the stroke owns exactly two points, so replaying the layer is both
+    // correct and cheap — no ImageData juggling needed.
+    if(cvCur){ cvCur.pts[1]=[p.x,p.y]; _cvRenderRoutes(); }
     redrawAll(); return;
   }
   rCtx.save();
@@ -8128,36 +8139,95 @@ function cvMove(e){
   // drawing all of them is the difference between a smooth curve and a polygon.
   const batch = (typeof e.getCoalescedEvents==='function') ? e.getCoalescedEvents() : null;
   const pts = (batch && batch.length) ? batch : [e];
-  for(let i=0;i<pts.length;i++){ _cvSeg(rCtx, cvGetPos(pts[i]), _cvW(pts[i])); }
+  for(let i=0;i<pts.length;i++){
+    const q=cvGetPos(pts[i]);
+    if(cvCur) cvCur.pts.push([q.x,q.y]);     // keep the vector in step with the pixels
+    _cvSeg(rCtx, q, _cvW(pts[i]));
+  }
   rCtx.restore();
   redrawAll();
 }
 
-// Straight shapes. Arrowhead = ball carrier / route; perpendicular T-cap = a block —
-// the same notation the auto-generated diagrams use (_blk / _pull further up).
-function _cvShape(rCtx,x0,y0,x1,y1){
+// Replay every stroke onto the route layer. Cheap enough to run on erase, undo and
+// shape rubber-banding; the freehand path still draws incrementally so a 120Hz
+// Pencil never waits on a full repaint.
+function _cvRenderRoutes(){
+  if(!cvRouteCanvas) return;
+  const rCtx=cvRouteCanvas.getContext('2d');
+  const dpr=window.devicePixelRatio||1;
+  const cw=cvRouteCanvas.width/dpr, ch=cvRouteCanvas.height/dpr;
+  rCtx.clearRect(0,0,cw,ch);
+  if(cvBaseImg) rCtx.drawImage(cvBaseImg,0,0,cw,ch);
+  for(const st of cvVec) _cvStroke(rCtx,st);
+}
+// Draw one stored stroke.
+function _cvStroke(rCtx,st){
+  const pts=st.pts||[]; if(pts.length<1) return;
   rCtx.save();
   rCtx.globalCompositeOperation='source-over';
-  rCtx.strokeStyle=cvColor; rCtx.fillStyle=cvColor;
-  rCtx.lineWidth=cvWidth; rCtx.lineCap='round'; rCtx.lineJoin='round';
+  rCtx.strokeStyle=st.color; rCtx.fillStyle=st.color;
+  rCtx.lineWidth=st.width; rCtx.lineCap='round'; rCtx.lineJoin='round';
+  if(st.dashed) rCtx.setLineDash([7,4]);
+  if(st.tool==='pen'){
+    if(pts.length===1){ rCtx.beginPath(); rCtx.arc(pts[0][0],pts[0][1],st.width/2,0,Math.PI*2); rCtx.fill(); }
+    else{
+      rCtx.beginPath(); rCtx.moveTo(pts[0][0],pts[0][1]);
+      for(let i=1;i<pts.length-1;i++){
+        const mx=(pts[i][0]+pts[i+1][0])/2, my=(pts[i][1]+pts[i+1][1])/2;
+        rCtx.quadraticCurveTo(pts[i][0],pts[i][1],mx,my);
+      }
+      rCtx.lineTo(pts[pts.length-1][0],pts[pts.length-1][1]);
+      rCtx.stroke();
+    }
+  } else {
+    const a=pts[0], b=pts[pts.length-1];
+    _cvShapeOn(rCtx,st.tool,a[0],a[1],b[0],b[1],st.width);
+  }
+  rCtx.restore();
+}
+// Lift every stroke under the eraser. Returns true if anything went.
+function _cvEraseAt(x,y){
+  const r=Math.max(10,cvWidth*3);
+  const keep=cvVec.filter(st=>_cvHit(st,x,y)>r);
+  if(keep.length===cvVec.length) return false;
+  cvVec=keep; _cvRenderRoutes(); return true;
+}
+// Distance from point to a stroke, for hit-testing the eraser.
+function _cvHit(st,x,y){
+  const pts=st.pts||[]; let best=1e9;
+  for(let i=0;i<pts.length;i++){
+    const a=pts[i], b=pts[i+1]||pts[i];
+    const dx=b[0]-a[0], dy=b[1]-a[1];
+    const L=dx*dx+dy*dy;
+    let t=L? ((x-a[0])*dx+(y-a[1])*dy)/L : 0;
+    t=Math.max(0,Math.min(1,t));
+    const px=a[0]+t*dx, py=a[1]+t*dy;
+    best=Math.min(best, Math.hypot(x-px,y-py));
+  }
+  return best;
+}
+
+// Straight shapes. Arrowhead = ball carrier / route; perpendicular T-cap = a block —
+// the same notation the auto-generated diagrams use (_blk / _pull further up).
+function _cvShapeOn(rCtx,tool,x0,y0,x1,y1,w){
+  rCtx.lineWidth=w; rCtx.lineCap='round'; rCtx.lineJoin='round';
   rCtx.beginPath(); rCtx.moveTo(x0,y0); rCtx.lineTo(x1,y1); rCtx.stroke();
   const ang=Math.atan2(y1-y0,x1-x0);
-  if(cvTool==='arrow'){
-    const h=Math.max(10,cvWidth*3.4), sp=0.42;
+  if(tool==='arrow'){
+    const h=Math.max(10,w*3.4), sp=0.42;
     rCtx.beginPath();
     rCtx.moveTo(x1,y1);
     rCtx.lineTo(x1-h*Math.cos(ang-sp), y1-h*Math.sin(ang-sp));
     rCtx.lineTo(x1-h*Math.cos(ang+sp), y1-h*Math.sin(ang+sp));
     rCtx.closePath(); rCtx.fill();
-  } else if(cvTool==='block'){
-    const c=Math.max(8,cvWidth*3);
+  } else if(tool==='block'){
+    const c=Math.max(8,w*3);
     const px=Math.cos(ang+Math.PI/2), py=Math.sin(ang+Math.PI/2);
     rCtx.beginPath();
     rCtx.moveTo(x1-c*px, y1-c*py);
     rCtx.lineTo(x1+c*px, y1+c*py);
     rCtx.stroke();
   }
-  rCtx.restore();
 }
 
 // One smoothed segment of the current stroke, from the last point to p.
@@ -8184,6 +8254,12 @@ function cvEnd(e){
   if(cvDrawing && cvGestureSnap){ cvPushHistory(cvGestureSnap); }
   else if(cvDragging && cvGestureSnap && cvGestureStart &&
           (Math.abs(cvDragging.x-cvGestureStart.x)>1 || Math.abs(cvDragging.y-cvGestureStart.y)>1)){ cvPushHistory(cvGestureSnap); }
+  // A shape the coach never dragged is a stray click — drop it instead of leaving a dot.
+  if(cvCur && cvIsShape() && cvCur.pts.length<2){
+    const i=cvVec.indexOf(cvCur); if(i>=0) cvVec.splice(i,1);
+    _cvRenderRoutes(); redrawAll();
+  }
+  cvCur=null;
   cvGestureSnap=null; cvGestureStart=null; cvShapeBase=null;
   cvDrawing=false; cvDragging=null;
 }
