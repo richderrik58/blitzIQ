@@ -433,6 +433,20 @@
     // PostHog's library loads async. Anything tracked before it lands used to be
     // dropped on the floor with no retry, so the earliest (and most important)
     // funnel steps under-counted. Queue instead, and flush once it's ready.
+    // Per-coach attribution. Every outreach link carries ?c=<slug> merged in by YAMM,
+    // so we learn which program is looking without asking anyone to type anything —
+    // they clicked a link we sent to their address, we already know who they are.
+    // Persisted, because the code is on the first hit only and coaches come back.
+    window._srcCode = (function(){
+      try{
+        var m = (location.search||'').match(/[?&]c=([^&#]+)/);
+        if(m){
+          var c = decodeURIComponent(m[1]).replace(/[^A-Za-z0-9_-]/g,'').slice(0,48);
+          if(c){ try{ localStorage.setItem('defwise_src_code', c); }catch(_){} return c; }
+        }
+        return localStorage.getItem('defwise_src_code') || '';
+      }catch(_){ return ''; }
+    })();
     window._trackQ = [];
     window._trackFlush = function(){
       try{
@@ -443,13 +457,22 @@
     };
     window._track = function(ev, props){
       try{
-        if(window.posthog && window.posthog.capture){ window._trackFlush(); window.posthog.capture(ev, props||{}); }
-        else { window._trackQ.push([ev, props||{}]); if(window._trackQ.length>50) window._trackQ.shift(); }
+        // Copy rather than mutate — callers reuse their props objects.
+        var p = {}; for(var k in (props||{})) p[k] = props[k];
+        if(window._srcCode) p.coach_code = window._srcCode;
+        if(window.posthog && window.posthog.capture){ window._trackFlush(); window.posthog.capture(ev, p); }
+        else { window._trackQ.push([ev, p]); if(window._trackQ.length>50) window._trackQ.shift(); }
       }catch(_){}
     };
     if(window.POSTHOG_KEY){
       var _ph=document.createElement('script'); _ph.async=true; _ph.src='https://us-assets.i.posthog.com/static/array.js';
-      _ph.onload=function(){ try{ window.posthog && posthog.init(window.POSTHOG_KEY,{api_host:'https://us.i.posthog.com', autocapture:true, capture_pageview:true, persistence:'localStorage+cookie'}); window._trackFlush(); }catch(_){} };
+      _ph.onload=function(){ try{
+        window.posthog && posthog.init(window.POSTHOG_KEY,{api_host:'https://us.i.posthog.com', autocapture:true, capture_pageview:true, persistence:'localStorage+cookie'});
+        // Super property, so $pageview and autocapture carry the code as well —
+        // otherwise a coach who bounces off the first screen is invisible.
+        if(window._srcCode && window.posthog && posthog.register) posthog.register({coach_code: window._srcCode});
+        window._trackFlush();
+      }catch(_){} };
       document.head.appendChild(_ph);
     }
   </script>
