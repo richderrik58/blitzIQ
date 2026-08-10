@@ -494,6 +494,32 @@
       }catch(_){} };
       document.head.appendChild(_ph);
     }
+
+    // ── ERROR REPORTING ───────────────────────────────────────────────────────
+    // Most try blocks in this app swallow their error whole. That's deliberate and
+    // right — a coach in the box on Friday should never see a stack trace — but it
+    // also meant every bug was invisible, and a modal that opened but didn't render
+    // took a day to chase because nothing was recorded. Report instead of discard.
+    // Deduped per site and hard-capped so a loop can't flood a session.
+    window._errSeen = {}; window._errCount = 0;
+    window._err = function(where, e){
+      try{
+        if(window._errCount >= 12) return;
+        var msg = (e && (e.message || e.name)) || String(e || 'unknown');
+        var key = where + '|' + msg;
+        if(window._errSeen[key]) return;
+        window._errSeen[key] = 1; window._errCount++;
+        if(window.console && console.warn) console.warn('[defwise]', where, e);
+        if(window._track) window._track('js_error', { where: where, message: String(msg).slice(0,180) });
+      }catch(_){}
+    };
+    // Anything that isn't caught at all still gets reported.
+    window.addEventListener('error', function(ev){
+      window._err('uncaught', (ev && (ev.error || ev.message)) || 'error');
+    });
+    window.addEventListener('unhandledrejection', function(ev){
+      window._err('unhandled-rejection', (ev && ev.reason) || 'rejection');
+    });
   </script>
 </head>
 <body>
@@ -2237,7 +2263,7 @@ function demoBanner(onScreen2){
 }
 // One-tap path to the "wow": load the demo opponent AND drop straight into the live predictor.
 function tryDemo(){
-  try{ if(!DB.scheme){ DB.scheme='4-3'; saveDB(); } }catch(_){}
+  try{ if(!DB.scheme){ DB.scheme='4-3'; saveDB(); } }catch(e){ _err('tryDemo.scheme',e); }
   _track('try_demo_clicked');
   loadDemo();
   setTimeout(function(){
@@ -2255,7 +2281,7 @@ function tryDemo(){
       // coach can reach with no Hudl export in hand. Every other ask (tendencies
       // report, call sheet) sits behind an import, which is exactly the step that
       // stops a coach in August. Delay so they watch the live call land first.
-      setTimeout(function(){ try{ maybeAskEmail('demo_predictor'); }catch(_){} }, 4200);
+      setTimeout(function(){ try{ maybeAskEmail('demo_predictor'); }catch(e){ _err('maybeAskEmail',e); } }, 4200);
     }catch(_){}
   }, 350);
 }
@@ -2934,7 +2960,11 @@ function renderDefCall() {
 }
 
 // ── MODALS ────────────────────────────────────────────────────────────────────
-function openModal(id) { document.getElementById(id).classList.add('open'); document.body.style.overflow='hidden'; }
+function openModal(id) {
+  const el=document.getElementById(id);
+  if(!el){ if(window._err) _err('openModal.missing', id); return; }   // was: silent TypeError, swallowed by the caller
+  el.classList.add('open'); document.body.style.overflow='hidden';
+}
 function closeModal(id){ document.getElementById(id).classList.remove('open'); document.body.style.overflow=''; }
 function openFeedback(){
   _track('feedback_opened');
@@ -5002,7 +5032,7 @@ function importPreview(){
   if(defAdded) showToast(`Added ${defAdded} of your defensive calls to Self-Scout`);
   // Right after an import is when the most work is sitting on one device with no
   // copy of it. Let the toast land first so this doesn't stack on top of it.
-  setTimeout(function(){ try{ maybeNudgeBackup(); }catch(_){} }, defAdded ? 3200 : 1400);
+  setTimeout(function(){ try{ maybeNudgeBackup(); }catch(e){ _err('backupNudge.import',e); } }, defAdded ? 3200 : 1400);
 }
 
 // ── DEFWISE RECOMMENDATION ENGINE ────────────────────────────────────────────
@@ -8989,7 +9019,7 @@ function quickStart(){
 // picker), so import_started → scouting_imported tells us if people find it and
 // bail vs. never find it. Then trigger the actual file input.
 function startImport(kind){
-  try{ _track('import_started', {kind:kind}); }catch(_){}
+  try{ _track('import_started', {kind:kind}); }catch(e){ _err('import_started',e); }
   var el=document.getElementById(kind==='pdf'?'pdfIn':'xlsxIn');
   if(el) el.click();
 }
@@ -9414,7 +9444,7 @@ function maybeAskEmail(source){
       // Without this we cannot tell "never shown" from "shown and ignored" — the exact
       // ambiguity that made a zero capture count impossible to diagnose.
       _track('email_ask_shown',{source:window._emailSrc||''});
-    }catch(_){}
+    }catch(e){ _err('emailAsk.open', e); }   // this catch hid a day of debugging once
   }, 700);
 }
 
@@ -9497,7 +9527,7 @@ function printDoc(html){
     let done=false;
     const go=function(){ if(done)return; done=true; try{ ifr.contentWindow.focus(); ifr.contentWindow.print(); }catch(_){} setTimeout(function(){ try{ ifr.parentNode&&ifr.parentNode.removeChild(ifr); }catch(_){} },2000); };
     ifr.onload=go; setTimeout(go,500);
-  }catch(e){ try{ showToast('Could not open the print view'); }catch(_){} }
+  }catch(e){ _err('print',e); try{ showToast('Could not open the print view'); }catch(_){} }
   maybeAskEmail('call_sheet');
 }
 
@@ -10230,7 +10260,7 @@ function maybeShowIosInstallTip(){
   }catch(e){}
 }
 renderOpps(); syncHdr(); applyGameDay(); applyCVD(); updateProBadge(); maybeShowIosInstallTip(); maybeShowSharedReport(); updatePbCount();
-if(/[#&](try|demo)\b/i.test(location.hash||'')) setTimeout(function(){ try{ tryDemo(); }catch(_){} }, 350);  // email/link → straight into the live demo predictor
+if(/[#&](try|demo)\b/i.test(location.hash||'')) setTimeout(function(){ try{ tryDemo(); }catch(e){ _err('tryDemo',e); } }, 350);  // email/link → straight into the live demo predictor
 // ?ask=1 opens the prompt directly, without waiting on the demo path or its timers,
 // so a no-show isolates the modal itself rather than the route that leads to it.
 if(_forceAsk()) setTimeout(function(){ try{ openModal('mEmail'); }catch(e){ alert('modal failed: '+e.message); } }, 1200);
@@ -10238,7 +10268,7 @@ if(_forceAsk()) setTimeout(function(){ try{ openModal('mEmail'); }catch(e){ aler
 // the exact window in which Safari is entitled to evict everything he charted.
 // Skipped when arriving at the demo, so a first-time visitor is never greeted by it.
 if(!/[#&](try|demo)\b/i.test(location.hash||''))
-  setTimeout(function(){ try{ maybeNudgeBackup(); }catch(_){} }, 2500);
+  setTimeout(function(){ try{ maybeNudgeBackup(); }catch(e){ _err('backupNudge.boot',e); } }, 2500);
 if (_loadNotice) setTimeout(() => { try { showToast(_loadNotice, 5000); } catch(_) {} }, 400);
 
 // ── INSTALL SCRIPT ────────────────────────────────────────────────────────────
