@@ -9225,10 +9225,15 @@ function dismissEmailAsk(){
 }
 // Ask once, at a value moment, only if we don't already have it and haven't asked.
 const EMAIL_ASK_COOLDOWN=7*24*60*60*1000;
+// Add ?ask=1 to force the prompt past both guards. Once a browser has stored an
+// email the ask is suppressed permanently and correctly — which also makes it
+// impossible to test on your own device without wiping site data.
+function _forceAsk(){ try{ return /[?&#]ask=1(\b|$)/.test(location.href); }catch(_){ return false; } }
 function maybeAskEmail(source){
-  if(getCoachEmail()) return;
+  const force=_forceAsk();
+  if(!force && getCoachEmail()) return;
   try{
-    const t=localStorage.getItem(EMAIL_ASKED);
+    const t=force?null:localStorage.getItem(EMAIL_ASKED);
     if(t){
       // Legacy flag was the string '1' with no timestamp. Treat it as long-expired so
       // a browser that burned its one ask before this fix gets asked again, once.
@@ -9239,7 +9244,7 @@ function maybeAskEmail(source){
   window._emailSrc=source||'';
   setTimeout(function(){
     try{
-      if(getCoachEmail()) return;
+      if(!force && getCoachEmail()) return;
       openModal('mEmail');
       // Record the ask only once the modal is actually on screen. Setting it up front
       // meant a coach who closed the tab during the 700ms delay burned their single
