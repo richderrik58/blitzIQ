@@ -1022,6 +1022,26 @@
 
 <!-- EMAIL CAPTURE — optional, skippable, honest. Address goes to PostHog so the
      solo founder can follow up. Never blocks; asked once after real value. -->
+<div class="modal-ov" id="mBackup">
+  <div class="modal-sheet">
+    <div class="modal-handle"></div>
+    <div class="modal-hdr">
+      <span class="modal-title">&#128190; Keep a copy of this</span>
+      <button class="modal-x" aria-label="Close" onclick="dismissBackupNudge()">&#10005;</button>
+    </div>
+    <div class="modal-body">
+      <div id="bkWhat" style="font-size:14px;color:var(--white);line-height:1.6;font-weight:600"></div>
+      <div style="font-size:13px;color:var(--grayl);line-height:1.6;margin-top:11px">
+        Your scouting lives on this device only &mdash; that's what keeps it private, but it also means
+        clearing your browser, switching iPads, or leaving it untouched for a week can wipe it.
+        The backup is one file. Drop it in your email or Drive and you're covered.
+      </div>
+      <button class="btn-save" style="width:100%;margin-top:14px" onclick="backupFromNudge()">&#8681; Save my backup file</button>
+      <button onclick="dismissBackupNudge()" style="width:100%;margin-top:8px;background:none;border:none;color:var(--gray);font-size:12px;cursor:pointer;font-family:inherit;text-decoration:underline">Not now</button>
+    </div>
+  </div>
+</div>
+
 <div class="modal-ov" id="mEmail">
   <div class="modal-sheet">
     <div class="modal-handle"></div>
@@ -1527,6 +1547,71 @@ function saveDB() {
 }
 function uid() { return Date.now() * 1000 + Math.floor(Math.random() * 999); }
 
+// ── BACKUP NUDGE ────────────────────────────────────────────────────────────
+// Every opponent a coach charts lives in localStorage on one device — no account,
+// no cloud. Safari evicts script-writable storage after ~7 days without a
+// first-party visit, so charting three opponents in August and then taking a bye
+// week can genuinely mean coming back to nothing. Export Backup existed but was a
+// button in settings that nothing ever pointed at. Ask at the moment they have the
+// most to lose, and never more than once every few days.
+const BK_LAST='defwise_last_backup', BK_NUDGED='defwise_backup_nudged', BK_MARK='defwise_backup_mark';
+const BK_STALE_MS=7*24*60*60*1000, BK_COOLDOWN_MS=3*24*60*60*1000;
+
+// A cheap measure of how much work is sitting unsaved. Demo and self-scout rows
+// don't count — losing those costs the coach nothing.
+function _bkWork(){
+  try{
+    const opps=(DB.opponents||[]).filter(o=>!o._demo && !o._self);
+    let snaps=0;
+    opps.forEach(o=>(o.formations||[]).forEach(f=>{ snaps += (f.playCount||0); }));
+    return {opps:opps.length, snaps:snaps};
+  }catch(_){ return {opps:0, snaps:0}; }
+}
+function _bkRead(k){ try{ return parseInt(localStorage.getItem(k)||'0',10)||0; }catch(_){ return 0; } }
+function _bkMark(){
+  try{
+    localStorage.setItem(BK_LAST, String(Date.now()));
+    localStorage.setItem(BK_MARK, JSON.stringify(_bkWork()));
+  }catch(_){}
+}
+function maybeNudgeBackup(){
+  try{
+    const w=_bkWork();
+    if(w.opps < 1) return;                                  // nothing worth losing yet
+    const now=Date.now();
+    if(now - _bkRead(BK_NUDGED) < BK_COOLDOWN_MS) return;   // asked recently — leave them be
+    const last=_bkRead(BK_LAST);
+    let mark={opps:0,snaps:0};
+    try{ mark=JSON.parse(localStorage.getItem(BK_MARK)||'null') || mark; }catch(_){}
+    const never = !last;
+    const stale = last && (now - last > BK_STALE_MS);
+    const grown = (w.opps - (mark.opps||0)) >= 2 || (w.snaps - (mark.snaps||0)) >= 150;
+    if(!(never || stale || grown)) return;
+
+    const el=document.getElementById('bkWhat');
+    if(el){
+      const d = last ? Math.floor((now-last)/86400000) : 0;
+      el.textContent = never
+        ? `You've charted ${w.opps} opponent${w.opps===1?'':'s'} and ${w.snaps} snap${w.snaps===1?'':'s'}. There's no copy of it anywhere but this device.`
+        : stale
+          ? `Your last backup was ${d} day${d===1?'':'s'} ago. Since then you've charted ${w.opps} opponent${w.opps===1?'':'s'}.`
+          : `You've added ${w.opps - (mark.opps||0)} opponent${(w.opps-(mark.opps||0))===1?'':'s'} since your last backup.`;
+    }
+    try{ localStorage.setItem(BK_NUDGED, String(now)); }catch(_){}
+    openModal('mBackup');
+    _track('backup_nudge_shown', {opponents:w.opps, snaps:w.snaps, reason: never?'never':(stale?'stale':'grown')});
+  }catch(_){}
+}
+function backupFromNudge(){
+  try{ _track('backup_nudge_accepted'); }catch(_){}
+  closeModal('mBackup');
+  exportBackup();
+}
+function dismissBackupNudge(){
+  try{ _track('backup_nudge_dismissed'); }catch(_){}
+  closeModal('mBackup');
+}
+
 // ── BACKUP / RESTORE ────────────────────────────────────────────────────────
 // All scouting data lives only in localStorage, so give coaches a way to save
 // it to a file (and move it between devices / share it with their staff).
@@ -1540,6 +1625,7 @@ function exportBackup() {
     a.href = url; a.download = `defwise-backup-${new Date().toISOString().slice(0,10)}.json`;
     document.body.appendChild(a); a.click(); a.remove();
     setTimeout(() => URL.revokeObjectURL(url), 1000);
+    _bkMark();   // the file is on their machine — stop nudging until the work grows again
     const n = (DB.opponents || []).length;
     if (mb >= 4) {
       // Approaching the ~5MB localStorage ceiling — mostly formation photos.
@@ -4914,6 +5000,9 @@ function importPreview(){
 
   saveDB(); closePreview(); renderOpps(); showScreen(1);
   if(defAdded) showToast(`Added ${defAdded} of your defensive calls to Self-Scout`);
+  // Right after an import is when the most work is sitting on one device with no
+  // copy of it. Let the toast land first so this doesn't stack on top of it.
+  setTimeout(function(){ try{ maybeNudgeBackup(); }catch(_){} }, defAdded ? 3200 : 1400);
 }
 
 // ── DEFWISE RECOMMENDATION ENGINE ────────────────────────────────────────────
@@ -10115,6 +10204,11 @@ if(/[#&](try|demo)\b/i.test(location.hash||'')) setTimeout(function(){ try{ tryD
 // ?ask=1 opens the prompt directly, without waiting on the demo path or its timers,
 // so a no-show isolates the modal itself rather than the route that leads to it.
 if(_forceAsk()) setTimeout(function(){ try{ openModal('mEmail'); }catch(e){ alert('modal failed: '+e.message); } }, 1200);
+// Catch the coach coming back after a bye week with a stale (or missing) backup —
+// the exact window in which Safari is entitled to evict everything he charted.
+// Skipped when arriving at the demo, so a first-time visitor is never greeted by it.
+if(!/[#&](try|demo)\b/i.test(location.hash||''))
+  setTimeout(function(){ try{ maybeNudgeBackup(); }catch(_){} }, 2500);
 if (_loadNotice) setTimeout(() => { try { showToast(_loadNotice, 5000); } catch(_) {} }, 400);
 
 // ── INSTALL SCRIPT ────────────────────────────────────────────────────────────
