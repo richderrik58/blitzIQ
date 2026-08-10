@@ -66,13 +66,14 @@ window._track = function(ev, props){
   var s=document.createElement('script'); s.async=true;
   s.src='https://us-assets.i.posthog.com/static/array.js';
   s.onload=function(){ try{
-    window.posthog && posthog.init(window.POSTHOG_KEY,{api_host:'https://us.i.posthog.com', autocapture:true, capture_pageview:true, persistence:'localStorage+cookie'});
+    window.posthog && posthog.init(window.POSTHOG_KEY,{api_host:'https://us.i.posthog.com', autocapture:true, capture_pageview:false, persistence:'localStorage+cookie'});
     var sup={};
     if(window._srcCode)    sup.coach_code  = window._srcCode;
     if(window._isInternal) sup.is_internal = true;
     // Super properties, so autocapture and $pageview carry them too — the pricing
     // clicks are autocapture, which is exactly what the goal counts.
     if(Object.keys(sup).length && window.posthog && posthog.register) posthog.register(sup);
+    if(window.posthog && posthog.capture) posthog.capture('$pageview');
     window._trackFlush();
   }catch(_){} };
   document.head.appendChild(s);
