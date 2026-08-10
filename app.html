@@ -5556,6 +5556,10 @@ const _clampF = v => Math.max(0.02, Math.min(0.98, v));
 
 // Map a formation name to an offensive alignment preset (shared by the play
 // generator and the practice-script diagram renderer).
+// Drawn when a formation name matches none of the rules below. 'doubles' is the
+// most neutral 2x2 look — a wrong-but-plausible picture, which is exactly why the
+// card has to say it was a guess.
+const OFF_PRESET_FALLBACK='doubles';
 function offPresetFor(name){
   const nm=(name||'').toUpperCase();
   if(/\bQUEEN\b/.test(nm)) return 'queen';   // FB offset WEAK (away from the TE)
@@ -5581,7 +5585,17 @@ function offPresetFor(name){
   if(/I.FORM|IFORM/.test(nm)) return 'i-form';
   if(/SPREAD/.test(nm)) return 'spread';        // SPREAD = flexed TE
   if(/DOUBLES?|DEUCE/.test(nm)) return 'doubles';
-  return 'doubles';                              // default = no-TE 2x2
+  // Coaches abbreviate in Hudl far more than they spell things out — a real export
+  // reads TRP, SPRD, DBLS, not TRIPS, SPREAD, DOUBLES. Only unambiguous shortenings
+  // go here; anything genuinely unclear should fall through and be flagged as a guess
+  // rather than drawn confidently wrong.
+  if(/\bTRP\b|\bTRPS\b/.test(nm)) return 'trips';
+  if(/\bSPRD\b|\bSPD\b/.test(nm)) return 'spread';
+  if(/\bDBL\b|\bDBLS\b|\bDUB\b/.test(nm)) return 'doubles';
+  if(/\bEMP\b|\bEMTY\b/.test(nm)) return 'empty';
+  if(/\bIFM\b|\bI\s*FRM\b/.test(nm)) return 'i-form';
+  if(/\bFLX\b|\bFB\b\s*BONE/.test(nm)) return 'flexbone';
+  return '';            // nothing matched — caller falls back to OFF_PRESET_FALLBACK and flags it
 }
 // Generic presets are drawn strong-RIGHT by default. When a formation NAME calls a
 // side (TRIPS LEFT, EMPTY RIGHT, SPREAD LEFT…) that differs from how the generic
@@ -5615,7 +5629,19 @@ function mirrorOffPreset(key, nm){
 function formationPreset(f){
   const nm=((f&&f.name)||'').toUpperCase();
   const manual=(typeof DB!=='undefined'&&DB.formationLooks&&DB.formationLooks[nm]);
-  return manual || mirrorOffPreset(offPresetFor(nm), nm);
+  return manual || mirrorOffPreset(offPresetFor(nm) || OFF_PRESET_FALLBACK, nm);
+}
+// True when nothing in offPresetFor matched and we're drawing the fallback. Every
+// program names formations its own way — 'TRY YOF' and 'WDE' come straight out of a
+// real Hudl export and match nothing — so without this the card shows a confident
+// picture of the wrong formation. Better to say we guessed and let the coach fix it.
+function formationIsGuessed(f){
+  try{
+    const nm=((f&&f.name)||'').toUpperCase();
+    if(!nm) return false;
+    if(typeof DB!=='undefined' && DB.formationLooks && DB.formationLooks[nm]) return false;  // coach set it
+    return !offPresetFor(nm);
+  }catch(_){ return false; }
 }
 
 // Decode a Hudl run number → {carrier, dir, gap letter, lateral distance}.
@@ -8574,6 +8600,7 @@ function _practiceCard(p, idx){
     <div style="display:flex;align-items:center;gap:8px;padding:7px 10px;background:var(--navy2);border-bottom:1px solid rgba(255,255,255,.06)">
       <span style="background:var(--gold);color:var(--navy);font-weight:900;font-size:11px;border-radius:6px;padding:2px 7px">${p.n}</span>
       <span style="font-weight:800;font-size:12px;color:var(--white)">${esc(p.form)}</span>
+      ${formationIsGuessed(p.f) ? `<button onclick="event.stopPropagation();showPlayZoom(${idx})" title="We don't recognise this formation name, so this diagram is a best guess. Tap to set the right look — it'll stick everywhere that formation appears." style="background:rgba(240,165,0,.15);border:1px solid rgba(240,165,0,.5);color:var(--gold);font-size:8.5px;font-weight:900;letter-spacing:.4px;border-radius:5px;padding:1px 5px;cursor:pointer;font-family:inherit;flex-shrink:0;line-height:1.5">GUESS &#9998;</button>` : ''}
       <span style="font-size:10px;color:var(--grayl);margin-left:auto;white-space:nowrap">${esc(p.sit)} · ${esc(p.hash)}</span>
       <button onclick="event.stopPropagation();showPlayZoom(${idx})" title="Zoom for wristband / teaching" style="background:none;border:none;color:var(--gold);cursor:pointer;font-size:13px;padding:0 2px;flex-shrink:0">&#128269;</button>
     </div>
@@ -9198,6 +9225,9 @@ function showPlayZoom(idx){
         <div style="font-size:15px;font-weight:800;color:var(--gold);margin-top:5px">DEF: ${esc(p.cov)} <span style="color:var(--grayl);font-weight:600">· ${esc(p.blitz)}</span></div>
       </div>
       <div style="margin-top:16px;text-align:center;border-top:1px solid rgba(255,255,255,.08);padding-top:14px">
+        ${formationIsGuessed(p.f) ? `<div style="background:rgba(240,165,0,.1);border:1px solid rgba(240,165,0,.4);border-radius:9px;padding:9px 12px;margin-bottom:13px;font-size:12px;color:var(--grayl);line-height:1.55;text-align:left">
+          <b style="color:var(--gold)">We guessed this one.</b> &ldquo;${esc(p.form)}&rdquo; isn't a formation name we know, so the diagram above is a neutral 2&times;2 look &mdash; it may not be what they actually line up in. Pick the right alignment below and it'll apply everywhere that formation shows up.
+        </div>` : ''}
         <label style="font-size:10px;color:var(--gray);text-transform:uppercase;letter-spacing:1.5px;font-weight:800;margin-right:9px">Formation look</label>
         <select onchange="setFormationLook(this.value)" style="background:var(--navy2);color:var(--white);border:1px solid rgba(255,255,255,.2);border-radius:8px;padding:8px 11px;font-family:inherit;font-size:13px;font-weight:600;outline:none">${FORMATION_LOOKS.map(([v,l])=>`<option value="${v}"${v===curLook?' selected':''}>${l}</option>`).join('')}</select>
         <div style="font-size:10px;color:var(--gray);margin-top:6px">Drawing wrong? Pick the right alignment — your formation name stays as-is.</div>
