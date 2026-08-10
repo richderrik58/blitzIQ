@@ -18,6 +18,65 @@
   // Carry the query string across too — dropping it silently swallowed ?ask=1.
   if(/^#(demo|try|app)\b/i.test(h)) location.replace('/app'+(location.search||'')+h);
 }catch(e){}})();
+
+// Analytics. The landing page had none after the front-door split, so every visit to
+// '/' since then was invisible and the pricing buttons could not record a click.
+window.POSTHOG_KEY = "phc_A3GQTdmgVmPwYYGh3iwJ9iKVg8dRXBKMtiGLWMz5Vgbj";
+// ?internal=1 marks this browser as the developer's, permanently. Events still send —
+// losing them makes debugging impossible — but every one carries is_internal so
+// dashboards and goals can exclude them instead of counting them as coach interest.
+window._isInternal = (function(){
+  try{
+    var m = (location.search||'').match(/[?&]internal=([01])/);
+    if(m){
+      if(m[1]==='1'){ localStorage.setItem('defwise_internal','1'); return true; }
+      localStorage.removeItem('defwise_internal'); return false;
+    }
+    return localStorage.getItem('defwise_internal')==='1';
+  }catch(_){ return false; }
+})();
+window._srcCode = (function(){
+  try{
+    var m = (location.search||'').match(/[?&]c=([^&#]+)/);
+    if(m){
+      var c = decodeURIComponent(m[1]).replace(/[^A-Za-z0-9_-]/g,'').slice(0,48);
+      if(c){ try{ localStorage.setItem('defwise_src_code', c); }catch(_){} return c; }
+    }
+    return localStorage.getItem('defwise_src_code') || '';
+  }catch(_){ return ''; }
+})();
+window._trackQ = [];
+window._trackFlush = function(){
+  try{
+    if(!(window.posthog && window.posthog.capture)) return;
+    var q = window._trackQ || []; window._trackQ = [];
+    for(var i=0;i<q.length;i++) window.posthog.capture(q[i][0], q[i][1]);
+  }catch(_){}
+};
+window._track = function(ev, props){
+  try{
+    var p = {}; for(var k in (props||{})) p[k] = props[k];
+    if(window._srcCode)   p.coach_code = window._srcCode;
+    if(window._isInternal) p.is_internal = true;
+    if(window.posthog && window.posthog.capture){ window._trackFlush(); window.posthog.capture(ev, p); }
+    else { window._trackQ.push([ev, p]); if(window._trackQ.length>50) window._trackQ.shift(); }
+  }catch(_){}
+};
+(function(){
+  var s=document.createElement('script'); s.async=true;
+  s.src='https://us-assets.i.posthog.com/static/array.js';
+  s.onload=function(){ try{
+    window.posthog && posthog.init(window.POSTHOG_KEY,{api_host:'https://us.i.posthog.com', autocapture:true, capture_pageview:true, persistence:'localStorage+cookie'});
+    var sup={};
+    if(window._srcCode)    sup.coach_code  = window._srcCode;
+    if(window._isInternal) sup.is_internal = true;
+    // Super properties, so autocapture and $pageview carry them too — the pricing
+    // clicks are autocapture, which is exactly what the goal counts.
+    if(Object.keys(sup).length && window.posthog && posthog.register) posthog.register(sup);
+    window._trackFlush();
+  }catch(_){} };
+  document.head.appendChild(s);
+})();
 </script>
 <style>
   :root{ --navy:#0a1525; --navy2:#0f1d33; --card:#13233d; --gold:#f0a500; --white:#f4f7fb; --gray:#8aa0bd; --grayl:#b9c8dc; --green:#22c55e; --line:rgba(255,255,255,.08); }
