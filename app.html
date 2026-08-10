@@ -48,8 +48,9 @@
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
   <meta name="apple-mobile-web-app-title" content="DefWise">
   <!-- Heavy import libs (pdf.js ~330KB, SheetJS ~900KB) load ON DEMAND, only when a
-       coach actually imports a file — keeps first paint fast on game-day cellular. -->
-  <link rel="preconnect" href="https://cdnjs.cloudflare.com" crossorigin>
+       coach actually imports a file — keeps first paint fast on game-day cellular.
+       Self-hosted: district firewalls block CDNs, and importing an export is the one
+       thing this app exists to do — it cannot depend on a third-party host. -->
   <link rel="dns-prefetch" href="https://esm.sh">
   <script>
     // Load an external script once, on demand. Returns a cached promise.
@@ -63,8 +64,8 @@
         document.head.appendChild(s);
       }));
     }
-    const ensurePdfJs = () => loadScript('https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js');
-    const ensureXLSX  = () => loadScript('https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js');
+    const ensurePdfJs = () => loadScript('./vendor/pdf.min.js');
+    const ensureXLSX  = () => loadScript('./vendor/xlsx.full.min.js');
   </script>
   <!-- Anthropic SDK loads ON DEMAND (only when a coach actually uses AI scouting)
        via ensureAnthropic() — keeps it off the critical path for faster first paint
@@ -1438,7 +1439,7 @@
 
 <script>
 // PDF.JS — fetch worker as blob URL to avoid cross-origin worker restrictions on GitHub Pages
-const PDFJS_WORKER_CDN = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
+const PDFJS_WORKER_CDN = './vendor/pdf.worker.min.js';
 let _pdfWorkerReady = null;
 
 // Max formations kept from a PDF/CSV scouting import.

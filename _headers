@@ -10,6 +10,12 @@
   Accept-Ranges: bytes
   Cache-Control: public, max-age=31536000, immutable, no-transform
 
+# Version-pinned parser libraries (pdf.js 3.11.174, SheetJS 0.18.5). Self-hosted
+# because district firewalls block CDNs and reading a coach's export is the one
+# thing this app cannot fail at. These filenames never change contents.
+/vendor/*
+  Cache-Control: public, max-age=31536000, immutable
+
 /*.jpg
   Cache-Control: public, max-age=31536000, immutable
 
