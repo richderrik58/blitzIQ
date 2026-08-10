@@ -15,7 +15,8 @@
 // links on before the page paints. Keeps ~40 sent emails working exactly as before.
 (function(){try{
   var h=location.hash||'';
-  if(/^#(demo|try|app)\b/i.test(h)) location.replace('/app'+h);
+  // Carry the query string across too — dropping it silently swallowed ?ask=1.
+  if(/^#(demo|try|app)\b/i.test(h)) location.replace('/app'+(location.search||'')+h);
 }catch(e){}})();
 </script>
 <style>

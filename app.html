@@ -10070,6 +10070,9 @@ function maybeShowIosInstallTip(){
 }
 renderOpps(); syncHdr(); applyGameDay(); applyCVD(); updateProBadge(); maybeShowIosInstallTip(); maybeShowSharedReport(); updatePbCount();
 if(/[#&](try|demo)\b/i.test(location.hash||'')) setTimeout(function(){ try{ tryDemo(); }catch(_){} }, 350);  // email/link → straight into the live demo predictor
+// ?ask=1 opens the prompt directly, without waiting on the demo path or its timers,
+// so a no-show isolates the modal itself rather than the route that leads to it.
+if(_forceAsk()) setTimeout(function(){ try{ openModal('mEmail'); }catch(e){ alert('modal failed: '+e.message); } }, 1200);
 if (_loadNotice) setTimeout(() => { try { showToast(_loadNotice, 5000); } catch(_) {} }, 400);
 
 // ── INSTALL SCRIPT ────────────────────────────────────────────────────────────
