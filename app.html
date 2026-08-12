@@ -5596,6 +5596,7 @@ function offPresetFor(name){
   if(/\bQUEEN\b/.test(nm)) return 'queen';   // FB offset WEAK (away from the TE)
   if(/\bKING\b/.test(nm)) return 'king';     // FB offset to the TE / strength
   if(/SINGLE\s*WING|WING\s+PISTOL|WING\s+[LR]\s+REDUCE/.test(nm)) return 'single-wing';
+  if(/\bPISTOL\b|\bPIST\b/.test(nm)) return 'pistol';   // after WING PISTOL, which is a single-wing look
   if(/FLEXBONE|FLEX\s*BONE|WISHBONE/.test(nm)) return 'flexbone';
   if(/TREY\s+R\s+WEAK/.test(nm)) return 'trey-r-weak';
   if(/TRIPS\s+L\s+STRONG/.test(nm)) return 'trips-l-strong';
@@ -5633,7 +5634,7 @@ function offPresetFor(name){
 // preset is drawn, mirror it left↔right. Specific presets (TRIPS L STRONG, PRO L
 // TWINS R…) already encode their side, so they're left alone. The defense aligns to
 // the actual coordinates, so flipping the offense flips the front with it.
-const _MIRRORABLE = new Set(['trips','empty','spread','doubles','i-form','king','queen','single-wing','flexbone']);
+const _MIRRORABLE = new Set(['trips','empty','spread','doubles','i-form','king','queen','single-wing','flexbone','pistol']);
 function _presetStrongLeft(arr){                    // TE side → receiver count → RB (coach's strength rule)
   const te=arr.filter(p=>p.type==='TE'), tl=te.filter(p=>p.xf<0.5).length;
   if(te.length && tl!==te.length-tl) return tl>te.length-tl;
@@ -7489,6 +7490,22 @@ const CV_PRESETS = {
     {type:'FB', team:'off', xf:0.505,yd:42},
     {type:'QB', team:'off', xf:0.46, yd:96},
     {type:'RB', team:'off', xf:0.55, yd:96},
+  ],
+  // Pistol, per a coach's own alignment: QB in the gun at 5 yds, FB beside him at the
+  // same depth offset to the strength, RB at 7 yds directly behind the QB. Scale here is
+  // LOS at yd:30 and ~14 units per yard, so 5 yds = 100 and 7 yds = 128.
+  'pistol':[
+    {type:'WR', team:'off', xf:0.06, yd:30},
+    {type:'OL', team:'off', xf:0.408,yd:30},
+    {type:'OL', team:'off', xf:0.454,yd:30},
+    {type:'C',  team:'off', xf:0.50, yd:30},
+    {type:'OL', team:'off', xf:0.546,yd:30},
+    {type:'OL', team:'off', xf:0.592,yd:30},
+    {type:'TE', team:'off', xf:0.62, yd:30},
+    {type:'WR', team:'off', xf:0.92, yd:40},
+    {type:'QB', team:'off', xf:0.50, yd:100},   // gun, 5 yds
+    {type:'FB', team:'off', xf:0.545,yd:100},   // beside the QB, offset to strength
+    {type:'RB', team:'off', xf:0.50, yd:128},   // 7 yds, behind the QB
   ],
   'i-form':[ // QB under center; FB in the I; tailback behind FB; TE right
     {type:'WR', team:'off', xf:0.06, yd:30},
