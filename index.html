@@ -30,6 +30,14 @@
   // Carry the query string across too — dropping it silently swallowed ?ask=1.
   if(/^#(demo|try|app)\b/i.test(h)) location.replace('/app'+(location.search||'')+h);
 }catch(e){}})();
+// A hash-only change does not reload the page, so the forwarder above never sees it.
+// Catch that case too — otherwise any surviving '/#demo' link is a dead button.
+window.addEventListener('hashchange', function(){
+  try{
+    var h=location.hash||'';
+    if(/^#(demo|try|app)\b/i.test(h)) location.replace('/app'+(location.search||'')+h);
+  }catch(e){}
+});
 
 // Analytics. The landing page had none after the front-door split, so every visit to
 // '/' since then was invisible and the pricing buttons could not record a click.
@@ -210,7 +218,7 @@ window._track = function(ev, props){
   <div class="nav-cta">
     <a class="nav-link" href="#how">How it works</a>
     <a class="nav-link" href="#pricing">Pricing</a>
-    <a class="btn btn-gold" href="https://defwise.com/#demo">Open the app</a>
+    <a class="btn btn-gold" href="/app#demo">Open the app</a>
   </div>
 </div></nav>
 
@@ -219,7 +227,7 @@ window._track = function(ev, props){
   <h1>You already broke down the film. <span>Now carry it into the box.</span></h1>
   <p class="sub">Drop in the Hudl export you already pull. DefWise turns your charting into a one-page situational sheet — and on Friday it tells you what they run on 3rd &amp; 7 from that hash, before the snap.</p>
   <div class="cta">
-    <a class="btn btn-gold" href="https://defwise.com/#demo">Start free — no signup</a>
+    <a class="btn btn-gold" href="/app#demo">Start free — no signup</a>
     <a class="btn btn-ghost" href="#how">See how it works</a>
   </div>
   <div class="micro">Free all season · Print it, or run it on the iPad offline in the box · Your data never leaves your device</div>
@@ -253,7 +261,7 @@ window._track = function(ev, props){
     </button>
     <button id="fullBtn" onclick="playFull()" style="position:absolute;right:10px;bottom:10px;padding:7px 13px;border-radius:8px;border:1px solid rgba(255,255,255,.3);background:rgba(10,21,37,.75);color:#fff;font-size:12px;font-weight:700;cursor:pointer;font-family:inherit;backdrop-filter:blur(4px)">&#9654; Full 30s</button>
   </div>
-  <p class="vid-cap">Prefer to just use it? <a href="https://defwise.com/#demo" style="color:var(--gold)">Open the live demo</a> — no signup.</p>
+  <p class="vid-cap">Prefer to just use it? <a href="/app#demo" style="color:var(--gold)">Open the live demo</a> — no signup.</p>
 <script>
 // Swap the silent loop for the full demo with sound, on a real click — which is the
 // gesture browsers require before any audio is allowed to start.
@@ -403,7 +411,7 @@ function playFull(){
         <li>Play diagrams &amp; practice scripts</li>
         <li>Print / PDF everything</li>
       </ul>
-      <a class="btn btn-gold" href="https://defwise.com/#demo" id="startBtn">Start now — free</a>
+      <a class="btn btn-gold" href="/app#demo" id="startBtn">Start now — free</a>
     </div>
     <div class="plan">
       <h3>Season Pass</h3>
@@ -441,14 +449,14 @@ function playFull(){
   <h2 class="sec">Know what's coming on 3rd &amp; long.</h2>
   <p class="lead">Load your first opponent in two minutes. Free all season — no account, no card, no limit.</p>
   <div class="cta" style="display:flex;gap:14px;justify-content:center;flex-wrap:wrap;margin-top:28px">
-    <a class="btn btn-gold" href="https://defwise.com/#demo" id="tryBtn">Try DefWise free</a>
+    <a class="btn btn-gold" href="/app#demo" id="tryBtn">Try DefWise free</a>
     <a class="btn btn-ghost" href="#how">See how it works</a>
   </div>
 </div></section>
 
 <footer><div class="wrap">
   <div>© 2026 DefWise · Built by a coach, for coaches</div>
-  <div><a href="https://defwise.com/#demo">Open the app</a><a href="privacy.html">Privacy</a><a href="terms.html">Terms</a><a href="mailto:hello@defwise.com">Contact</a></div>
+  <div><a href="/app#demo">Open the app</a><a href="privacy.html">Privacy</a><a href="terms.html">Terms</a><a href="mailto:hello@defwise.com">Contact</a></div>
 </div>
 <div class="wrap" style="margin-top:14px;font-size:11px;line-height:1.5;color:var(--gray)">DefWise is an independent tool and is not affiliated with, endorsed by, or sponsored by Hudl® or any other third-party service. All product names and trademarks are the property of their respective owners and are referenced only to describe file compatibility.</div>
 </footer>
