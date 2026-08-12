@@ -6106,7 +6106,7 @@ function buildPlayPolylines(f, offPreset, playName){
     const sideSign = r.xf<0.5 ? -1 : 1;                // -1 = toward left sideline
     const pts = ROUTE_LIB[word].map(([o,y])=>[_clampF(r.xf + o*sideSign), y]);
     if(a&&a.andGo) pts.push([pts[pts.length-1][0], -125]); // hitch/curl-and-go = deep extension
-    lines.push({color:'#ef4444', pts});
+    lines.push({color:'#ef4444', pts, label:word});   // label so a coach can read what was drawn, not trust the concept
   });
   if(/\bFLY\b/.test(nm)){                                // FLY motion is the RB → swing to the flat
     const rb = preset.find(p=>p.type==='RB') || preset.find(p=>p.type==='FB');
@@ -6256,7 +6256,16 @@ function playDiagramSVG(f, playName, isRun){
     if(pl.motion){ return `<polyline points="${pts}" fill="none" stroke="${pl.color}" stroke-width="2" stroke-dasharray="5 3.5" stroke-linejoin="round" stroke-linecap="round" marker-end="url(#arrM)"/>`; }
     if(pl.fake){ return `<polyline points="${pts}" fill="none" stroke="${RUNC}" stroke-width="2" stroke-dasharray="4 3" stroke-linejoin="round" stroke-linecap="round" marker-end="url(#arrG)" opacity="0.7"/>`; }  // run fake — dashed
     const cw=(pl.color===RUNC)?3.2:2.3;               // ball-carrier / QB path drawn bold so the play reads at a glance
-    return `<polyline points="${pts}" fill="none" stroke="${pl.color}" stroke-width="${cw}" stroke-linejoin="round" stroke-linecap="round" marker-end="url(#${pl.color===RUNC?'arrG':'arrR'})"/>`;
+    const line = `<polyline points="${pts}" fill="none" stroke="${pl.color}" stroke-width="${cw}" stroke-linejoin="round" stroke-linecap="round" marker-end="url(#${pl.color===RUNC?'arrG':'arrR'})"/>`;
+    // Name the route at its endpoint. Concept vocabulary changes program to program —
+    // one OC's stick is another's flood — so rather than ask a coach to trust our
+    // decoding, show him the actual route and let him see at a glance if it's wrong.
+    if(!pl.label) return line;
+    const end=P[P.length-1], prev=P[P.length-2]||end;
+    const up = end[1] <= prev[1];                     // running upfield → label above the arrow
+    const lx = Math.max(14, Math.min(W-14, end[0]));
+    const ly = up ? end[1]-6 : end[1]+11;
+    return line + `<text x="${lx.toFixed(1)}" y="${ly.toFixed(1)}" font-size="6.6" font-weight="800" fill="#ef4444" text-anchor="middle" paint-order="stroke" stroke="#fff" stroke-width="2.2" stroke-linejoin="round">${pl.label}</text>`;
   }).join('');
   // Gap marker (A/B/C/D) at the hole a numbered run hits
   const pNm=(playName||'').toUpperCase();
