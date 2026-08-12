@@ -490,6 +490,9 @@
         if(window._srcCode)    sup.coach_code  = window._srcCode;
         if(window._isInternal) sup.is_internal = true;
         if(Object.keys(sup).length && window.posthog && posthog.register) posthog.register(sup);
+        // Also stamp it on the PERSON, not just the event — a PostHog cohort matches on
+        // person properties, so an event-only flag can never exclude these sessions.
+        if(window._isInternal && window.posthog && posthog.setPersonProperties) posthog.setPersonProperties({is_internal:true});
         if(window.posthog && posthog.capture) posthog.capture('$pageview');
         window._trackFlush();
       }catch(_){} };
