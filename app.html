@@ -5697,7 +5697,11 @@ const ROUTE_NUM = {0:'HITCH',1:'FLAT',2:'SLANT',3:'COMEBACK',4:'CURL',5:'OUT',6:
 // Named pass concepts → routes for the play-side receivers (outside → in).
 const CONCEPT_ROUTES = {
   // playside, outside → in
-  SMASH:['HITCH','CORNER'], FLOOD:['GO','OUT','FLAT'], STICK:['GO','OUT','FLAT'],
+  SMASH:['HITCH','CORNER'], FLOOD:['GO','OUT','FLAT'],
+  // Stick is not Flood — these were the same array, so every Stick call drew a
+  // Flood. Per a coach: to a 3-receiver side, #1 (widest) runs the go, #2 the out,
+  // #3 settles on the hitch. Flood keeps #3 running to the flat; that's the difference.
+  STICK:['GO','OUT','HITCH'],
   MESH:['CORNER','DRAG','DRAG'], POSTDIG:['POST','DIG'], POSTWHEEL:['WHEEL','POST'],
   SNAG:['SPOT','CORNER','FLAT'],        // #1 snag/spot, #2 corner, #3 flat — triangle stretch
   SPACING:['HITCH','SPOT','FLAT'],      // horizontal spacing of quick sits
