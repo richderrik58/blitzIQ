@@ -5754,7 +5754,11 @@ function applyConcept(concept, nm, recv, out){
   const playSide = idx.filter(o=> side>0 ? o.r.xf>0.5 : o.r.xf<0.5)
     .sort((a,b)=> side>0 ? b.r.xf-a.r.xf : a.r.xf-b.r.xf);                     // outside → in
   (CONCEPT_ROUTES[concept]||[]).forEach((w,k)=>{ if(playSide[k]) out[playSide[k].i]={word:w}; });
-  idx.forEach(o=>{ if(!out[o.i]) out[o.i]={word:'GO'}; });                     // backside clearout
+  // Backside: #1 clears deep, #2 runs the out. Previously every unassigned receiver
+  // ran GO, so an empty set showed two backside verticals and no combination.
+  const back = idx.filter(o=>!out[o.i])
+    .sort((a,b)=> Math.abs(b.r.xf-0.5) - Math.abs(a.r.xf-0.5));            // outside → in
+  back.forEach((o,k)=>{ out[o.i] = {word: k===0 ? 'GO' : k===1 ? 'OUT' : 'DRAG'}; });
 }
 // Assign one route per receiver: concept → numbered/named tokens (L→R) → jet flat.
 function assignRoutes(nm, recv){
@@ -5764,11 +5768,16 @@ function assignRoutes(nm, recv){
     applyConcept(concept, nm, recv, out);
   } else {
     const toks = nm.replace(/[^A-Z0-9\s]/g,' ').split(/\s+/).filter(Boolean);
+    // A route named after FLY belongs to the motioning back (handled in the caller),
+    // so don't also hand it to a receiver — otherwise two players run the same route.
+    const flyNamed = (nm.match(/\bFLY\b[^A-Z]*(?:[LR]\b[^A-Z]*)?([A-Z]+)/)||[])[1];
+    let flySkipped = !(flyNamed && ROUTE_LIB[flyNamed]);
     const seq=[];
     for(let i=0;i<toks.length;i++){
       const t=toks[i];
       if(t==='AND' && toks[i+1]==='GO'){ if(seq.length) seq[seq.length-1].andGo=true; i++; continue; }
       if(/^\d{3,}$/.test(t)){ for(const ch of t){ const w=ROUTE_NUM[+ch]; if(w) seq.push({word:w}); } continue; }
+      if(!flySkipped && t===flyNamed){ flySkipped=true; continue; }   // that one is the back's
       if(ROUTE_LIB[t]) seq.push({word:t});
       else if(BLOCK_WORD.test(t)) seq.push({word:t, block:true});   // "block/down/base…" → blocker, not a route
     }
@@ -6108,10 +6117,20 @@ function buildPlayPolylines(f, offPreset, playName){
     if(a&&a.andGo) pts.push([pts[pts.length-1][0], -125]); // hitch/curl-and-go = deep extension
     lines.push({color:'#ef4444', pts, label:word});   // label so a coach can read what was drawn, not trust the concept
   });
-  if(/\bFLY\b/.test(nm)){                                // FLY motion is the RB → swing to the flat
+  if(/\bFLY\b/.test(nm)){                                // FLY motion = the back goes out on a route
     const rb = preset.find(p=>p.type==='RB') || preset.find(p=>p.type==='FB');
     if(rb){ const dir = /\bLEFT\b|\bL\b/.test(nm) ? -1 : 1;
-      lines.push({color:'#ef4444', pts:[[rb.xf,rb.yd],[_clampF(0.5+dir*0.30),36],[_clampF(0.5+dir*0.44),22]]}); }
+      // A named route after FLY belongs to the back, not a receiver — "FLY L WHEEL"
+      // is the back running the wheel. Default stays a swing to the flat.
+      const named = (nm.match(/\bFLY\b[^A-Z]*(?:[LR]\b[^A-Z]*)?([A-Z]+)/)||[])[1];
+      const rbRoute = (named && ROUTE_LIB[named]) ? named : null;
+      if(rbRoute){
+        const sign = dir;
+        const pts = ROUTE_LIB[rbRoute].map(([o,y])=>[_clampF(rb.xf + o*sign), y]);
+        lines.push({color:'#ef4444', pts:[[rb.xf,rb.yd], ...pts], label:rbRoute});
+      } else {
+        lines.push({color:'#ef4444', pts:[[rb.xf,rb.yd],[_clampF(0.5+dir*0.30),36],[_clampF(0.5+dir*0.44),22]], label:'FLAT'});
+      } }
   }
   // Play-action: the RB sells the fake toward the run gap; otherwise the RB pass-protects
   if(/\b(ROLL|BOOT|BOOTLEG|WAGGLE|NAKED|SPRINT)\b/.test(nm)){
