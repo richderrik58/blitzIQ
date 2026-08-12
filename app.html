@@ -5593,10 +5593,14 @@ const _clampF = v => Math.max(0.02, Math.min(0.98, v));
 const OFF_PRESET_FALLBACK='doubles';
 function offPresetFor(name){
   const nm=(name||'').toUpperCase();
+  // Order matters. KING and QUEEN are backfield tags — they say where the FB sits,
+  // not where the quarterback is — so they must not outrank PISTOL, which positions
+  // the whole backfield. 'PISTOL KING RIGHT' was drawing a QB under center because
+  // KING matched first.
+  if(/SINGLE\s*WING|WING\s+PISTOL|WING\s+[LR]\s+REDUCE/.test(nm)) return 'single-wing';
+  if(/\bPISTOL\b|\bPIST\b/.test(nm)) return 'pistol';   // QB in the gun at 5, FB beside him, RB at 7
   if(/\bQUEEN\b/.test(nm)) return 'queen';   // FB offset WEAK (away from the TE)
   if(/\bKING\b/.test(nm)) return 'king';     // FB offset to the TE / strength
-  if(/SINGLE\s*WING|WING\s+PISTOL|WING\s+[LR]\s+REDUCE/.test(nm)) return 'single-wing';
-  if(/\bPISTOL\b|\bPIST\b/.test(nm)) return 'pistol';   // after WING PISTOL, which is a single-wing look
   if(/FLEXBONE|FLEX\s*BONE|WISHBONE/.test(nm)) return 'flexbone';
   if(/TREY\s+R\s+WEAK/.test(nm)) return 'trey-r-weak';
   if(/TRIPS\s+L\s+STRONG/.test(nm)) return 'trips-l-strong';
