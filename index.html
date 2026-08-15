@@ -4,6 +4,20 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>DefWise — Your Hudl export, on your call sheet</title>
+<!-- PWA: a coach who lands here and taps Add to Home Screen used to get a bookmark to
+     the pitch. The manifest declares start_url ./app, so the icon now opens the actual
+     app, full screen, offline-capable.
+     No service worker is registered on this page ON PURPOSE — sw.js caches every
+     navigation under the './app.html' key, so putting it on '/' would overwrite the
+     offline app shell with this marketing page. The app registers it from /app. -->
+<link rel="manifest" href="manifest.webmanifest">
+<meta name="theme-color" content="#0a1628">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="DefWise">
+<link rel="apple-touch-icon" href="apple-touch-icon.png">
+<link rel="icon" type="image/png" sizes="192x192" href="icon-192.png">
+<link rel="icon" type="image/png" sizes="512x512" href="icon-512.png">
 <meta name="description" content="Free for high-school defensive coaches. Drop in the Hudl export you already pull and DefWise turns your charting into a one-page situational call sheet — plus what they actually run on 3rd &amp; 7 from that hash.">
 <!-- OpenGraph for link previews when shared in coaching forums / social -->
 <meta property="og:title" content="DefWise — Your Hudl export, on your call sheet">
