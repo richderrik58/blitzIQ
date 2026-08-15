@@ -1076,20 +1076,20 @@
   <div class="modal-sheet">
     <div class="modal-handle"></div>
     <div class="modal-hdr">
-      <span class="modal-title">&#128203; Stay in the loop</span>
+      <span class="modal-title">Who do you open with?</span>
       <button class="modal-x" aria-label="Close" onclick="dismissEmailAsk()">&#10005;</button>
     </div>
     <div class="modal-body">
       <div style="font-size:13px;color:var(--grayl);line-height:1.6;margin-bottom:13px">
-        I built DefWise solo, and it's <b style="color:var(--gold)">free all season</b>. No export handy right now? Tell me who you open with and <b style="color:var(--gold)">I'll build their breakdown myself</b> and send it to you &mdash; free, no catch. Just a coach who wants this to actually help you win Friday.
+        Tell me the school and <b style="color:var(--gold)">I'll build their full breakdown myself</b> and send it to you before you play them. Free, no catch &mdash; I'm a defensive coach, 12 years, and I built this thing solo.
       </div>
       <div class="fld">
-        <input class="fld-in" id="emailInput" type="email" inputmode="email" autocomplete="email" placeholder="you@school.org">
+        <input class="fld-in" id="emailOppInput" type="text" autocomplete="off" placeholder="Week 1 opponent">
       </div>
       <div class="fld" style="margin-top:9px">
-        <input class="fld-in" id="emailOppInput" type="text" autocomplete="off" placeholder="Your Week 1 opponent (optional)">
+        <input class="fld-in" id="emailInput" type="email" inputmode="email" autocomplete="email" placeholder="Where do I send it? you@school.org">
       </div>
-      <button class="btn-save" style="width:100%;margin-top:11px" onclick="saveCoachEmail('modal')">Send me my opponent breakdown</button>
+      <button class="btn-save" style="width:100%;margin-top:11px" onclick="saveCoachEmail('modal')">Build my opponent breakdown</button>
       <button onclick="dismissEmailAsk()" style="width:100%;margin-top:8px;background:none;border:none;color:var(--gray);font-size:12px;cursor:pointer;font-family:inherit;text-decoration:underline">No thanks</button>
     </div>
   </div>
