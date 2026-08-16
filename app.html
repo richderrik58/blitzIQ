@@ -1456,6 +1456,53 @@ const MAX_PLAYLIST_FORMATIONS = 9;
 const EXPLOSIVE_RUN_YDS = 15;   // a run gaining 15+ yards
 const EXPLOSIVE_PASS_YDS = 20;  // a pass gaining 20+ yards
 
+// ── HOW A SNAP BECOMES RUN, PASS, OR RPO ─────────────────────────────────────
+// A coach told us the predictor leans pass and high school is a run league. He was
+// right, and the cause was arithmetic rather than football:
+//
+// The old rule matched ONLY /^RUN|^RUSH/ for a run. Every snap a staff tagged
+// OPTION, ZONE READ, QB KEEP, SWEEP, TOSS, DRAW or RPO failed both tests, became
+// 'other', and was DELETED before the percentages were taken. Those are run-game
+// snaps. Drop runs out of the denominator and the pass number climbs on its own.
+//
+// Three fixes:
+//   1. Read the PLAY NAME as well as the PLAY TYPE column. Staffs write "32 ZONE
+//      READ" in the name far more reliably than they tag the type column.
+//   2. A SCRAMBLE is a QB RUN. The call was a pass; the play was a man running with
+//      the ball, and that is what a defense had to tackle. A SACK stays a pass —
+//      nobody has to stop a runner on a sack.
+//   3. RPO gets its own bucket and is NEVER silently folded into pass.
+//
+// RPO = Run-Pass Option. One play, two outcomes: the quarterback reads one specific
+// defender AFTER the snap and either hands the ball off or throws, depending on what
+// that defender does. Calling it "pass" is what mislabels it — the handoff is the
+// default and the throw is the punishment for crashing on the run. So an RPO counts
+// toward RUN in the two-way lean (that is the outcome the defense sees most), and is
+// ALSO reported on its own line so a coordinator knows a throw is attached to it.
+const RE_RPO = /\bRPO\b|\bR\.P\.O\b|RUN\s*[-\/]?\s*PASS\s*OPTION|\bPEEK\b/;
+const RE_NAME_PASS = /\bPASS\b|\bSCREEN\b|\bBOOT\b|\bWAGGLE\b|\bSPRINT\s*OUT\b|\bPLAY\s*ACTION\b|\bMESH\b|\bSMASH\b|\bFLOOD\b|\bCURL\b|\bFADE\b|\bWHEEL\b|\bDIG\b|\bHITCH\b|\bSEAM\b|\bVERT/;
+const RE_NAME_RUN = /\bOPTION\b|\bZONE\s*READ\b|\bREAD\b|\bKEEP(?:ER)?\b|\bSNEAK\b|\bSWEEP\b|\bTOSS\b|\bDIVE\b|\bTRAP\b|\bDRAW\b|\bCOUNTER\b|\bPOWER\b|\bISO\b|\bBELLY\b|\bWEDGE\b|\bJET\b|\bVEER\b|\bMIDLINE\b|\bWHAM\b|\bSTRETCH\b|\bBLAST\b|\bLEAD\b|\bINSIDE\s*ZONE\b|\bOUTSIDE\s*ZONE\b|\bIZ\b|\bOZ\b|\bGT\b|\bQB\s/;
+function classifySnap(typeRaw, playName){
+  const t = String(typeRaw||'').toUpperCase();
+  const s = (t + ' ' + String(playName||'')).toUpperCase();
+  if(RE_RPO.test(s)) return 'rpo';          // wins over everything — it is its own thing
+  if(/^SCRAMBLE/.test(t)) return 'run';     // the QB ran; defend the runner
+  if(/^RUN|^RUSH/.test(t)) return 'run';
+  if(/^PASS|^SACK/.test(t)) return 'pass';
+  if(RE_NAME_PASS.test(s)) return 'pass';   // type column was blank/unknown — read the name
+  if(RE_NAME_RUN.test(s))  return 'run';
+  return 'other';
+}
+// An RPO's default outcome is the handoff, so it sits with the runs in the two-way
+// lean. Everywhere this is used, the RPO count is also shown on its own.
+const asRunPass = t => t==='rpo' ? 'run' : t;
+// League prior for high school, used ONLY when a formation has no run/pass snaps at
+// all. It is not this opponent's data and the card says so. 50/50 was never right for
+// high school — no public dataset publishes a national HS split, but every level below
+// the NFL runs more than it throws, and a coach's read of his own league beats a
+// placeholder. Shown only as a baseline, never as a measured tendency.
+const HS_BASELINE_RUN_PCT = 58;
+
 function ensurePDFWorker() {
   if (_pdfWorkerReady) return _pdfWorkerReady;
   if (typeof pdfjsLib === 'undefined') {
@@ -1478,13 +1525,13 @@ function ensurePDFWorker() {
 
 // ── SEED DATA ─────────────────────────────────────────────────────────────────
 const SEED = { opponents: [{
-  id:1, name:'Broad Run', season:'2025', runPct:50, passPct:50,
+  id:1, name:'Broad Run', season:'2025', runPct:54, passPct:46,
   notes:'Trips-heavy spread offense. No-huddle, fast tempo. Mobile QB — dual-threat runner. Motions pre-snap frequently to create secondary conflicts.',
   gameNotes:'',
   formations:[{
     id:11, name:'Trey R Weak', runPct:38, passPct:62,
     favoriteRunPlay:'Inside Zone (Strong Side)', favoritePassPlay:'Curl-Flat Combo (Trips)',
-    downTendency:'Pass-heavy in most situations. On 3rd & Long they pass 100% of the time. Expect curl-flat or 4-verts from the trips side.',
+    downTendency:'Leans pass from this look, but never abandons the run — the QB draw shows up on 3rd &amp; long. Expect curl-flat or 4-verts from the trips side.',
     situations:[
       {id:111,down:1,distLabel:'1st & 10',runPct:45,passPct:55,
        notes:'Balanced. Bubble screen to trips is the go-to opening play. May use H-back motion pre-snap.',
@@ -1501,8 +1548,8 @@ const SEED = { opponents: [{
       {id:115,down:3,distLabel:'3rd & Short',runPct:52,passPct:48,
        notes:'Even split. QB draw or sneak are real options. Quick slant is the hot route vs. a heavy box.',
        dc:{coverage:'Cover 1 Man',blitz:'Double A-Gap Pressure',reason:'Crowd the line. If they hand off, we win the numbers. If they throw, corners locked man-to-man with FS rolling over top.',alert:'Quick slant is the automatic hot route vs. A-gap pressure — CBs must jam and reroute at the snap.'}},
-      {id:116,down:3,distLabel:'3rd & Long',runPct:0,passPct:100,
-       notes:'100% pass. Expect 4-Verticals or smash concept. QB checks to a hot route the instant he sees blitz.',
+      {id:116,down:3,distLabel:'3rd & Long',runPct:12,passPct:88,
+       notes:'Pass first — 4-Verticals or smash. But the QB draw is live here and it is how they steal a first down when you drop eight.',
        dc:{coverage:'Cover 4 (Quarters)',blitz:'Cover-0 Dog Blitz',reason:'Quarters is purpose-built for 4-verts — every receiver is carried vertically. The Cover-0 dog blitz must get home in under 2 seconds.',alert:'4-VERTICALS from trips — safeties carry #1 deep, CBs carry #2 on the seam. Do NOT bail early.'}}
     ]
   },{
@@ -1513,8 +1560,8 @@ const SEED = { opponents: [{
       {id:121,down:1,distLabel:'1st & 10',runPct:28,passPct:72,
        notes:'Quick screens or inside zone RPO. Very fast tempo — expect a snap within 10 seconds.',
        dc:{coverage:'Cover 3',blitz:'Base 4-3 — No Blitz',reason:'Play assignment football vs. 4-wide. Stay in base. Cover 3 handles screens with the flat defender.',alert:'Tempo! Get aligned fast — they will snap the ball before you finish substituting.'}},
-      {id:122,down:3,distLabel:'3rd & Long',runPct:5,passPct:95,
-       notes:'Near-guaranteed pass. 4-verts or mesh. QB holds the ball looking for the deep shot.',
+      {id:122,down:3,distLabel:'3rd & Long',runPct:10,passPct:90,
+       notes:'Pass nearly every time — 4-verts or mesh. QB draw is the change-up; he will take it if you vacate the middle.',
        dc:{coverage:'Cover 4 (Quarters)',blitz:'5-Man Overload Blitz',reason:'Quarters is built for 4-verts. Overload blitz overwhelms the OL before routes fully develop.',alert:'QB scramble if pocket collapses — DE must set the edge. Do NOT let him convert with his legs.'}}
     ]
   },{
@@ -2101,7 +2148,7 @@ function parsePlaylistRows(rows,filename,sideOpt){
   const groups=new Map();
   const snaps=[];                       // raw per-snap rows for the in-game predictor
   const defSnaps=[];                    // filming team's own defensive calls (opt-in only)
-  let totRun=0,totPass=0,totSnaps=0;
+  let totRun=0,totPass=0,totRpo=0,totSnaps=0;
   const rawLines=[];
   const intOf=v=>{ const n=parseInt(String(v).replace(/[^\d.\-]/g,''),10); return isFinite(n)?n:NaN; };
 
@@ -2110,8 +2157,9 @@ function parsePlaylistRows(rows,filename,sideOpt){
     if(ci.odk>=0){ const tag=norm(row[ci.odk]); if(side==='D'? !/^D/.test(tag) : !/^O/.test(tag)) continue; }
     const form=String(row[ci.form]==null?'':row[ci.form]).trim(); if(!form) continue;
     const typeRaw=norm(row[ci.type]);
-    const type=/^RUN|^RUSH/.test(typeRaw)?'run':/^PASS|^SCRAMBLE|^SACK/.test(typeRaw)?'pass':'other';  // Rush=run; scramble/sack=pass
     const play=ci.play>=0?String(row[ci.play]==null?'':row[ci.play]).trim():'';
+    const rawType=classifySnap(typeRaw, play);   // 'run' | 'pass' | 'rpo' | 'other'
+    const type=asRunPass(rawType);               // RPO rides with the runs for the lean
     const gn=ci.gnls>=0?intOf(row[ci.gnls]):NaN;
     const dn=ci.dn>=0?intOf(row[ci.dn]):NaN;
     const dist=ci.dist>=0?String(row[ci.dist]==null?'':row[ci.dist]).trim():'';
@@ -2127,7 +2175,8 @@ function parsePlaylistRows(rows,filename,sideOpt){
     const qtr=ci.qtr>=0?intOf(row[ci.qtr]):NaN;
     if(type==='run'||type==='pass')
       snaps.push({dn:isFinite(dn)?dn:null, dist:isFinite(distNum)?distNum:null, hash,
-        yard:isFinite(yard)?yard:null, qtr:isFinite(qtr)?qtr:null, form, play, type, gn:isFinite(gn)?gn:null});
+        yard:isFinite(yard)?yard:null, qtr:isFinite(qtr)?qtr:null, form, play, type,
+        rpo:rawType==='rpo'||undefined, gn:isFinite(gn)?gn:null});
 
     // Charting the D side means the filming team was on defense on this snap, so a
     // call in these columns is THEIRS. Collect it separately — nothing is stored
@@ -2142,8 +2191,9 @@ function parsePlaylistRows(rows,filename,sideOpt){
     }
 
     let g=groups.get(form);
-    if(!g){ g={snaps:0,run:0,pass:0,runPlays:new Map(),passPlays:new Map(),downs:new Map(),explosive:[]}; groups.set(form,g); }
+    if(!g){ g={snaps:0,run:0,pass:0,rpo:0,runPlays:new Map(),passPlays:new Map(),downs:new Map(),explosive:[]}; groups.set(form,g); }
     g.snaps++; totSnaps++;
+    if(rawType==='rpo'){ g.rpo++; totRpo++; }   // tracked on its own as well as inside the run count
     if(type==='run'){ g.run++; totRun++; if(play) g.runPlays.set(play,(g.runPlays.get(play)||0)+1); }
     else if(type==='pass'){ g.pass++; totPass++; if(play) g.passPlays.set(play,(g.passPlays.get(play)||0)+1); }
     if(dn>=1&&dn<=4){ let d=g.downs.get(dn); if(!d){ d={run:0,pass:0}; g.downs.set(dn,d); }
@@ -2162,11 +2212,12 @@ function parsePlaylistRows(rows,filename,sideOpt){
     const runPlays=topPlays(g.runPlays).slice(0,6);
     const passPlays=topPlays(g.passPlays).slice(0,6);
     const situations=[...g.downs.entries()].sort((a,b)=>a[0]-b[0]).map(([dn,d])=>{
-      const dd=d.run+d.pass, rp=dd?Math.round(d.run/dd*100):50;
+      const dd=d.run+d.pass, rp=dd?Math.round(d.run/dd*100):HS_BASELINE_RUN_PCT;
       return {down:dn,distLabel:`${ord(dn)} Down`,runPct:rp,passPct:100-rp,
-        notes:`From ${dd} snap${dd!==1?'s':''} in this formation.`};
+        notes:dd?`From ${dd} snap${dd!==1?'s':''} in this formation.`:'No snaps here — showing the high-school baseline, not their tendency.'};
     });
     return {name,runPct,passPct:100-runPct,playCount:g.snaps,totalPlays:totSnaps,
+      rpoCount:g.rpo||0, rpoPct:g.snaps?Math.round((g.rpo||0)/g.snaps*100):0,
       favoriteRunPlay:runPlays[0]||'Not specified',favoritePassPlay:passPlays[0]||'Not specified',
       runPlays,passPlays,situations,
       explosivePlays:g.explosive.sort((a,b)=>b.yards-a.yards)};
@@ -2174,7 +2225,7 @@ function parsePlaylistRows(rows,filename,sideOpt){
   formations.sort((a,b)=>b.playCount-a.playCount);
   const kept=formations.slice(0,MAX_PLAYLIST_FORMATIONS);
 
-  const tDenom=totRun+totPass, teamRun=tDenom?Math.round(totRun/tDenom*100):50;
+  const tDenom=totRun+totPass, teamRun=tDenom?Math.round(totRun/tDenom*100):HS_BASELINE_RUN_PCT;
   const totExpl=kept.reduce((n,f)=>n+f.explosivePlays.length,0);
   const cleaned=filename.replace(/\.[^.]+$/,'')            // drop extension
     .replace(/\d{4}[-/.]\d{1,2}[-/.]\d{1,2}/g,'')          // drop date (separators still intact)
@@ -2183,9 +2234,11 @@ function parsePlaylistRows(rows,filename,sideOpt){
   const teamName=/[A-Za-z]/.test(cleaned)?cleaned:'Imported Team'; // need a real name, else generic
   const log=[`Playlist import: ${filename}`,
     `✓ ${groups.size} formation(s) from ${totSnaps} offensive snap(s) — keeping top ${kept.length}`,
-    `✓ ${totExpl} explosive play(s) (run ≥${EXPLOSIVE_RUN_YDS} yds, pass ≥${EXPLOSIVE_PASS_YDS} yds)`];
+    `✓ ${totExpl} explosive play(s) (run ≥${EXPLOSIVE_RUN_YDS} yds, pass ≥${EXPLOSIVE_PASS_YDS} yds)`,
+    totRpo?`✓ ${totRpo} RPO snap(s) read as run-first, not counted as pass`:`✓ 0 snaps tagged RPO`];
 
   return {teamName,season:year,runPct:teamRun,passPct:100-teamRun,
+    rpoCount:totRpo, rpoPct:totSnaps?Math.round(totRpo/totSnaps*100):0,
     formations:kept,rawLines,snaps,
     confidence:totSnaps>=20?90:totSnaps>=8?70:45,
     sourceFiles:[filename],extractionLog:log,
@@ -2371,10 +2424,15 @@ function loadDemo(){
       if(dn>=3&&bk==='L') pRun*=0.4;
       if(bk==='S') pRun=Math.min(0.92,pRun+0.18);
       const type=Math.random()<pRun?'run':'pass';
+      // A real high-school spread team runs RPO. Tagging some of the run snaps as RPO
+      // is what makes the demo honest — and it is the only way a coach trying the demo
+      // ever sees the RPO panel, since he has no playlist of his own loaded yet.
+      const isRpo = type==='run' && bk!=='L' && Math.random()<0.30;
       const gn = type==='run' ? (Math.random()<0.12?13+R(18):-2+R(8))
                               : (Math.random()<0.15?20+R(22):(Math.random()<0.35?0:3+R(11)));
       out.push({dn,dist,hash:pick(hashes),yard:pick(zones),qtr:1+R(4),form:fc.form,
-                play:type==='run'?pick(fc.runs):pick(fc.passes),type,gn});
+                play:isRpo?pick(['RPO Bubble','RPO Glance','Inside Zone RPO']):(type==='run'?pick(fc.runs):pick(fc.passes)),
+                type,rpo:isRpo||undefined,gn});
     }});
     return out;
   })();
@@ -8972,9 +9030,11 @@ function predictOffense(o, sit){
   let pool=all.filter(s=>active.every(d=>d.match(s)));
   while(pool.length<MIN && active.length>0){ active=active.slice(1); pool=all.filter(s=>active.every(d=>d.match(s))); }
   const run=pool.filter(s=>s.type==='run').length;
-  const runPct=pool.length?Math.round(run/pool.length*100):50;
+  const runPct=pool.length?Math.round(run/pool.length*100):HS_BASELINE_RUN_PCT;
+  const rpoN=pool.filter(s=>s.rpo).length;                 // RPOs sit inside the run count — report them anyway
   const expl=pool.filter(s=>(s.type==='run'&&s.gn>=EXPLOSIVE_RUN_YDS)||(s.type==='pass'&&s.gn>=EXPLOSIVE_PASS_YDS)).length;
   return { n:pool.length, runPct, passPct:100-runPct,
+    rpoN, rpoPct: pool.length?Math.round(rpoN/pool.length*100):0,
     used:active.map(d=>d.label), dropped:requested.filter(d=>active.indexOf(d)<0).map(d=>d.label),
     formations:_tally(pool,s=>s.form).slice(0,3),
     runPlays:_tally(pool.filter(s=>s.type==='run'),s=>s.play).slice(0,3),
@@ -9181,6 +9241,91 @@ function topPlayInsight(p){
   }
   return `🎯 Most likely: <b>${esc(top.key)}</b> (${top.pct}% of passes here). Make the underneath defender squat on it — don't let him bail off.`;
 }
+// ── RPO DIAGRAM ──────────────────────────────────────────────────────────────
+// Drawn the way a coach draws it on a board, then stripped back until a 15-year-old
+// gets it on a phone in a huddle: O = us, X = them, solid arrow = somebody runs,
+// dashed = the read. Two panels side by side, because the whole point of an RPO is
+// that ONE defender decides which of two plays it becomes. One panel cannot show that.
+// Conventions kept from real chalk: circles for offense, X for defense, a T-bar on a
+// blocking line, an arrowhead on a ball-carrier or route.
+function _rpoPanel(chase){
+  const OL=[130,160,190,220,250], LOS=112;
+  const O=(x,y,lbl,fill)=>`<circle cx="${x}" cy="${y}" r="11" fill="${fill||'#16233d'}" stroke="#e8eef8" stroke-width="2.5"/>${lbl?`<text x="${x}" y="${y+4.5}" text-anchor="middle" font-size="11" font-weight="800" fill="#e8eef8" font-family="system-ui,sans-serif">${lbl}</text>`:''}`;
+  const X=(x,y,hot)=>`<g stroke="${hot?'#c084fc':'#ff7676'}" stroke-width="${hot?4:3}" stroke-linecap="round"><line x1="${x-9}" y1="${y-9}" x2="${x+9}" y2="${y+9}"/><line x1="${x+9}" y1="${y-9}" x2="${x-9}" y2="${y+9}"/></g>`;
+  const block=(x)=>`<g stroke="#7eb0ff" stroke-width="3" stroke-linecap="round"><line x1="${x}" y1="${LOS+11}" x2="${x}" y2="${LOS-14}"/><line x1="${x-7}" y1="${LOS-14}" x2="${x+7}" y2="${LOS-14}"/></g>`;
+  const arrow=(d,c,w)=>`<path d="${d}" fill="none" stroke="${c}" stroke-width="${w||3.5}" stroke-linecap="round" marker-end="url(#ah${chase?'C':'S'})"/>`;
+  const dash=(d,c)=>`<path d="${d}" fill="none" stroke="${c}" stroke-width="2.5" stroke-dasharray="6 5" stroke-linecap="round"/>`;
+  return `<svg viewBox="0 0 400 250" style="width:100%;height:auto;display:block;background:#0d1830;border-radius:10px">
+    <defs>
+      <marker id="ah${chase?'C':'S'}" markerWidth="7" markerHeight="7" refX="5" refY="3.5" orient="auto">
+        <path d="M0,0 L7,3.5 L0,7 Z" fill="${chase?'#f0a500':'#4ade80'}"/></marker>
+    </defs>
+    <line x1="18" y1="${LOS}" x2="382" y2="${LOS}" stroke="#3a4a68" stroke-width="2" stroke-dasharray="7 6"/>
+    ${OL.map(block).join('')}
+    ${OL.map(x=>O(x,LOS+11,'')).join('')}
+    ${O(60,LOS-2,'W')}${O(105,LOS+2,'H')}
+    ${O(190,182,'QB','#1f3358')}${O(228,182,'RB','#1f3358')}
+    ${[148,178,208,238].map(x=>X(x,LOS-24)).join('')}
+    ${X(190,LOS-58)}
+    ${X(112,LOS-50,true)}
+    <text x="112" y="${LOS-66}" text-anchor="middle" font-size="10" font-weight="800" fill="#c084fc" font-family="system-ui,sans-serif">READ HIM</text>
+    ${dash(`M186,174 C165,150 135,125 116,${LOS-42}`,'#c084fc')}
+    ${chase
+      ? `${arrow(`M112,${LOS-50} L150,${LOS-16}`,'#f0a500',3)}
+         ${arrow('M196,180 C170,172 140,150 112,124','#f0a500')}
+         <text x="300" y="196" text-anchor="middle" font-size="12" font-weight="900" fill="#f0a500" font-family="system-ui,sans-serif">QB KEEPS IT — THROWS</text>`
+      : `${arrow('M228,178 C246,150 250,132 258,116','#4ade80')}
+         ${arrow(`M105,${LOS+2} C88,${LOS-4} 74,${LOS-10} 62,${LOS-16}`,'#4ade80',3)}
+         <text x="300" y="196" text-anchor="middle" font-size="12" font-weight="900" fill="#4ade80" font-family="system-ui,sans-serif">QB HANDS IT OFF</text>`}
+  </svg>`;
+}
+function showRpoDiagram(){
+  _track('rpo_diagram_viewed');
+  let ov=document.getElementById('rpoOv');
+  if(!ov){ ov=document.createElement('div'); ov.id='rpoOv';
+    ov.style.cssText='position:fixed;inset:0;background:rgba(4,10,22,.93);z-index:9999;overflow-y:auto;padding:18px;display:none';
+    ov.onclick=e=>{ if(e.target===ov) closeRpoDiagram(); };
+    document.body.appendChild(ov); }
+  const card='background:var(--navy2);border:1px solid rgba(255,255,255,.1);border-radius:14px;padding:12px';
+  ov.innerHTML=`<div style="max-width:760px;margin:0 auto">
+    <div style="display:flex;align-items:center;gap:10px;margin-bottom:4px">
+      <div style="font-size:19px;font-weight:900;color:var(--white)">RPO — one play, two answers</div>
+      <button onclick="closeRpoDiagram()" aria-label="Close" style="margin-left:auto;background:none;border:none;color:var(--gray);font-size:26px;cursor:pointer;font-family:inherit;line-height:1">&times;</button>
+    </div>
+    <div style="font-size:13px;color:var(--grayl);line-height:1.55;margin-bottom:14px"><b style="color:var(--white)">Run-Pass Option.</b> The quarterback does not decide before the snap. He picks <b style="color:#c084fc">one defender</b> and watches him. That defender picks the play — not the QB, not the coordinator. <b style="color:var(--white)">Same look, same backfield, both times.</b></div>
+    <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(300px,1fr));gap:12px">
+      <div style="${card}">
+        <div style="font-size:13px;font-weight:900;color:#4ade80;margin-bottom:7px">1 &nbsp;HE SITS &rarr; THEY RUN IT</div>
+        ${_rpoPanel(false)}
+        <div style="font-size:12px;color:var(--grayl);line-height:1.5;margin-top:8px">The read defender stays home, so the QB gives it to the back. You have him blocked. Normal run — fit it up.</div>
+      </div>
+      <div style="${card}">
+        <div style="font-size:13px;font-weight:900;color:#f0a500;margin-bottom:7px">2 &nbsp;HE CHASES &rarr; THEY THROW IT</div>
+        ${_rpoPanel(true)}
+        <div style="font-size:12px;color:var(--grayl);line-height:1.5;margin-top:8px">The read defender squeezes the run, so the QB pulls it and throws behind him — right into the grass he just left.</div>
+      </div>
+    </div>
+    <div style="${card};margin-top:12px">
+      <div style="font-size:10px;letter-spacing:1.5px;text-transform:uppercase;color:var(--gray);font-weight:800;margin-bottom:8px">How to read the picture</div>
+      <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:9px;font-size:12px;color:var(--grayl);line-height:1.45">
+        <div><b style="color:#e8eef8">&#9711; O</b> — offense (them)</div>
+        <div><b style="color:#ff7676">&#10005; X</b> — defense (you)</div>
+        <div><b style="color:#c084fc">&#10005;</b> purple — the man he's reading</div>
+        <div><b style="color:#7eb0ff">&#8866;</b> T-bar — a lineman blocking</div>
+        <div><b style="color:#4ade80">&rarr;</b> solid arrow — somebody carries it</div>
+        <div><b style="color:#c084fc">- - -</b> dashed — the QB's eyes</div>
+      </div>
+    </div>
+    <div style="background:rgba(240,165,0,.1);border:1px solid rgba(240,165,0,.35);border-radius:12px;padding:13px;margin-top:12px">
+      <div style="font-size:12.5px;font-weight:900;color:var(--gold);margin-bottom:5px">What this means for your call</div>
+      <div style="font-size:12.5px;color:var(--grayl);line-height:1.55">You cannot take both away with the same man &mdash; that is the entire point of the play. Pick which one you are giving up, and make sure the kid being read knows he is being read. Blitzing him is the fastest way to get the ball thrown behind you.</div>
+    </div>
+    <button onclick="closeRpoDiagram()" style="width:100%;margin-top:12px;padding:13px;background:var(--gold);color:var(--navy);border:none;border-radius:11px;font-size:14px;font-weight:900;cursor:pointer;font-family:inherit">Got it</button>
+  </div>`;
+  ov.style.display='block'; document.body.style.overflow='hidden';
+}
+function closeRpoDiagram(){ const ov=document.getElementById('rpoOv'); if(ov) ov.style.display='none'; document.body.style.overflow=''; }
+
 function renderPrediction(){
   const o=st.opp, el=document.getElementById('predictOut'); if(!o||!el) return;
   const p=predictOffense(o, st.pred||{});
@@ -9238,6 +9383,11 @@ function renderPrediction(){
       </div>
       ${p.n<8?`<div style="background:rgba(239,68,68,.12);border:1px solid rgba(239,68,68,.4);border-radius:9px;padding:8px 11px;margin-bottom:10px;font-size:11.5px;color:#fca5a5;text-align:center;font-weight:700">&#9888;&#65039; Thin sample — only ${p.n} play${p.n!==1?'s':''}${p.dropped&&p.dropped.length?' (had to widen the situation)':''}. Treat this as a hint, not a rule.</div>`:''}
       ${sbar(p.runPct,p.passPct)}
+      ${p.rpoN?`<div style="margin-top:10px;background:rgba(168,85,247,.12);border:1px solid rgba(168,85,247,.45);border-radius:10px;padding:9px 12px">
+        <div style="font-size:12.5px;font-weight:800;color:#c4a3ff">&#128064; ${p.rpoPct}% of these snaps are RPO (${p.rpoN} of ${p.n})</div>
+        <div style="font-size:11.5px;color:var(--grayl);line-height:1.45;margin-top:3px">One play, two answers. The QB reads <b>one defender</b> after the snap and either hands it off or throws. Counted with the runs, because the handoff is what he does unless that defender takes it away. <b style="color:#c4a3ff">Whoever you put in conflict is the guy he's reading.</b></div>
+        <button onclick="showRpoDiagram()" style="margin-top:7px;background:rgba(168,85,247,.2);border:1px solid rgba(168,85,247,.5);border-radius:8px;color:#c4a3ff;font-size:11.5px;font-weight:800;padding:6px 11px;cursor:pointer;font-family:inherit">&#9999;&#65039; Show me the diagram</button>
+      </div>`:''}
       <div style="margin-top:12px;font-size:13px">Most likely: <b>${tf?esc(tf.key):'—'}</b>${tf?` <span style="color:var(--gray)">(${tf.pct}%)</span>`:''}${p.formations.slice(1).map(f=>` <span style="color:var(--gray)">· ${esc(f.key)} ${f.pct}%</span>`).join('')}</div>
       <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:10px">
         <div><div style="font-size:9px;letter-spacing:1px;text-transform:uppercase;color:var(--green);font-weight:800;margin-bottom:3px">Likely runs</div>${plays(p.runPlays,'&#127939;')}</div>
